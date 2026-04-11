@@ -532,7 +532,7 @@ with st.sidebar:
         key="knowledge_radio",
     )
     st.markdown(
-        "<span style='font-size:0.65rem; color:#7A8BA8; line-height:1.2;'>"
+        "<span style='font-size:0.78rem; color:#94A3C0; line-height:1.4;'>"
         "Controls the detail level of the info tooltips next to each metric. "
         "Beginner = plain English. Intermediate = finance terms. Advanced = formulas."
         "</span>",
@@ -558,7 +558,7 @@ with st.sidebar:
                     st.session_state["ticker_input_box"] = PRESETS[name]["tickers"]
                     st.rerun()
                 st.markdown(
-                    f"<div style='font-size:0.6rem; color:#7A8BA8; margin-top:-8px; margin-bottom:6px; line-height:1.3;'>"
+                    f"<div style='font-size:0.75rem; color:#94A3C0; margin-top:-8px; margin-bottom:6px; line-height:1.4;'>"
                     f"{PRESETS[name]['desc']}</div>",
                     unsafe_allow_html=True,
                 )
@@ -614,7 +614,7 @@ with st.sidebar:
              "The unconstrained frontier is always at least as efficient as long-only.",
     )
     st.markdown(
-        "<span style='font-size:0.65rem; color:#7A8BA8; line-height:1.2;'>"
+        "<span style='font-size:0.78rem; color:#94A3C0; line-height:1.4;'>"
         "Can be toggled after running analysis without re-downloading data. "
         "The app may take a moment to recalculate optimizations."
         "</span>",
@@ -634,8 +634,8 @@ with st.sidebar:
 
         **Sharpe Ratio**: (Rₚ − Rf) / σₚ using annualized values.
 
-        **Sortino Ratio**: (Rₚ − Rf) / σ_downside, where downside deviation
-        uses only returns below the daily risk-free rate.
+        **Sortino Ratio**: (Rₚ − Rf) / σ downside, where downside
+        deviation uses only returns below the daily risk-free rate.
 
         **Portfolio Variance**: Full quadratic form w′Σw.
 
