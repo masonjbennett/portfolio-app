@@ -658,8 +658,13 @@ with st.sidebar:
 
     # ── Author Branding ──────────────────────────────────────────────────
     st.markdown("---")
-    st.caption("Mason Bennett")
-    st.caption("M.S. in Finance · University of Arkansas")
+    st.markdown(
+        "<div style='text-align:center; padding:0.3rem 0;'>"
+        "<div style='font-size:0.85rem; font-weight:600; color:#FFFFFF;'>Mason Bennett</div>"
+        "<div style='font-size:0.75rem; color:#94A3C0; margin-top:2px;'>M.S. in Finance · University of Arkansas</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
