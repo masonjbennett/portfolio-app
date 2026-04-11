@@ -256,6 +256,12 @@ st.markdown(f"""
         border: 1px solid rgba(255,255,255,0.1) !important;
         border-radius: 8px !important;
     }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] p,
+    [data-testid="stSidebar"] [data-testid="stExpander"] span,
+    [data-testid="stSidebar"] [data-testid="stExpander"] li,
+    [data-testid="stSidebar"] [data-testid="stExpander"] strong {{
+        color: #E2E8F0 !important;
+    }}
     [data-testid="stSidebar"] code {{
         background: rgba(255,255,255,0.12) !important;
         background-color: rgba(255,255,255,0.12) !important;
