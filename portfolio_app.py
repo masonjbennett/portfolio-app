@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.io as pio
 import yfinance as yf
 from scipy import optimize, stats
-from datetime import date
+from datetime import date, timedelta
 import io
 
 # ── Page Config ──────────────────────────────────────────────────────────────
@@ -74,11 +74,6 @@ PRESETS = {
         "tickers": "AAPL, MSFT, JPM, JNJ, V, UNH, PG",
         "desc": "Stable large caps",
     },
-}
-
-# Common ticker typo corrections to keep presets and manual entry forgiving.
-COMMON_TICKER_ALIASES = {
-    "APPL": "AAPL",
 }
 
 # ── Custom Plotly Template ───────────────────────────────────────────────────
@@ -537,7 +532,7 @@ with st.sidebar:
         key="knowledge_radio",
     )
     st.markdown(
-        "<span style='font-size:0.65rem; color:#7A8BA8; line-height:1.2;'>"
+        "<span style='font-size:0.78rem; color:#94A3C0; line-height:1.4;'>"
         "Controls the detail level of the info tooltips next to each metric. "
         "Beginner = plain English. Intermediate = finance terms. Advanced = formulas."
         "</span>",
@@ -563,7 +558,7 @@ with st.sidebar:
                     st.session_state["ticker_input_box"] = PRESETS[name]["tickers"]
                     st.rerun()
                 st.markdown(
-                    f"<div style='font-size:0.6rem; color:#7A8BA8; margin-top:-8px; margin-bottom:6px; line-height:1.3;'>"
+                    f"<div style='font-size:0.75rem; color:#94A3C0; margin-top:-8px; margin-bottom:6px; line-height:1.4;'>"
                     f"{PRESETS[name]['desc']}</div>",
                     unsafe_allow_html=True,
                 )
@@ -619,7 +614,7 @@ with st.sidebar:
              "The unconstrained frontier is always at least as efficient as long-only.",
     )
     st.markdown(
-        "<span style='font-size:0.65rem; color:#7A8BA8; line-height:1.2;'>"
+        "<span style='font-size:0.78rem; color:#94A3C0; line-height:1.4;'>"
         "Can be toggled after running analysis without re-downloading data. "
         "The app may take a moment to recalculate optimizations."
         "</span>",
@@ -639,8 +634,8 @@ with st.sidebar:
 
         **Sharpe Ratio**: (Rₚ − Rf) / σₚ using annualized values.
 
-        **Sortino Ratio**: (Rₚ − Rf) / σ_downside, where downside deviation
-        uses only returns below the daily risk-free rate.
+        **Sortino Ratio**: (Rₚ − Rf) / σ downside, where downside
+        deviation uses only returns below the daily risk-free rate.
 
         **Portfolio Variance**: Full quadratic form w′Σw.
 
@@ -663,8 +658,13 @@ with st.sidebar:
 
     # ── Author Branding ──────────────────────────────────────────────────
     st.markdown("---")
-    st.caption("Mason Bennett")
-    st.caption("M.S. in Finance · University of Arkansas")
+    st.markdown(
+        "<div style='text-align:center; padding:0.3rem 0;'>"
+        "<div style='font-size:0.85rem; font-weight:600; color:#FFFFFF;'>Mason Bennett</div>"
+        "<div style='font-size:0.75rem; color:#94A3C0; margin-top:2px;'>M.S. in Finance · University of Arkansas</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
@@ -708,8 +708,7 @@ def annualized_stats(returns: pd.Series, rf: float):
     sigma = returns.std() * np.sqrt(252)
     rf_daily = rf / 252
     sharpe = (mu - rf) / sigma if sigma > 0 else np.nan
-    shortfalls = np.minimum(returns - rf_daily, 0)
-    downside = np.sqrt(np.mean(shortfalls ** 2)) * np.sqrt(252)
+    downside = returns[returns < rf_daily].std() * np.sqrt(252)
     sortino = (mu - rf) / downside if downside > 0 else np.nan
     return mu, sigma, sharpe, sortino
 
@@ -817,19 +816,9 @@ if "data_loaded" not in st.session_state:
 # ══════════════════════════════════════════════════════════════════════════════
 # INPUT VALIDATION & DATA LOAD
 # ══════════════════════════════════════════════════════════════════════════════
-tickers_entered = [t.strip().upper() for t in ticker_input.split(",") if t.strip()]
-alias_corrections = []
-normalized_tickers = []
-for ticker in tickers_entered:
-    normalized = COMMON_TICKER_ALIASES.get(ticker, ticker)
-    if normalized != ticker:
-        alias_corrections.append(f"{ticker} → {normalized}")
-    normalized_tickers.append(normalized)
-tickers_raw = list(dict.fromkeys(normalized_tickers))
+tickers_raw = list(dict.fromkeys(t.strip().upper() for t in ticker_input.split(",") if t.strip()))
 
 if run_button:
-    if alias_corrections:
-        st.info(f"Corrected common ticker typo(s): {', '.join(alias_corrections)}")
     if len(tickers_raw) < 3:
         st.error("Please enter at least 3 unique tickers.")
         st.stop()
@@ -1073,7 +1062,7 @@ with tab1:
         cum = ((1 + returns[show_tickers]).cumprod()) * initial_investment
         cum.rename(columns={bench_ticker_saved: bench_label_saved}, inplace=True)
         fig_cum = px.line(cum, title=f"Cumulative Growth of ${initial_investment:,.0f}", labels={"value": "Value ($)", "variable": "Asset"})
-        fig_cum.update_layout(legend_title_text="", xaxis_title="Date")
+        fig_cum.update_layout(legend_title_text="")
         style_chart(fig_cum)
         st.plotly_chart(fig_cum, use_container_width=True, key="cum_wealth_tab1")
 
@@ -1135,7 +1124,7 @@ with tab2:
                                    help="Adjusts in increments of 30 days")
     rolling_vol = stock_returns.rolling(vol_window).std() * np.sqrt(252)
     fig_vol = px.line(rolling_vol, title=f"{vol_window}-Day Rolling Annualized Volatility", labels={"value": "Annualized Volatility", "variable": "Stock"})
-    fig_vol.update_layout(legend_title_text="", xaxis_title="Date")
+    fig_vol.update_layout(legend_title_text="")
     style_chart(fig_vol)
     st.plotly_chart(fig_vol, use_container_width=True, key="vol_tab2")
 
@@ -1242,10 +1231,7 @@ with tab3:
         zmin=-1, zmax=1, aspect="equal",
     )
     fig_corr.update_layout(
-        title="Pairwise Correlation Heatmap",
         coloraxis_colorbar=dict(title="Corr", tickformat=".1f"),
-        xaxis_title="Ticker",
-        yaxis_title="Ticker",
     )
     style_chart(fig_corr, height=500)
     st.plotly_chart(fig_corr, use_container_width=True, key="corr_tab3")
@@ -1266,12 +1252,7 @@ with tab3:
         rc = stock_returns[rc_s1].rolling(rc_win).corr(stock_returns[rc_s2])
         fig_rc = px.line(rc, labels={"value": "Correlation"})
         fig_rc.update_traces(line_color=COLORS["secondary"])
-        fig_rc.update_layout(
-            showlegend=False,
-            title=f"{rc_win}-Day Rolling Correlation: {rc_s1} vs {rc_s2}",
-            xaxis_title="Date",
-            yaxis_title="Correlation",
-        )
+        fig_rc.update_layout(showlegend=False, title=f"{rc_win}-Day Rolling Correlation: {rc_s1} vs {rc_s2}")
         style_chart(fig_rc, height=380)
         st.plotly_chart(fig_rc, use_container_width=True, key="rc_tab3")
     else:
@@ -1355,7 +1336,6 @@ with tab4:
     st.subheader("Portfolio Weights")
     wt_df = pd.DataFrame({"GMV": gmv_w, "Tangency": tan_w, "Equal-Weight": ew_weights}, index=tickers)
     fig_wt = px.bar(wt_df, barmode="group", labels={"value": "Weight", "index": "Asset"},
-                     title="Portfolio Weights by Asset",
                      color_discrete_sequence=[COLORS["success"], COLORS["accent"], COLORS["secondary"]])
     fig_wt.update_layout(yaxis_tickformat=".0%", legend_title_text="")
     style_chart(fig_wt, height=400)
@@ -1386,7 +1366,6 @@ with tab4:
         "Tangency Weight": tan_w, "Tangency PRC": tan_prc,
     }, index=tickers)
     fig_prc = px.bar(prc_df[["GMV PRC", "Tangency PRC"]], barmode="group",
-                      title="Percentage Risk Contribution by Asset",
                       labels={"value": "PRC", "index": "Asset"},
                       color_discrete_sequence=[COLORS["success"], COLORS["accent"]])
     fig_prc.update_layout(yaxis_tickformat=".0%", legend_title_text="")
@@ -1470,7 +1449,6 @@ with tab4:
         hovertemplate="Volatility: %{x:.2%}<br>Return: %{y:.2%}<extra>%{fullData.name}</extra>"
     )
     fig_ef.update_layout(
-        title="Efficient Frontier, CAL, and Portfolio Positions",
         xaxis_title="Annualized Volatility", yaxis_title="Annualized Return",
         xaxis_tickformat=".0%", yaxis_tickformat=".0%", showlegend=True,
         hovermode="closest",
@@ -1492,7 +1470,7 @@ with tab4:
     cum_ports = (1 + port_rets).cumprod() * initial_investment
     fig_comp = px.line(cum_ports, title=f"Growth of ${initial_investment:,.0f}", labels={"value": "Value ($)", "variable": "Portfolio"},
                         color_discrete_sequence=["#9B59B6", COLORS["success"], COLORS["accent"], "#E91E63", COLORS["primary"]])
-    fig_comp.update_layout(legend_title_text="", xaxis_title="Date")
+    fig_comp.update_layout(legend_title_text="")
     style_chart(fig_comp)
     st.plotly_chart(fig_comp, use_container_width=True, key="comp_tab4")
 
@@ -1634,7 +1612,6 @@ with tab5:
         hovertemplate="Volatility: %{x:.2%}<br>Return: %{y:.2%}<extra>%{fullData.name}</extra>"
     )
     fig_ef2.update_layout(
-        title="Efficient Frontier with Custom Portfolio",
         xaxis_title="Annualized Volatility", yaxis_title="Annualized Return",
         xaxis_tickformat=".0%", yaxis_tickformat=".0%",
         hovermode="closest",
@@ -1656,7 +1633,7 @@ with tab5:
     cum_cust = (1 + port_rets_cust).cumprod() * initial_investment
     fig_cc = px.line(cum_cust, title=f"Growth of ${initial_investment:,.0f}", labels={"value": "Value ($)", "variable": "Portfolio"},
                       color_discrete_sequence=["#9B59B6", COLORS["success"], COLORS["accent"], "#E91E63", COLORS["primary"]])
-    fig_cc.update_layout(legend_title_text="", xaxis_title="Date")
+    fig_cc.update_layout(legend_title_text="")
     style_chart(fig_cc)
     st.plotly_chart(fig_cc, use_container_width=True, key="cc_tab5")
 
@@ -1695,24 +1672,10 @@ with tab6:
         st.info("Need at least 2 years of overlapping data to show multiple lookback windows. Try a longer date range.")
         st.stop()
 
-    selected_windows = st.multiselect(
-        "Select lookback windows",
-        options=labels,
-        default=labels,
-        key="sens_windows",
-        help="Choose which estimation windows to compare. Options are limited to windows supported by the selected date range.",
-    )
-    if not selected_windows:
-        st.warning("Select at least one lookback window.")
-        st.stop()
-
-    selected_pairs = [(lb, lbl) for lb, lbl in zip(lookback_options, labels) if lbl in selected_windows]
-    selected_labels = [lbl for _, lbl in selected_pairs]
-
     sensitivity_rows = []
     portfolio_metrics_rows = []
 
-    for lb, lbl in selected_pairs:
+    for lb, lbl in zip(lookback_options, labels):
         sub_rets = stock_returns.iloc[-lb:]
         sub_mean = sub_rets.mean()
         sub_cov = sub_rets.cov()
@@ -1776,8 +1739,7 @@ with tab6:
     port_choice = st.radio("Portfolio", ["GMV", "Tangency"], horizontal=True, key="sens_port")
     sub = sens_df[sens_df["Portfolio"] == port_choice]
     fig_sens = px.bar(sub, x="Ticker", y="Weight", color="Window", barmode="group",
-                       color_discrete_sequence=CHART_COLORS,
-                       title="Weight Comparison Across Lookback Windows")
+                       color_discrete_sequence=CHART_COLORS)
     fig_sens.update_layout(yaxis_tickformat=".0%")
     style_chart(fig_sens, height=420)
     st.plotly_chart(fig_sens, use_container_width=True, key="sens_tab6")
@@ -1817,7 +1779,7 @@ with tab6:
 
         # Compute custom portfolio metrics for each window
         custom_sens_rows = []
-        for lb, lbl in selected_pairs:
+        for lb, lbl in zip(lookback_options, labels):
             sub_rets = stock_returns.iloc[-lb:]
             sub_mean = sub_rets.mean()
             sub_cov = sub_rets.cov()
@@ -1845,10 +1807,10 @@ with tab6:
 
         # Sharpe comparison chart
         sharpe_comparison = pd.DataFrame({
-            "Window": selected_labels,
-            "GMV": [float(gmv_metrics.loc[lbl, "Sharpe"]) if lbl in gmv_metrics.index else np.nan for lbl in selected_labels],
-            "Tangency": [float(tan_metrics.loc[lbl, "Sharpe"]) if lbl in tan_metrics.index else np.nan for lbl in selected_labels],
-            "Custom": [float(custom_sens_df.loc[lbl, "Sharpe"]) if lbl in custom_sens_df.index else np.nan for lbl in selected_labels],
+            "Window": labels,
+            "GMV": [float(gmv_metrics.loc[lbl, "Sharpe"]) if lbl in gmv_metrics.index else np.nan for lbl in labels],
+            "Tangency": [float(tan_metrics.loc[lbl, "Sharpe"]) if lbl in tan_metrics.index else np.nan for lbl in labels],
+            "Custom": [float(custom_sens_df.loc[lbl, "Sharpe"]) if lbl in custom_sens_df.index else np.nan for lbl in labels],
         })
         fig_sharpe_comp = px.bar(
             sharpe_comparison.melt(id_vars="Window", var_name="Portfolio", value_name="Sharpe"),
