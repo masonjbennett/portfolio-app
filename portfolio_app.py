@@ -673,16 +673,21 @@ with st.sidebar:
 @st.cache_data(ttl=3600, show_spinner=False)
 def download_data(tickers: list, start: str, end: str, benchmark: str):
     """Download adjusted close prices; returns (prices_df, failed_tickers)."""
+    import time
     all_tickers = tickers + [benchmark]
     data = {}
     failed = []
     for t in all_tickers:
         try:
             df = yf.download(t, start=start, end=end, progress=False, auto_adjust=True)
+            # Handle MultiIndex columns from newer yfinance versions
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
             if df.empty or len(df) < 30:
                 failed.append(t)
             else:
                 data[t] = df["Close"].squeeze()
+            time.sleep(0.15)  # small delay to avoid Yahoo Finance rate limiting
         except Exception:
             failed.append(t)
     if not data:
