@@ -635,7 +635,8 @@ with st.sidebar:
         **Sharpe Ratio**: (Rₚ − Rf) / σₚ using annualized values.
 
         **Sortino Ratio**: (Rₚ − Rf) / σ downside, where downside
-        deviation uses only returns below the daily risk-free rate.
+        deviation uses the root-mean-square of negative excess returns
+        (returns above the risk-free rate are set to zero).
 
         **Portfolio Variance**: Full quadratic form w′Σw.
 

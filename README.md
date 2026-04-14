@@ -35,4 +35,4 @@ streamlit run portfolio_app.py
 - Portfolio variance: full quadratic form w'Sigma*w
 - Optimization: scipy.optimize.minimize with SLSQP, no-short-selling constraints
 - Efficient frontier: constrained optimization at each target return level
-- Sortino ratio: downside deviation using returns below the daily risk-free rate
+- Sortino ratio: downside deviation using root-mean-square of negative excess returns
