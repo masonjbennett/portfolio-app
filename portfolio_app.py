@@ -708,7 +708,8 @@ def annualized_stats(returns: pd.Series, rf: float):
     sigma = returns.std() * np.sqrt(252)
     rf_daily = rf / 252
     sharpe = (mu - rf) / sigma if sigma > 0 else np.nan
-    downside = returns[returns < rf_daily].std() * np.sqrt(252)
+    shortfalls = np.minimum(returns - rf_daily, 0)
+    downside = np.sqrt(np.mean(shortfalls ** 2)) * np.sqrt(252)
     sortino = (mu - rf) / downside if downside > 0 else np.nan
     return mu, sigma, sharpe, sortino
 
