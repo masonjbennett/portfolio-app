@@ -76,6 +76,11 @@ PRESETS = {
     },
 }
 
+# Common ticker typo corrections to keep presets and manual entry forgiving.
+COMMON_TICKER_ALIASES = {
+    "APPL": "AAPL",
+}
+
 # ── Custom Plotly Template ───────────────────────────────────────────────────
 custom_template = go.layout.Template()
 custom_template.layout = go.Layout(
@@ -807,9 +812,19 @@ if "data_loaded" not in st.session_state:
 # ══════════════════════════════════════════════════════════════════════════════
 # INPUT VALIDATION & DATA LOAD
 # ══════════════════════════════════════════════════════════════════════════════
-tickers_raw = list(dict.fromkeys(t.strip().upper() for t in ticker_input.split(",") if t.strip()))
+tickers_entered = [t.strip().upper() for t in ticker_input.split(",") if t.strip()]
+alias_corrections = []
+normalized_tickers = []
+for ticker in tickers_entered:
+    normalized = COMMON_TICKER_ALIASES.get(ticker, ticker)
+    if normalized != ticker:
+        alias_corrections.append(f"{ticker} → {normalized}")
+    normalized_tickers.append(normalized)
+tickers_raw = list(dict.fromkeys(normalized_tickers))
 
 if run_button:
+    if alias_corrections:
+        st.info(f"Corrected common ticker typo(s): {', '.join(alias_corrections)}")
     if len(tickers_raw) < 3:
         st.error("Please enter at least 3 unique tickers.")
         st.stop()
