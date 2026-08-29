@@ -8,6 +8,7 @@ import yfinance as yf
 from scipy import optimize, stats
 from datetime import date, timedelta
 import io
+import time
 
 # ── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Portfolio Analytics", page_icon="📊", layout="wide")
@@ -174,27 +175,65 @@ st.markdown(f"""
         border-radius: 8px !important;
         color: {COLORS["input_text"]} !important;
     }}
+    /* Newer Streamlit renders the date as SEGMENT SPANS (role="spinbutton":
+       year / month / day) and keeps the real <input type="date"> hidden in
+       [data-testid="hidden-dateinput-container"]. Styling only the input
+       therefore colours something nobody can see, while the visible digits
+       fall through to the blanket sidebar colour — #E2E8F0 on a white field.
+       Measuring the input is what makes this one easy to miss: it reports a
+       perfectly readable navy while the page shows nothing. */
+    [data-testid="stSidebar"] [data-testid="stDateInputField"] {{
+        background: {COLORS["sidebar_input"]} !important;
+        border: 1px solid rgba(255,255,255,0.3) !important;
+        border-radius: 8px !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stDateInput"] [role="group"] *,
+    [data-testid="stSidebar"] [data-testid="stDateInput"] [role="spinbutton"] {{
+        color: {COLORS["input_text"]} !important;
+        -webkit-text-fill-color: {COLORS["input_text"]} !important;
+    }}
     [data-testid="stSidebar"] .stNumberInput input {{
         background: {COLORS["sidebar_input"]} !important;
         border: 1px solid rgba(255,255,255,0.3) !important;
         border-radius: 8px !important;
         color: {COLORS["input_text"]} !important;
     }}
-    [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] {{
+    /* ── Selectbox / multiselect ───────────────────────────────────────
+       Streamlit has shipped TWO different widget internals: BaseWeb
+       ([data-baseweb="select"]) and, in a later release, React Aria
+       ([data-rac], with the field carrying role="group"). Both are matched
+       here on purpose. When the app was pinned to `streamlit>=1.32.0` a
+       rebuild picked up the React Aria version, every [data-baseweb] rule
+       below stopped matching, and the benchmark dropdown fell through to the
+       blanket sidebar colour — #E2E8F0 text on a white field, 1.23:1, i.e.
+       invisible. Nothing in this repo had changed.
+       The ARIA hooks (role="group", role="combobox") are the durable half:
+       they are part of the accessibility contract rather than one component
+       library's markup, so prefer them when adding rules. */
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"],
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] [role="group"],
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"],
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [role="group"] {{
         background: {COLORS["sidebar_input"]} !important;
+        border: 1px solid rgba(255,255,255,0.3) !important;
         border-radius: 8px !important;
     }}
-    [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] * {{
+    /* Scoped to the FIELD, never the widget label — the label's tooltip icon
+       has to stay light against the navy sidebar. */
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] *,
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] [role="group"] *,
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] input[role="combobox"],
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] *,
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [role="group"] *,
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] input[role="combobox"] {{
         color: {COLORS["input_text"]} !important;
+        -webkit-text-fill-color: {COLORS["input_text"]} !important;
     }}
-    [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] svg {{
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] svg,
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] [role="group"] svg,
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] svg,
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [role="group"] svg {{
         fill: {COLORS["input_text"]} !important;
-    }}
-    [data-testid="stSidebar"] .stMultiSelect [data-baseweb="select"] {{
-        background: {COLORS["sidebar_input"]} !important;
-        border-radius: 8px !important;
-    }}
-    [data-testid="stSidebar"] .stMultiSelect [data-baseweb="select"] * {{
         color: {COLORS["input_text"]} !important;
     }}
     [data-testid="stSidebar"] hr {{
@@ -236,6 +275,13 @@ st.markdown(f"""
         height: unset !important;
         transition: all 0.2s ease !important;
         box-shadow: 0 2px 8px rgba(46,134,171,0.3) !important;
+    }}
+    /* The label lives in a nested <p>, and `[data-testid="stSidebar"] *`
+       above matches it directly — a matched rule beats inherited colour, so
+       the button's own `color: #FFFFFF` never reached the text. */
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] *,
+    [data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"] * {{
+        color: #FFFFFF !important;
     }}
     [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover,
     [data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-primary"]:hover {{
@@ -289,21 +335,24 @@ st.markdown(f"""
     }}
 
     /* ── Tabs ─────────────────────────────────────────────────────────── */
-    [data-baseweb="tab-list"] {{
+    [data-baseweb="tab-list"],
+    [data-testid="stTabs"] [role="tablist"] {{
         gap: 0px;
         background: {COLORS["tab_bg"]};
         border-radius: 12px;
         padding: 4px;
         overflow-x: auto;
     }}
-    [data-baseweb="tab"] {{
+    [data-baseweb="tab"],
+    [data-testid="stTabs"] [role="tab"] {{
         border-radius: 8px !important;
         font-weight: 500 !important;
         font-size: 0.85rem !important;
         padding: 0.45rem 1rem !important;
         color: {COLORS["text_muted"]} !important;
     }}
-    [data-baseweb="tab"][aria-selected="true"] {{
+    [data-baseweb="tab"][aria-selected="true"],
+    [data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
         background: {COLORS["tab_active_bg"]} !important;
         color: {COLORS["primary"]} !important;
         font-weight: 600 !important;
@@ -381,7 +430,9 @@ st.markdown(f"""
     }}
 
     /* ── Selectbox / Multiselect / Radio ──────────────────────────────── */
-    [data-baseweb="select"] {{
+    [data-baseweb="select"],
+    [data-testid="stSelectbox"] [role="group"],
+    [data-testid="stMultiSelect"] [role="group"] {{
         border-radius: 8px !important;
     }}
     .stRadio > label {{
@@ -671,33 +722,82 @@ with st.sidebar:
 # HELPER FUNCTIONS
 # ══════════════════════════════════════════════════════════════════════════════
 
+# A series shorter than this is treated as no data rather than as a stub.
+MIN_TRADING_DAYS = 30
+
+
+def _fetch_prices(tickers: list, start: str, end: str) -> dict:
+    """One BATCHED Yahoo request for `tickers`. Returns {ticker: close Series}.
+
+    Batched deliberately. The original version issued one request per ticker —
+    eleven HTTP calls for a ten-ticker run — which is what tripped Yahoo
+    Finance's rate limiter in the first place. A throttled response comes back
+    as an EMPTY DataFrame, not an exception, so a perfectly good symbol looked
+    like a bad one and the user was told to check their spelling.
+    """
+    if not tickers:
+        return {}
+    try:
+        raw = yf.download(
+            tickers,
+            start=start,
+            end=end,
+            progress=False,
+            auto_adjust=True,
+            threads=False,
+        )
+    except Exception:
+        return {}
+    if raw is None or raw.empty:
+        return {}
+
+    if isinstance(raw.columns, pd.MultiIndex):
+        if "Close" not in raw.columns.get_level_values(0):
+            return {}
+        close = raw["Close"]
+    else:
+        # yfinance returns flat columns when only one ticker is requested.
+        if "Close" not in raw.columns:
+            return {}
+        close = raw[["Close"]]
+        close.columns = [tickers[0]]
+
+    out = {}
+    for t in tickers:
+        if t not in close.columns:
+            continue
+        series = close[t].dropna()
+        if len(series) >= MIN_TRADING_DAYS:
+            out[t] = series
+    return out
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def download_data(tickers: list, start: str, end: str, benchmark: str):
     """Download adjusted close prices; returns (prices_df, failed_tickers)."""
-    import time
-    all_tickers = tickers + [benchmark]
-    data = {}
-    failed = []
-    for t in all_tickers:
-        try:
-            df = yf.download(t, start=start, end=end, progress=False, auto_adjust=True)
-            # Handle MultiIndex columns from newer yfinance versions
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
-            if df.empty or len(df) < 30:
-                failed.append(t)
-            else:
-                data[t] = df["Close"].squeeze()
-            time.sleep(0.15)  # small delay to avoid Yahoo Finance rate limiting
-        except Exception:
-            failed.append(t)
+    all_tickers = list(dict.fromkeys(tickers + [benchmark]))
+
+    data = _fetch_prices(all_tickers, start, end)
+    missing = [t for t in all_tickers if t not in data]
+
+    # Retry what is missing, with backoff. A short batch is far more often
+    # throttling than a bad symbol, and the retry is what turns a reported
+    # failure back into data.
+    for delay in (1.0, 3.0):
+        if not missing:
+            break
+        time.sleep(delay)
+        data.update(_fetch_prices(missing, start, end))
+        missing = [t for t in all_tickers if t not in data]
+
     if not data:
-        return None, failed
+        return None, missing
+
     prices = pd.DataFrame(data)
     prices.index = pd.to_datetime(prices.index)
     if prices.index.tz is not None:
         prices.index = prices.index.tz_localize(None)
-    return prices, failed
+    return prices, missing
 
 
 def compute_returns(prices: pd.DataFrame) -> pd.DataFrame:
@@ -838,16 +938,27 @@ if run_button:
         prices, failed = download_data(tickers_raw, str(start_date), str(end_date), bench_ticker)
 
     if failed:
+        # A failed download must NOT stay in the cache. st.cache_data would
+        # otherwise hold this result for its full hour TTL, so clicking
+        # "Run Analysis" again replayed the same error without ever
+        # re-contacting Yahoo. Clearing here is what makes the retry real.
+        download_data.clear()
         bench_failed = bench_ticker in failed
         ticker_failed = [t for t in failed if t != bench_ticker]
         if ticker_failed:
             st.warning(
                 f"Could not download data for: **{', '.join(ticker_failed)}**. These tickers were dropped. "
-                f"Common causes: the ticker symbol is misspelled, the company has been delisted, "
-                f"or the stock does not have enough trading history for the selected date range."
+                f"This is most often Yahoo Finance rate-limiting the request rather than a problem with the "
+                f"symbol — click **Run Analysis** again in a few seconds and it usually succeeds. "
+                f"If it keeps failing, check that the symbol is spelled correctly and was publicly traded "
+                f"across the selected date range."
             )
         if bench_failed:
-            st.error(f"Could not download {bench_label} benchmark data. The benchmark index may be temporarily unavailable. Please try again or select a different benchmark.")
+            st.error(
+                f"Could not download {bench_label} benchmark data. This is usually Yahoo Finance "
+                f"rate-limiting rather than an outage — click **Run Analysis** again in a few "
+                f"seconds, or select a different benchmark."
+            )
             st.stop()
 
     if prices is None or prices.shape[1] < 4:

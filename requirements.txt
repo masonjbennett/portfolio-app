@@ -1,7 +1,18 @@
-streamlit>=1.32.0
-pandas>=2.0.0
-numpy>=1.24.0
-plotly>=5.18.0
-yfinance>=0.2.36
-scipy>=1.12.0
-openpyxl>=3.1.0
+# Pinned deliberately. This app styles Streamlit by reaching into Streamlit's
+# own DOM, so a Streamlit upgrade can silently un-style the page: the widget
+# markup moved from BaseWeb ([data-baseweb="select"]) to React Aria ([data-rac])
+# in a release after the original pins, which killed 11 CSS rules and left the
+# benchmark dropdown reading #E2E8F0 on white (1.23:1). Nothing in this repo
+# changed; the app broke on a rebuild. Verify the sidebar dropdown and the tab
+# bar still look right before raising the Streamlit pin.
+streamlit==1.62.0
+
+# yfinance is capped at a major version rather than pinned exactly: it breaks
+# when Yahoo changes its API, and the fix for that is normally an UPGRADE.
+yfinance>=1.2.2,<2.0.0
+
+pandas>=2.0.0,<4.0.0
+numpy>=1.24.0,<3.0.0
+plotly>=5.18.0,<7.0.0
+scipy>=1.12.0,<2.0.0
+openpyxl>=3.1.0,<4.0.0

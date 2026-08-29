@@ -1,0 +1,22 @@
+# Pins the app to a light base theme for EVERY visitor.
+#
+# Without this file, Streamlit Cloud lets each visitor's operating-system
+# dark-mode preference choose the base theme. This app hardcodes light
+# backgrounds in its own CSS but lets Streamlit supply text colours, so a
+# visitor in dark mode got #FAFAFA text painted on #FFFFFF cards — measured
+# at 1.04:1 contrast, i.e. invisible. The page looked correct to anyone
+# browsing in light mode and broken to everyone else.
+#
+# The colours below mirror LIGHT_COLORS in portfolio_app.py; keep them in sync.
+[theme]
+base = "light"
+primaryColor = "#2E86AB"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8F9FC"
+textColor = "#1B2A4A"
+
+[server]
+enableStaticServing = false
+
+[browser]
+gatherUsageStats = false
