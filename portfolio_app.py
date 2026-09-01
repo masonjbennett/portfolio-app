@@ -409,10 +409,23 @@ st.markdown(f"""
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }}
 
-    /* ── Sliders ──────────────────────────────────────────────────────── */
-    [data-testid="stSlider"] > div > div > div > div {{
-        background-color: #2E86AB !important;
-    }}
+    /* ── Sliders ──────────────────────────────────────────────────────────
+       Deliberately NO background rule here. There used to be one:
+           [data-testid="stSlider"] > div > div > div > div
+       written to paint the filled part of the track. Under the React Aria
+       markup that four-deep `> div` chain no longer reaches the track (which
+       is one level higher) and instead matched FOUR elements, all wrong: the
+       thumb wrapper, [data-testid="stSliderThumbValue"] — the number above the
+       handle — and both tick labels in [data-testid="stSliderTickBar"]. That
+       is the row of teal blocks that appeared over every slider, and because
+       Streamlit colours the thumb value's TEXT with primaryColor, which this
+       app sets to the same #2E86AB, the number inside each block was teal on
+       teal and could not be read at all.
+       The track does not need a rule: `primaryColor` in .streamlit/config.toml
+       already paints it. A positional selector like that one is the same
+       fragility as the [data-baseweb] rules above — it describes where an
+       element sits in Streamlit's DOM rather than what it is, so it does not
+       stop working when the DOM moves, it starts painting something else. */
 
     /* ── Plotly Charts ────────────────────────────────────────────────── */
     [data-testid="stPlotlyChart"] {{
