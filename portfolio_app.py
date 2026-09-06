@@ -50,25 +50,32 @@ CHART_COLORS = [
 ]
 
 # ── Preset Ticker Lists ─────────────────────────────────────────────────────
+# Every preset must survive the app's own cleaning at the DEFAULT date range
+# (2019-01-01): anything missing >5% of days is dropped before analysis, so a
+# preset built from recent IPOs silently shrinks. "Growth" used to carry CRWD,
+# DDOG, NET and PLTR and lost all four — 3 of 7 survived, exactly the minimum,
+# so the preset a curious visitor is most likely to try produced a warning
+# stack and a three-stock portfolio. Check any new preset against that rule
+# before adding it.
 PRESETS = {
-    "FAANG+": {
-        "tickers": "AAPL, AMZN, GOOGL, META, NFLX, MSFT",
-        "desc": "Big tech giants",
+    "Cross-asset": {
+        "tickers": "VTI, AGG, GLD, VNQ, EFA",
+        "desc": "Stocks, bonds, gold, property",
     },
     "Mag 7": {
         "tickers": "AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA",
         "desc": "Top 7 mega caps",
     },
     "Sectors": {
-        "tickers": "XLK, XLF, XLV, XLE, XLI, XLP, XLY",
-        "desc": "7 sector ETFs",
+        "tickers": "XLK, XLF, XLV, XLE, XLI, XLP, XLY, XLU, XLRE",
+        "desc": "9 sector ETFs",
     },
     "Dividend": {
         "tickers": "JNJ, KO, PG, PEP, MMM, ABT, WMT",
-        "desc": "Dividend kings",
+        "desc": "Long dividend records",
     },
     "Growth": {
-        "tickers": "NVDA, AMD, SHOP, CRWD, DDOG, NET, PLTR",
+        "tickers": "NVDA, AMD, SHOP, TTD, MDB, NOW, PANW",
         "desc": "High-growth tech",
     },
     "Blue Chip": {
@@ -580,6 +587,58 @@ def tip(key: str) -> str:
     return TOOLTIPS.get(key, {}).get(level, "")
 
 
+# ── Live risk-free rate ──────────────────────────────────────────────────────
+# The risk-free rate is the one input that silently flatters everything when it
+# is stale: Sharpe, Sortino, Jensen's alpha, the CAL and the tangency portfolio
+# all measure against it. Asking the user to look it up was a chore the app can
+# absorb.
+#
+# FRED's fredgraph.csv needs no API key. ONE series per request — a single
+# request mixing frequencies comes back as a ZIP of separate CSVs rather than
+# one CSV, which parses as no columns at all. DGS3MO is daily, so a lone daily
+# series is safe. `cosd` pins a short window: the default is the full series
+# back to 1982, which is ~150KB to read one number.
+RF_FALLBACK = 2.0
+FRED_DGS3MO = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3MO&cosd={}"
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def fetch_rf_rate():
+    """Latest 3-month Treasury constant-maturity yield. Returns (pct, date) or None.
+
+    Returns None rather than raising so the caller can fall back visibly. The
+    caller must clear the cache on None: st.cache_data would otherwise hold a
+    failed lookup for the full six-hour TTL, which is the same defect that once
+    froze an empty market-data response for an hour and made a fix unreachable
+    to anyone already holding one.
+    """
+    cosd = (date.today() - timedelta(days=120)).isoformat()
+    try:
+        import urllib.request
+        with urllib.request.urlopen(FRED_DGS3MO.format(cosd), timeout=10) as resp:
+            text = resp.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+
+    # DATE,DGS3MO — one row per calendar weekday. Holidays and any not-yet-
+    # published day carry "." rather than a number, and the newest rows are the
+    # ones most likely to be blank, so walk the whole window and keep the last
+    # value that actually parses.
+    latest = None
+    for line in text.splitlines()[1:]:
+        parts = line.split(",")
+        if len(parts) < 2:
+            continue
+        day, raw = parts[0].strip(), parts[-1].strip()
+        if not raw or raw == ".":
+            continue
+        try:
+            latest = (float(raw), day)
+        except ValueError:
+            continue
+    return latest
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR — Inputs
 # ══════════════════════════════════════════════════════════════════════════════
@@ -645,7 +704,21 @@ with st.sidebar:
         end_date = st.date_input("End", value=date.today())
 
     st.subheader("3 · Risk-Free Rate")
-    rf_annual = st.number_input("Annualized Rf (%)", value=2.0, step=0.25) / 100.0
+    _rf_live = fetch_rf_rate()
+    if _rf_live is None:
+        # Never let a failed lookup sit in the cache for the full TTL.
+        fetch_rf_rate.clear()
+        _rf_default = RF_FALLBACK
+        _rf_note = ("Could not reach FRED — using the "
+                    f"{RF_FALLBACK:.1f}% placeholder. Edit it if you know today's rate.")
+    else:
+        _rf_default, _rf_asof = _rf_live
+        _rf_note = f"Live: 3-month Treasury (DGS3MO), {_rf_asof} · source FRED. Override it freely."
+    rf_annual = st.number_input("Annualized Rf (%)", value=float(_rf_default), step=0.25) / 100.0
+    st.markdown(
+        f"<span style='font-size:0.78rem; color:#94A3C0; line-height:1.4;'>{_rf_note}</span>",
+        unsafe_allow_html=True,
+    )
 
     st.subheader("4 · Starting Investment")
     initial_investment = st.number_input("Initial Amount ($)", value=10000, min_value=100, step=1000,
