@@ -2,7 +2,21 @@
 
 An interactive portfolio analytics application built with Streamlit for real-time equity portfolio construction, optimization, and risk analysis.
 
-**Mason Bennett | M.S. in Finance | University of Arkansas**
+**Mason Bennett — M.S. Finance, University of Arkansas (May 2026)** · [masonjbennett.com](https://masonjbennett.com)
+
+**[Open the live app →](https://portfolio-app-ifh8afmcuxkyr6ivov9fmj.streamlit.app/)**
+(Streamlit Community Cloud — the first load takes about 20 seconds to wake the container)
+
+## What the out-of-sample test found
+
+I walk-forward tested the optimizer over six rolling one-year holding periods: fit on all prior
+history, hold one year, re-fit, roll forward. On similar assets, equal-weighting beat both optimized
+portfolios — the max-Sharpe portfolio's **1.107 in-sample Sharpe became 0.659 out of sample**.
+Optimization only added value across genuinely different asset classes.
+
+That result is why the app ships an estimation-window sensitivity tab at all: the instability of the
+inputs is made visible rather than averaged away. Method note and the full figures:
+[masonjbennett.com/projects#portfolio-method](https://masonjbennett.com/projects#portfolio-method).
 
 ## Features
 
