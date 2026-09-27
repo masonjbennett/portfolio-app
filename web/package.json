@@ -1,0 +1,19 @@
+{
+  "name": "portfolio-analytics-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p . && vite build",
+    "preview": "vite preview",
+    "test": "node test/run.mjs",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "quadprog": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
