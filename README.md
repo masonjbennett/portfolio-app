@@ -1,6 +1,9 @@
 # Portfolio Analytics
 
-An interactive portfolio analytics application built with Streamlit for real-time equity portfolio construction, optimization, and risk analysis.
+Name three to ten tickers and get the full mean-variance treatment on their real price
+history — annualized return and volatility, the correlation structure, drawdowns, CAPM
+beta and alpha, and three constructed portfolios (equal-weight, minimum-variance and
+max-Sharpe) plotted on an efficient frontier with the capital allocation line.
 
 **Mason Bennett — M.S. Finance, University of Arkansas (May 2026)** · [masonjbennett.com](https://masonjbennett.com)
 
