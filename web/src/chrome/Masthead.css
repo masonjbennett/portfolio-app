@@ -20,6 +20,16 @@
   font-size: 0.95rem;
 }
 
+.masthead-byline {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink2);
+  font-size: 0.82rem;
+}
+
+.masthead-byline a {
+  color: var(--color-ink);
+}
+
 .masthead-meta {
   display: grid;
   justify-items: end;

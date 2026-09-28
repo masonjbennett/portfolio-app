@@ -6,9 +6,57 @@
 }
 
 .footer p {
-  margin: 0;
+  margin: var(--space-2) 0 0;
   max-width: 60em;
   font-size: 0.78rem;
   line-height: 1.5;
   color: var(--color-ink2);
+}
+
+.footer p:first-child {
+  margin-top: 0;
+}
+
+/* The methodology: closed until asked for, as the app's expander is; a term column and its definition. */
+.footer-method summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.footer-method dl {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 60em;
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+.footer-method-row {
+  display: grid;
+  grid-template-columns: 12em 1fr;
+  gap: var(--space-3);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.footer-method dt {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.footer-method dd {
+  margin: 0;
+  color: var(--color-ink2);
+}
+
+.footer-links a {
+  color: var(--color-ink);
+}
+
+@media (max-width: 760px) {
+  .footer-method-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
 }
