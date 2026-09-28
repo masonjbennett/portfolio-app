@@ -1,0 +1,6 @@
+# LF in the working tree on every platform: t-shell and t-tooltips compare generated files byte
+# for byte with a fresh generation, and a Windows checkout (core.autocrlf) would otherwise turn a
+# correct file into a stale-looking one.
+* text=auto eol=lf
+*.woff2 binary
+*.png binary
