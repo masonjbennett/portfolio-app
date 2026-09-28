@@ -1,0 +1,94 @@
+/* The info mark: a serif italic "i" in a hairline ring, with a thumb-sized hit area around it. */
+.tip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: var(--space-1);
+}
+
+.tip-mark {
+  appearance: none;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-ink2);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1;
+  text-transform: none;
+  cursor: help;
+}
+
+.tip-mark::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.tip-mark:hover,
+.tip[data-open] .tip-mark {
+  color: var(--color-teal);
+  border-color: var(--color-teal);
+}
+
+.tip-text {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 18rem;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-top: var(--line-bar) solid var(--color-teal);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+}
+
+.tip-mark:focus-visible + .tip-text,
+.tip[data-open] .tip-text {
+  display: block;
+}
+
+@media (hover: hover) {
+  .tip:hover .tip-text {
+    display: block;
+  }
+}
+
+.tip[data-hushed]:not([data-open]) .tip-text {
+  display: none;
+}
+
+/* Phone (760px, tokens.breakpoint.phone): the text sits along the bottom of the screen, full width,
+   where a thumb is not covering it and no edge can clip it. */
+@media (max-width: 760px) {
+  .tip-text {
+    position: fixed;
+    top: auto;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    left: var(--space-4);
+    transform: none;
+    width: auto;
+    max-width: none;
+  }
+}

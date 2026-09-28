@@ -1,0 +1,57 @@
+{
+  "return": {
+    "plain": "How much money this investment made (or lost) per year on average, shown as a percentage.",
+    "finance": "Annualized arithmetic mean return — the average daily return scaled to a yearly figure (×252 trading days).",
+    "formula": "Annualized arithmetic mean: μ = r̄_daily × 252. Simple returns used (not log). Does not account for compounding drag."
+  },
+  "volatility": {
+    "plain": "How wildly the investment's value swings up and down. Higher = more unpredictable.",
+    "finance": "Annualized standard deviation of daily returns (×√252). Measures total risk — both upside and downside moves.",
+    "formula": "σ_annual = σ_daily × √252. Assumes i.i.d. returns for scaling. Full (symmetric) dispersion measure including upside variance."
+  },
+  "sharpe": {
+    "plain": "A score that shows if the returns are worth the risk. Higher is better — above 1.0 is generally good.",
+    "finance": "Excess return per unit of total risk: (Rₚ − Rf) / σₚ. Compares how much extra return you get for each unit of volatility taken.",
+    "formula": "Ex-post Sharpe: (μₚ − Rf) / σₚ using annualized values. Assumes normally distributed returns; can be misleading with skewed or fat-tailed distributions."
+  },
+  "sortino": {
+    "plain": "Like Sharpe, but only counts the bad volatility (losses). Higher is better.",
+    "finance": "Excess return divided by downside deviation only — ignores upside volatility, focusing purely on harmful risk.",
+    "formula": "Sortino = (μₚ − Rf) / σ_down, where σ_down = √(Σ min(rᵢ − Rf_daily, 0)² / N) × √252. Better for asymmetric return distributions."
+  },
+  "max_dd": {
+    "plain": "The biggest drop from a high point to a low point — the worst loss you could have experienced.",
+    "finance": "Maximum peak-to-trough decline in cumulative returns. Shows worst-case drawdown over the entire period.",
+    "formula": "Max DD = min_t [(cum_t − peak_t) / peak_t]. Path-dependent measure; sensitive to sequence of returns, not just distribution."
+  },
+  "best_sharpe": {
+    "plain": "The best possible risk-vs-reward score achievable by mixing these stocks optimally.",
+    "finance": "The Sharpe ratio of the tangency portfolio — the point where the Capital Allocation Line is steepest.",
+    "formula": "Sharpe of the tangency portfolio: max_w (w′μ − Rf) / √(w′Σw), s.t. Σwᵢ=1, wᵢ≥0. Slope of the CAL."
+  },
+  "tangency_return": {
+    "plain": "The expected yearly return of the best risk-adjusted portfolio mix.",
+    "finance": "Annualized expected return of the maximum-Sharpe portfolio found via constrained optimization.",
+    "formula": "μ_tan = w_tan′ μ × 252, where w_tan = argmax Sharpe subject to full-investment and long-only constraints."
+  },
+  "bench_return": {
+    "plain": "How much the benchmark index returned per year on average — a baseline to compare your portfolio against.",
+    "finance": "Annualized mean return of the selected benchmark index over the analysis period.",
+    "formula": "Benchmark annualized arithmetic mean return. Used as the passive alternative in active-vs-passive comparison."
+  },
+  "bench_vol": {
+    "plain": "How much the benchmark index's value swings around year to year.",
+    "finance": "Annualized standard deviation of the benchmark's daily returns.",
+    "formula": "Benchmark σ_annual = σ_daily × √252. Represents systematic market risk for the chosen index."
+  },
+  "beta": {
+    "plain": "How much a stock moves when the market moves. Beta of 1.0 = moves with the market; above 1.0 = more volatile than the market.",
+    "finance": "Sensitivity of the stock's returns to benchmark returns. Estimated via OLS regression: β = Cov(rᵢ, rₘ) / Var(rₘ).",
+    "formula": "CAPM beta from OLS: rᵢ − rf = α + β(rₘ − rf) + ε. Measures systematic risk exposure. Does not capture nonlinear or tail dependencies."
+  },
+  "alpha": {
+    "plain": "Extra return above (or below) what you'd expect given the stock's risk level. Positive = outperforming, negative = underperforming.",
+    "finance": "Annualized Jensen's alpha — the intercept from regressing excess stock returns on excess benchmark returns. Measures manager/stock skill.",
+    "formula": "Jensen's α (annualized): α_annual = â × 252, where â is the daily OLS intercept from rᵢ − rf = α + β(rₘ − rf) + ε. Significance depends on sample size and residual structure."
+  }
+}

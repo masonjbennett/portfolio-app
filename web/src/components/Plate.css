@@ -1,0 +1,40 @@
+/* Plates are the one place boxes are used: a hairline box on paper around a single figure. */
+.plate {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: var(--line-hair) solid var(--color-hairline);
+  background: var(--color-paper);
+}
+
+.plate-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-ink2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plate-value {
+  margin-top: var(--space-2);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 28px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.plate-na {
+  color: var(--color-ink2);
+  font-size: 12px;
+}
+
+/* Phone: 760px, tokens.breakpoint.phone. */
+@media (max-width: 760px) {
+  .plate-value {
+    font-size: 22px;
+  }
+}

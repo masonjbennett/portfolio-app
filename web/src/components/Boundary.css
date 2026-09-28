@@ -1,0 +1,11 @@
+/* The one line a failed card leaves: small, muted mono text on the hairline, no box, no colour
+   alarm. It says which card is missing and nothing else. */
+.boundary {
+  margin: var(--space-3) 0;
+  padding-top: var(--space-2);
+  border-top: var(--line-hair) solid var(--color-hairline2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--color-ink2) 70%, var(--color-paper));
+}

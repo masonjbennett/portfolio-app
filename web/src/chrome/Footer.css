@@ -1,0 +1,14 @@
+/* The footing: small print under a hairline. */
+.footer {
+  margin-top: var(--space-7);
+  padding-top: var(--space-3);
+  border-top: var(--line-hair) solid var(--color-hairline);
+}
+
+.footer p {
+  margin: 0;
+  max-width: 60em;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-ink2);
+}

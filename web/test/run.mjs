@@ -1,10 +1,12 @@
 // Runs every test/t-*.mjs, each in its own process. Suites are DISCOVERED, never listed: a suite
-// nobody runs looks exactly like a suite that passes.
+// nobody runs looks exactly like a suite that passes. Every suite starts with test/_tsx.mjs
+// registered (--import), so a suite can import .tsx components and anything that imports CSS.
 import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const dir = fileURLToPath(new URL(".", import.meta.url));
+const loader = new URL("./_tsx.mjs", import.meta.url).href;
 const suites = readdirSync(dir).filter((f) => /^t-.*\.mjs$/.test(f)).sort();
 if (!suites.length) {
   console.log("no suites found");
@@ -12,7 +14,7 @@ if (!suites.length) {
 }
 let failed = 0;
 for (const s of suites) {
-  const r = spawnSync(process.execPath, [dir + s], { stdio: "inherit" });
+  const r = spawnSync(process.execPath, ["--import", loader, dir + s], { stdio: "inherit" });
   if (r.status !== 0) failed += 1;
 }
 console.log(`${suites.length - failed}/${suites.length} suites passed`);

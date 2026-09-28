@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/prices.ts": { "maxDuration": 30 },
+    "api/rf.ts": { "maxDuration": 15 }
+  }
+}

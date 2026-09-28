@@ -1,0 +1,53 @@
+.chart-frame {
+  margin: 0 0 var(--space-6);
+  min-width: 0;
+}
+
+.chart-head {
+  margin-bottom: var(--space-3);
+}
+
+.chart-title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.chart-sub {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink2);
+  font-size: 14px;
+}
+
+.chart-body {
+  position: relative;
+  min-width: 0;
+}
+
+/* Loading, empty and error share one quiet band between hairlines, at the chart's own height. */
+.chart-note {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-4);
+  border-top: var(--line-hair) solid var(--color-hairline2);
+  border-bottom: var(--line-hair) solid var(--color-hairline2);
+  color: var(--color-ink2);
+  font-size: 14px;
+  text-align: center;
+}
+
+.chart-note--error {
+  color: var(--color-claret);
+}
+
+.chart-note-name {
+  font-family: var(--font-mono);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
+@media (max-width: 760px) {
+  .chart-title {
+    font-size: 19px;
+  }
+}

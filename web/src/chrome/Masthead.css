@@ -1,0 +1,68 @@
+/* The masthead: serif title over an ink rule, the chip and the price-date line to its right. */
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-5);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-5);
+  border-bottom: var(--line-hair) solid var(--color-ink);
+}
+
+.masthead-title {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+}
+
+.masthead-dek {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink2);
+  font-size: 0.95rem;
+}
+
+.masthead-meta {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+}
+
+.masthead-chip {
+  margin: 0;
+  padding: 2px var(--space-3);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink2);
+}
+
+.masthead-asof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5ch;
+  margin: 0;
+  min-height: 1.2em;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-ink2);
+}
+
+.masthead-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.masthead-tag-example {
+  color: var(--color-plum);
+}
+
+.masthead-tag-updating {
+  color: var(--color-teal);
+}
+
+@media (max-width: 760px) {
+  .masthead-meta {
+    justify-items: start;
+  }
+}

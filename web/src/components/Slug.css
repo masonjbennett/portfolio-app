@@ -1,0 +1,31 @@
+.slug {
+  position: relative;
+  margin: var(--space-6) 0 var(--space-4);
+  padding-top: var(--space-3);
+  border-top: var(--line-hair) solid var(--color-hairline);
+}
+
+/* The teal bar sits on the hairline, its bottom edge flush with the line's. */
+.slug::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * var(--line-bar));
+  left: 0;
+  width: 40px;
+  height: var(--line-bar);
+  background: var(--color-teal);
+}
+
+.slug-text {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  line-height: 1.15;
+  scroll-margin-top: var(--space-5);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone. */
+@media (max-width: 760px) {
+  .slug-text {
+    font-size: 22px;
+  }
+}

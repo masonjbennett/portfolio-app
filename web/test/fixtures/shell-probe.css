@@ -1,0 +1,2 @@
+/* Exists so test/t-shell.mjs can prove a component's .css import loads as an empty module. */
+.shell-probe { color: #262421; }

@@ -1,0 +1,113 @@
+/* A dense ledger table: hairline rules, no box, figures right-aligned in tabular mono. The table
+   scrolls sideways inside its own box when it is wider than the column, and the label column stays
+   frozen at the left edge while it does (on a phone, nearly every table). */
+.tbl {
+  margin: var(--space-4) 0 var(--space-5);
+}
+
+.tbl-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.tbl table {
+  border-collapse: separate; /* sticky cells keep their rules only with separate borders */
+  border-spacing: 0;
+  min-width: 100%;
+  font-size: 14px;
+}
+
+.tbl caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0 0 var(--space-2);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--color-ink);
+}
+
+.tbl th,
+.tbl td {
+  padding: 6px var(--space-3);
+  border-bottom: var(--line-hair) solid var(--color-hairline2);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.tbl thead th {
+  border-bottom: var(--line-hair) solid var(--color-hairline);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--color-ink2) 72%, var(--color-paper));
+}
+
+.tbl .num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+.tbl .txt {
+  text-align: left;
+}
+
+.tbl tbody th {
+  font-weight: 400;
+  color: var(--color-ink);
+}
+
+/* The label column: frozen when the table scrolls sideways. It needs an opaque ground, or the
+   figures scrolling under it would show through. */
+.tbl .first {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-paper);
+  text-align: left;
+  border-right: var(--line-hair) solid var(--color-hairline2);
+}
+
+.tbl-dl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.tbl-dl button {
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 6px;
+  background: var(--color-paper);
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-teal);
+  cursor: pointer;
+}
+
+.tbl-dl button:hover {
+  border-color: var(--color-teal);
+}
+
+.tbl-dl button:disabled {
+  cursor: progress;
+  color: color-mix(in srgb, var(--color-ink2) 60%, var(--color-paper));
+}
+
+.tbl-note {
+  font-size: 12px;
+  color: var(--color-claret);
+}
+
+@media (max-width: 760px) {
+  .tbl th,
+  .tbl td {
+    padding: 6px var(--space-2);
+  }
+}

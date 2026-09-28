@@ -1,0 +1,81 @@
+/* The phone's summary chip, a full-width pill, and the sheet it opens from the bottom edge. */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  text-align: left;
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip-label {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-teal);
+}
+
+.chip-summary {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  background: color-mix(in srgb, var(--color-ink) 35%, transparent);
+}
+
+.sheet {
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  background: var(--color-paper);
+  border-top: var(--line-bar) solid var(--color-teal);
+  border-radius: 12px 12px 0 0;
+}
+
+.sheet:focus {
+  outline: none;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.sheet-title {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+}
+
+.sheet-done {
+  padding: 6px var(--space-4);
+  font: inherit;
+  font-weight: 700;
+  color: var(--color-paper);
+  background: var(--color-teal);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}

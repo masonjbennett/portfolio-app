@@ -1,0 +1,81 @@
+/* The command palette: a paper card near the top of the screen over a dimmed page. */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 15vh var(--space-4) 0;
+  background: color-mix(in srgb, var(--color-ink) 30%, transparent);
+}
+
+.palette {
+  width: min(520px, 100%);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-top: var(--line-bar) solid var(--color-teal);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--color-ink);
+  background: none;
+  border: 0;
+  border-bottom: var(--line-hair) solid var(--color-hairline);
+}
+
+.palette-input:focus-visible {
+  outline: none;
+}
+
+.palette-list {
+  margin: 0;
+  padding: var(--space-1) 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.palette-option,
+.palette-empty {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+}
+
+.palette-option {
+  cursor: pointer;
+}
+
+.palette-option[aria-selected="true"] {
+  background: var(--color-hairline2);
+  box-shadow: inset var(--line-bar) 0 0 var(--color-teal);
+}
+
+.palette-group {
+  flex: none;
+  width: 9.5em;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+.palette-label {
+  flex: 1;
+}
+
+.palette-current,
+.palette-empty {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-teal);
+}

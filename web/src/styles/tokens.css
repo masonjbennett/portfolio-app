@@ -1,0 +1,44 @@
+/* The paper-and-ink tokens, as custom properties. src/styles/tokens.ts carries the same values for
+   SVG and chart code (an SVG attribute cannot read a custom property); test/t-shell.mjs holds the
+   two files to each other value for value, so change both or the suite goes red. */
+:root {
+  color-scheme: light;
+
+  /* Palette. Teal is the primary accent and a rising market; red is a falling one. */
+  --color-paper: #faf3ea;
+  --color-ink: #262421;
+  --color-ink2: #33302c;
+  --color-teal: #0d6d56;
+  --color-navy: #1f5a9e;
+  --color-plum: #6d549e;
+  --color-claret: #990f3d;
+  --color-bronze: #b0741e;
+  --color-red: #b2342b;
+  --color-hairline: #ddcfb8;
+  --color-hairline2: #e9ddc9;
+  --color-up: #0d6d56;
+  --color-down: #b2342b;
+
+  /* Instrument Serif for headlines, Space Grotesk for body, JetBrains Mono for numbers. */
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  /* Spacing scale, 4px steps at the small end. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Rule widths: a hairline, and the teal bar a section Slug sits on it with. */
+  --line-hair: 1px;
+  --line-bar: 3px;
+
+  /* The phone breakpoint. A custom property cannot be read inside @media, so stylesheets write
+     760px literally; this entry exists so script code (matchMedia) and CSS name one number. */
+  --breakpoint-phone: 760px;
+}
