@@ -7,8 +7,12 @@ max-Sharpe) plotted on an efficient frontier with the capital allocation line.
 
 **Mason Bennett — M.S. Finance, University of Arkansas (May 2026)** · [masonjbennett.com](https://masonjbennett.com)
 
-**[Open the live app →](https://portfolio-app-ifh8afmcuxkyr6ivov9fmj.streamlit.app/)**
-(Streamlit Community Cloud — the first load takes about 20 seconds to wake the container)
+**[Open the live app →](https://portfolio.masonjbennett.com)**
+
+The live app is a TypeScript rebuild of the original Python/Streamlit app, which is still up at
+[portfolio-app-ifh8afmcuxkyr6ivov9fmj.streamlit.app](https://portfolio-app-ifh8afmcuxkyr6ivov9fmj.streamlit.app/)
+(Streamlit Community Cloud — the first load takes about 20 seconds to wake the container).
+Both live in this repository: the Streamlit app at the root, the web version in [`web/`](web).
 
 ## What the out-of-sample test found
 
@@ -32,6 +36,19 @@ inputs is made visible rather than averaged away. Method note and the full figur
 
 ## Tech Stack
 
+**Web version (`web/`)**
+
+- **TypeScript + React**, built with **Vite**; every figure is computed in the browser
+- **quadprog** — exact quadratic programmes for the optimized portfolios and the frontier
+- **Recharts** — charts
+- **Vercel functions** — `api/prices` (daily adjusted closes from Yahoo Finance's chart endpoint) and
+  `api/rf` (the 3-month Treasury yield from FRED)
+- A parity suite holds the TypeScript engine to the Python app's own functions on frozen price
+  fixtures; where the web version deliberately differs, each difference is listed and tested
+  (`web/test/t-ledger.mjs`)
+
+**Original (repository root)**
+
 - **Streamlit** — Interactive web framework
 - **yfinance** — Market data from Yahoo Finance
 - **scipy** — Portfolio optimization (SLSQP)
@@ -39,6 +56,17 @@ inputs is made visible rather than averaged away. Method note and the full figur
 - **pandas / NumPy** — Data processing
 
 ## Run Locally
+
+Web version:
+
+```bash
+cd web
+npm install
+npm run dev
+npm test
+```
+
+Streamlit app:
 
 ```bash
 pip install -r requirements.txt
@@ -50,6 +78,10 @@ streamlit run portfolio_app.py
 - Simple (arithmetic) daily returns
 - Annualization: mean x 252, std x sqrt(252)
 - Portfolio variance: full quadratic form w'Sigma*w
-- Optimization: scipy.optimize.minimize with SLSQP, no-short-selling constraints
+- Optimization: the Streamlit app uses scipy.optimize.minimize with SLSQP; the web version solves the
+  minimum-variance and maximum-Sharpe portfolios exactly as quadratic programmes (Goldfarb–Idnani, via
+  quadprog). Both bound each weight to [0, 1] by default, or [-1, 1] with short selling allowed
 - Efficient frontier: constrained optimization at each target return level
 - Sortino ratio: downside deviation using root-mean-square of negative excess returns
+
+The web version's full methodology is in the Methodology panel at the foot of its page.
