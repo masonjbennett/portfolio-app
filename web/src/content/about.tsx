@@ -1,8 +1,8 @@
 // Who made the page, where its code lives, and how every figure on it is computed.
 //
-// The byline is the resume's wording, not the app's: the app prints "M.S. in Finance" (portfolio_app.py
-// 802, 1108, 1177); the resume says "Master of Science in Finance" and "M.S. Finance", and
-// masonjbennett.com says "M.S. Finance · University of Arkansas".
+// The byline is the resume's wording: the resume says "Master of Science in Finance" and "M.S. Finance",
+// and masonjbennett.com says "M.S. Finance · University of Arkansas". The app printed "M.S. in Finance"
+// until Sep 28 2026 and now matches (portfolio_app.py 802, 1108, 1177; t-about holds both).
 //
 // The methodology is the port's, not the app's "About / Methodology" (763-797), which describes the
 // app's SLSQP solver. Every number in it is read from the constant the engine uses, so a change to the

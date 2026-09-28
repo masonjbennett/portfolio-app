@@ -799,7 +799,7 @@ with st.sidebar:
     st.markdown(
         "<div style='text-align:center; padding:0.3rem 0;'>"
         "<div style='font-size:0.85rem; font-weight:600; color:#FFFFFF;'>Mason Bennett</div>"
-        "<div style='font-size:0.75rem; color:#94A3C0; margin-top:2px;'>M.S. in Finance · University of Arkansas</div>"
+        "<div style='font-size:0.75rem; color:#94A3C0; margin-top:2px;'>M.S. Finance · University of Arkansas</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1105,7 +1105,7 @@ if not st.session_state.data_loaded:
             Mean-Variance Optimization & Risk Analysis
         </p>
         <p style="color:{COLORS['text_muted']}; font-size:0.85rem; margin-bottom:2rem;">
-            Mason Bennett · M.S. in Finance · University of Arkansas
+            Mason Bennett · M.S. Finance · University of Arkansas
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1174,7 +1174,7 @@ st.markdown(f"""
     <div>
         <h1 style="margin:0; font-size:1.6rem; color:{COLORS['primary']};">Portfolio Analytics</h1>
         <div style="font-size:0.82rem; color:{COLORS['text_muted']}; margin-top:2px;">
-            Mason Bennett &nbsp;·&nbsp; M.S. in Finance &nbsp;·&nbsp; University of Arkansas
+            Mason Bennett &nbsp;·&nbsp; M.S. Finance &nbsp;·&nbsp; University of Arkansas
         </div>
     </div>
     <div style="text-align:right;">

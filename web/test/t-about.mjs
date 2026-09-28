@@ -1,8 +1,9 @@
 // Who made the page, where its code lives, and how its figures are computed: the masthead's byline, the
 // footer's methodology and its links (src/content/about.tsx, src/chrome/Masthead.tsx, src/chrome/Footer.tsx).
 //
-// (a) The byline, in the resume's words. The app prints "M.S. in Finance" (portfolio_app.py 1177); the resume
-//     and masonjbennett.com say "M.S. Finance". Both sides asserted, as the divergence ledger does.
+// (a) The byline, in the resume's words: "M.S. Finance", as masonjbennett.com says it. The app printed
+//     "M.S. in Finance" until Sep 28 2026 (portfolio_app.py 802, 1108, 1177); it now says what the port does,
+//     and this holds both to it, so neither can drift back alone.
 // (b) The methodology states what the ENGINE does. Its numbers are the engine's constants, the two written
 //     out (rolling windows, the net-exposure floor) are held here to the code that uses them, and its
 //     solver is the port's: the app's expander names SLSQP (764-797), the port's names neither SLSQP nor scipy.
@@ -39,10 +40,12 @@ const EMOJI = /\p{Extended_Pictographic}/u;
   check(!EMOJI.test(text(r.container)), "byline: no emoji in the masthead");
   r.unmount();
 
-  const appLine = APP.split(/\r?\n/).find((l) => /Mason Bennett &nbsp;·&nbsp; M\.S\. in Finance/.test(l)) ?? "";
-  check(appLine.includes("M.S. in Finance") && !A.CREDENTIAL.includes(" in "),
-    "byline (ledger): the app says \"M.S. in Finance\" (1177); the port says \"M.S. Finance\", as the resume and masonjbennett.com do",
-    `${appLine.trim().slice(0, 80)} / ${A.CREDENTIAL}`);
+  const appLine = APP.split(/\r?\n/).find((l) => /^\s*Mason Bennett &nbsp;·&nbsp; /.test(l)) ?? "";
+  check(appLine.trim().replaceAll("&nbsp;·&nbsp;", "·") === `${A.AUTHOR} · ${A.CREDENTIAL}`,
+    "byline: the app's header line (1177) reads the port's byline word for word", appLine.trim());
+  check(!/M\.S\. in Finance/.test(APP) && (APP.match(/M\.S\. Finance/g) ?? []).length === 3,
+    "byline: all three of the app's bylines (802, 1108, 1177) say \"M.S. Finance\", none \"M.S. in Finance\"",
+    (APP.match(/M\.S\.[^·<]*·/g) ?? []).join(" | "));
 }
 
 // ---- (b) the methodology ---------------------------------------------------------------------------------
