@@ -163,13 +163,13 @@ for (const set of ["cross", "megacap"]) {
   check(M.mixPhrase([0.7, 0.3, 0.0004, -0.0004], T) === "holds 70.0% AAA and 30.0% BBB", "phrase: a weight that prints as 0.0% is not a holding");
 
   const a = fixtureAnalysis("cross");
-  check(M.headline(a) === "The maximum-Sharpe portfolio holds 54.2% GLD and 45.8% VTI, for a Sharpe ratio of 0.95 against 0.60 for equal weights.",
+  check(M.headline(a) === "The maximum-Sharpe portfolio holds 54.2% GLD and 45.8% VTI, for a Sharpe ratio of 0.946 against 0.597 for equal weights.",
     "headline: cross, long-only, literal", M.headline(a));
   check(M.frontierTitle(a) === `Tangency has the highest Sharpe ratio on the frontier, at ${format(a.tangency.sigma, "pct2")} volatility; GMV the lowest volatility, ${format(a.gmv.sigma, "pct2")}`,
     "frontier title: where Tangency and GMV sit", M.frontierTitle(a));
   check(M.weightsTitle(a) === "GMV's largest weight is AGG, 95.4%; Tangency's is GLD, 54.2%", "weights title: each largest weight", M.weightsTitle(a));
   const rich = fixtureAnalysis("cross", { rf: 0.5 });
-  check(!rich.tangency.beatsRf && M.headline(rich) === `No long-only mix of these assets earned more than the 50.00% risk-free rate: the best Sharpe ratio is ${format(rich.tangency.sharpe, "num2")}.`,
+  check(!rich.tangency.beatsRf && M.headline(rich) === `No long-only mix of these assets earned more than the 50.00% risk-free rate: the best Sharpe ratio is ${format(rich.tangency.sharpe, "num3")}.`,
     "headline: a rate no portfolio beats is said, not dressed as a tangency mix, and names the long-only bounds searched", M.headline(rich));
   check(M.headline({ ...rich, allowShort: true }).startsWith(`No mix of these assets with weights inside [${MINUS}1, 1] earned more than the 50.00% risk-free rate`),
     "headline: with shorting on it names those bounds instead", M.headline({ ...rich, allowShort: true }));

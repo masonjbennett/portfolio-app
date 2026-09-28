@@ -9,8 +9,8 @@ import { readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
 import { act, render, setMedia, text } from "./_dom.mjs";
 
-const { createElement: h, useState } = await import("react");
-const { AppView, TABS } = await import("../src/App.tsx");
+const { createElement: h, useState, lazy } = await import("react");
+const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
 const { snapshotPlates, finding } = await import("../src/chrome/Band.tsx");
 const { default: Rail, symbolMessage } = await import("../src/chrome/Rail.tsx");
@@ -24,6 +24,9 @@ const { PRESETS, RF_FALLBACK } = await import("../src/state/defaults.ts");
 const { PHONE_QUERY } = await import("../src/styles/tokens.ts");
 const { TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
 const { exampleAnalysis, examplePayload, fixtureAnalysis, settingsFor } = await import("./_analysis.mjs");
+// The tabs App routes to, loaded up front: a check about a tab itself should not wait on a chunk.
+// The lazy path App ships is checked on its own below.
+const TABS = Object.fromEntries(await Promise.all(TAB_IDS.map(async (id) => [id, (await TAB_LOADERS[id]()).default])));
 
 const ORACLE = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8").split(/\r?\n/);
 
@@ -277,7 +280,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const band = text(r.container.querySelector("main"));
   check(want.every(([label, v, f]) => band.includes(label) && band.includes(format(v, f))), "band: every plate renders its label and figure", band);
   const sentence = finding(EX);
-  check(band.includes(sentence) && sentence.includes(format(t.sharpe, "num2")) && sentence.includes(format(EX.benchStats.sharpe, "num2")) &&
+  check(band.includes(sentence) && sentence.includes(format(t.sharpe, "num3")) && sentence.includes(format(EX.benchStats.sharpe, "num3")) &&
     sentence.includes(monthYear(EX.prices.dates[0])) && sentence.includes(monthYear(EX.asOf)) && sentence.includes(EX.benchLabel),
     "band: the sentence states the tangency's and the benchmark's Sharpe over the price span", sentence);
   r.unmount();
@@ -468,6 +471,85 @@ function rail(over = {}) {
   key(dialog()?.querySelector("input") ?? document.body, "Escape");
   check(!dialog(), "palette: Escape closes");
   r.unmount();
+}
+
+// ---- (i) each tab is its own chunk -----------------------------------------------------------------
+// App reaches its tabs through React.lazy (TABS over TAB_LOADERS), so the tabs and Recharts leave the
+// first chunk (t-split.mjs reads that off the real build). Three promises hold the page up while a
+// chunk is in flight, each checked with a chunk this suite holds open: the first tab shows a named
+// loading line in its place, never a blank panel or a thrown page; a switch keeps the tab on screen,
+// marked busy, until the next one's code is in; a chunk that never arrives names its tab and leaves
+// the band and the tab row standing.
+{
+  const wait = () => act(() => new Promise((res) => setTimeout(res, 5)));
+  const until = async (cond, tries = 400) => {
+    for (let i = 0; i < tries && !cond(); i++) await wait();
+    return cond();
+  };
+  const held = () => {
+    let res, rej;
+    const p = new Promise((a, b) => ((res = a), (rej = b)));
+    return { p, res, rej };
+  };
+  const panel = (r) => r.container.querySelector("[role=tabpanel]");
+  const fallback = (r) => [...r.container.querySelectorAll(".app-main [role=status]")].find((n) => /^Loading /.test(text(n)));
+
+  // The first tab: its chunk is still on the way.
+  const first = held();
+  const second = held();
+  const lazies = {
+    ...STAND_TABS,
+    returns: lazy(() => first.p),
+    risk: lazy(() => second.p),
+    correlation: lazy(() => Promise.reject(new Error("chunk 404"))),
+  };
+  const r = quietly(() => render(h(Harness, { wb: stand().wb, tabs: lazies })));
+  check(text(fallback(r) ?? {}) === `Loading ${TAB_LABELS.returns}` && !panel(r),
+    "lazy: while the first tab's chunk loads, its place holds one line naming it", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
+  check(!!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector(".band, [class*=band]"),
+    "lazy: the band and the tab row are up before any tab's chunk");
+  await act(async () => {
+    first.res({ default: STAND_TABS.returns });
+    await first.p;
+  });
+  await until(() => !!r.container.querySelector('[data-tab="returns"]'));
+  check(!!panel(r)?.querySelector('[data-tab="returns"]') && !fallback(r), "lazy: the first tab replaces the line when its chunk lands");
+
+  // A switch to a tab whose chunk is not in yet: the old tab stays, marked busy; no loading line.
+  const row = r.container.querySelector(".app-tabs [role=tablist]");
+  quietly(() => click(byLabel(row, TAB_LABELS.risk)));
+  await wait();
+  check(!!panel(r)?.querySelector('[data-tab="returns"]') && panel(r)?.getAttribute("aria-busy") === "true" && !fallback(r),
+    "lazy: during a switch the tab on screen stays, marked aria-busy, and the panel never blanks to a loading line",
+    `busy=${panel(r)?.getAttribute("aria-busy")} fallback=${!!fallback(r)} body=${text(panel(r) ?? {}).slice(0, 40)}`);
+  await act(async () => {
+    second.res({ default: STAND_TABS.risk });
+    await second.p;
+  });
+  await until(() => !!r.container.querySelector('[data-tab="risk"]'));
+  check(!!panel(r)?.querySelector('[data-tab="risk"]') && !panel(r)?.hasAttribute("aria-busy"),
+    "lazy: the next tab takes its place when its chunk lands, no longer busy");
+
+  // A chunk that never arrives (a deploy that no longer serves it, a dropped connection).
+  quietly(() => click(byLabel(row, TAB_LABELS.correlation)));
+  const { error, warn } = console;
+  console.error = console.warn = () => {};
+  try {
+    await until(() => !!r.container.querySelector(".boundary"));
+  } finally {
+    Object.assign(console, { error, warn });
+  }
+  check(text(r.container.querySelector(".boundary") ?? {}) === `${TAB_LABELS.correlation} could not be shown.` &&
+    !!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector("header"),
+    "lazy: a chunk that fails to load names its tab, and the tab row and masthead stay", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
+  r.unmount();
+
+  // The shipped map: every tab is a lazy component, and App's own default reaches the real finding.
+  check(TAB_IDS.every((id) => AppTabs[id]?.$$typeof === Symbol.for("react.lazy")), "lazy: App ships each of the six tabs as React.lazy");
+  const shipped = quietly(() => render(h(Harness, { wb: stand().wb })));
+  const found = await until(() => !!panel(shipped)?.querySelector("h2.tab-finding"));
+  check(found, "lazy: App's default tabs load and draw the Returns finding", text(shipped.container.querySelector(".app-main") ?? {}).slice(0, 120));
+  shipped.unmount();
 }
 
 done("t-app");

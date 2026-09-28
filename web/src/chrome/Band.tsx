@@ -53,14 +53,14 @@ export function finding(a: Analysis): string {
   if (!t.beatsRf) {
     return (
       `${span}, no mix of these ${n} assets${a.allowShort ? "" : ", held long only,"} earned more than the ` +
-      `${format(a.rf, "pct2")} risk-free rate; the best Sharpe ratio reachable was ${format(fin(t.sharpe), "num2")}, ` +
-      `against ${format(fin(b.sharpe), "num2")} for ${bench}.`
+      `${format(a.rf, "pct2")} risk-free rate; the best Sharpe ratio reachable was ${format(fin(t.sharpe), "num3")}, ` +
+      `against ${format(fin(b.sharpe), "num3")} for ${bench}.`
     );
   }
   return (
     `${span}, the highest-Sharpe mix of these ${n} assets, picked with hindsight, earned ` +
-    `${format(fin(t.sharpe), "num2")} of annual excess return per unit of volatility; ${bench} earned ` +
-    `${format(fin(b.sharpe), "num2")}.`
+    `${format(fin(t.sharpe), "num3")} of annual excess return per unit of volatility; ${bench} earned ` +
+    `${format(fin(b.sharpe), "num3")}.`
   );
 }
 

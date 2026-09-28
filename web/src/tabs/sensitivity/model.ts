@@ -323,7 +323,7 @@ export function sharpeChartTitle(groups: Group[]): string {
     if (!hi || v > hi.v) hi = { v, w: g.name };
   }
   if (!lo || !hi) return "The custom portfolio's Sharpe ratio is undefined in every window";
-  return `The custom portfolio's Sharpe ratio runs from ${format(lo.v, "num2")} (${lo.w}) to ${format(hi.v, "num2")} (${hi.w})`;
+  return `The custom portfolio's Sharpe ratio runs from ${format(lo.v, "num3")} (${lo.w}) to ${format(hi.v, "num3")} (${hi.w})`;
 }
 
 // ---- the custom portfolio (1948-1977) -------------------------------------------------------------

@@ -28,7 +28,7 @@ const quiet = (fn) => {
 // ---- (a) every shared module imports and keeps its contract exports -------------------------------
 const EXPORTS = {
   "src/types.ts": { LEVELS: "object", TAB_LABELS: "object", TAB_IDS: "object" },
-  "src/App.tsx": { default: "function", TABS: "object" },
+  "src/App.tsx": { default: "function", TABS: "object", TAB_LOADERS: "object" },
   "src/chrome/Rail.tsx": { default: "function" },
   "src/chrome/SummaryChip.tsx": { default: "function" },
   "src/chrome/Band.tsx": { default: "function" },
@@ -189,7 +189,8 @@ for (const id of T.TAB_IDS ?? []) {
     continue;
   }
   check(html.length > 0, `tabs: ${file} renders from a real Analysis`);
-  check(m("src/App.tsx").TABS?.[id] === m(file).default, `tabs: App routes "${id}" to ${file}`);
+  const routed = await m("src/App.tsx").TAB_LOADERS?.[id]?.().catch(() => null);
+  check(routed?.default === m(file).default, `tabs: App routes "${id}" to ${file}`);
 }
 let page = "";
 try {

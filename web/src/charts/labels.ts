@@ -4,6 +4,28 @@ import { labelFill } from "./contrast.ts";
 
 export type LabelSide = "right" | "left" | "top" | "bottom";
 
+// Space Grotesk 400 at 12px (the self-hosted face): each printable ASCII character's advance in tenths
+// of a pixel, rounded up, measured in Chromium on Sep 28 2026. Summed, it runs 0-4% over the drawn
+// width, since kerning only ever tightens. The old estimate, 7px a character, ran 19% short on "GMV"
+// and 30% long on "Capital allocation line".
+const ADVANCE_12 = [
+  31, 31, 51, 76, 74, 93, 73, 31, 46, 46, 63, 75, 31, 55, 31, 45, 77, 51, 73, 73, 75, 72, 74, 68, 75, 74, 31, 31, 75, 75, 75, 70,
+  124, 76, 80, 78, 80, 68, 65, 80, 79, 30, 72, 74, 66, 104, 80, 81, 73, 81, 76, 74, 71, 80, 75, 105, 77, 74, 70, 41, 45, 41, 75, 75,
+  34, 69, 78, 72, 78, 72, 54, 78, 74, 30, 30, 65, 30, 104, 74, 75, 78, 78, 46, 64, 56, 74, 65, 97, 72, 74, 63, 52, 29, 52, 75,
+];
+/** A character outside printable ASCII counts as one of the face's widest capitals. */
+const ADVANCE_OTHER = 81;
+
+/** The width of `text` set in Space Grotesk at `fontSize` px, from the measured advances above. */
+export function textWidth(text: string, fontSize = 12): number {
+  let tenths = 0;
+  for (const ch of text) {
+    const i = ch.codePointAt(0)! - 32;
+    tenths += i >= 0 && i < ADVANCE_12.length ? ADVANCE_12[i] : ADVANCE_OTHER;
+  }
+  return (tenths / 10) * (fontSize / 12);
+}
+
 // Label props for a Recharts <ReferenceDot label={...}> or <ReferenceLine label={...}>: the name in
 // Space Grotesk, in the series' own colour where that reads on paper (labelFill: bronze is set in ink2),
 // beside the point. Put it on a <ReferenceDot r={0}> at a

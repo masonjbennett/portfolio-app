@@ -313,7 +313,8 @@ export function barLayout(groups: Group[], labelPx: number, plotPx: number): { h
 
 const pct1 = (x: number) => format(x, "pct1");
 const pct2 = (x: number) => format(x, "pct2");
-const num2 = (x: number) => format(x, "num2");
+// Every Sharpe ratio on the page prints to three places, the app's own `:.3f` (test/t-sharpe.mjs).
+const num3 = (x: number) => format(x, "num3");
 // A weight under 0.05% prints as 0.0%: the sentences do not count it as a holding.
 const HELD = 5e-4;
 
@@ -345,14 +346,14 @@ export function headline(a: Analysis): string {
   if (!t) {
     return a.gmv
       ? `The maximum-Sharpe solve failed, so there is no tangency portfolio; the minimum-variance portfolio's volatility is ${pct2(a.gmv.sigma)}.`
-      : `Both optimisations failed, so only equal weights are shown, at a Sharpe ratio of ${num2(ew.sharpe)}.`;
+      : `Both optimisations failed, so only equal weights are shown, at a Sharpe ratio of ${num3(ew.sharpe)}.`;
   }
   if (!t.beatsRf) {
     // Only the mixes inside the current bounds were searched, so the sentence names them (as the Band does).
     const which = a.allowShort ? `mix of these assets with weights inside [${MINUS}1, 1]` : "long-only mix of these assets";
-    return `No ${which} earned more than the ${pct2(a.rf)} risk-free rate: the best Sharpe ratio is ${num2(t.sharpe)}.`;
+    return `No ${which} earned more than the ${pct2(a.rf)} risk-free rate: the best Sharpe ratio is ${num3(t.sharpe)}.`;
   }
-  return `The maximum-Sharpe portfolio ${mixPhrase(t.w, a.tickers)}, for a Sharpe ratio of ${num2(t.sharpe)} against ${num2(ew.sharpe)} for equal weights.`;
+  return `The maximum-Sharpe portfolio ${mixPhrase(t.w, a.tickers)}, for a Sharpe ratio of ${num3(t.sharpe)} against ${num3(ew.sharpe)} for equal weights.`;
 }
 
 /** The frontier's title: where the two optimised portfolios sit on it. */

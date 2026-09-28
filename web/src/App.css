@@ -50,6 +50,12 @@
   min-width: 0;
 }
 
+/* The tab being left while the next one's chunk loads (App's transition): readable, plainly waiting. */
+.app-tab[aria-busy="true"] {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
 /* A tab's finding, the sentence that opens each of the six tabs: one element (h2), one face, one size.
    Each tab's own class keeps only its spacing. */
 .tab-finding {

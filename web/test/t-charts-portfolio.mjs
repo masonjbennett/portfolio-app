@@ -27,6 +27,7 @@ const Wealth = W.default;
 const { tokens } = await import("../src/styles/tokens.ts");
 const { ROLE, DASH, SERIES, assetColors } = await import("../src/charts/theme.ts");
 const { contrastRatio, labelFill, TEXT_AA } = await import("../src/charts/contrast.ts");
+const { textWidth } = await import("../src/charts/labels.ts");
 const { format, MINUS } = await import("../src/format.ts");
 const { portfolioReturns } = await import("../src/lib/portfolio.ts");
 const REL = 1e-12; // test/t-parity.mjs's T0 tier: arithmetic fed the same inputs
@@ -60,10 +61,10 @@ const labels = (root) => [...root.querySelectorAll(".direct-label text")].map((t
   anchor: t.getAttribute("text-anchor"),
   fill: t.getAttribute("fill"),
 }));
-// Two names collide when their boxes (the placement estimate, 12px tall) overlap.
+// Two names collide when their boxes (the face's measured advances, 12px tall) overlap.
 function collisions(ls) {
   const box = (l) => {
-    const w = l.text.length * F.CHAR_PX;
+    const w = textWidth(l.text);
     return { lo: l.anchor === "end" ? l.x - w : l.x, hi: l.anchor === "end" ? l.x : l.x + w, top: l.y - 6, bot: l.y + 6 };
   };
   const out = [];
@@ -389,6 +390,167 @@ const W0 = o.w0;
   r.unmount();
   r = at(ready({ ...data, series: [] }));
   check(!r.container.querySelector("svg") && text(r.container).includes("There is no portfolio to plot."), "wealth: nothing to plot says so");
+  r.unmount();
+}
+
+// ---- (i) no name sits on a marker, at a phone's width or a desk's --------------------------------------
+// Names were kept off each other and nothing else: at 375px the Tangency name ran into the benchmark's
+// cross, and it began inside its own star's right point. Every frontier here is drawn at three widths
+// (a 375px phone's chart box, a tablet's, jsdom's desktop fallback) on all five fixture sets, long-only
+// and shorting, with Custom on Equal-Weight. Each marker's box is read off the path Recharts DREW
+// (its d3 symbol and its translate), not off the placement's own model of it, and each name's box off
+// the text drawn, at the face's measured advances (textWidth) and 12px tall. And a name must still say
+// whose it is: moved clear of the crowd, "S&P 500" had landed under GLD's dot and "GLD" under the
+// benchmark's cross, their hairlines crossing. A name level with its point (no hairline) sits nearer its
+// own marker than any other, and no two hairlines cross. (Level or not, "nearest" alone cannot hold in a
+// tight cluster: at 343px GLD sits between the Tangency star, the S&P 500 cross and VTI.)
+{
+  const { PHONE_QUERY } = await import("../src/styles/tokens.ts");
+  const { setMedia } = await import("./_dom.mjs");
+  // The box a d3 symbol path covers, around its centre: M/L/h/v/Z as d3 writes them, and a circle's arcs.
+  function pathBox(d) {
+    const box = { lo: Infinity, hi: -Infinity, top: Infinity, bot: -Infinity };
+    const add = (x, y) => {
+      box.lo = Math.min(box.lo, x);
+      box.hi = Math.max(box.hi, x);
+      box.top = Math.min(box.top, y);
+      box.bot = Math.max(box.bot, y);
+    };
+    let x = 0;
+    let y = 0;
+    for (const [, cmd, args] of d.matchAll(/([MLHVAZmlhvaz])([^MLHVAZmlhvaz]*)/g)) {
+      const n = (args.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) ?? []).map(Number);
+      if (cmd === "M" || cmd === "L") for (let k = 0; k + 1 < n.length; k += 2) add((x = n[k]), (y = n[k + 1]));
+      else if (cmd === "h") add((x += n[0]), y);
+      else if (cmd === "v") add(x, (y += n[0]));
+      else if (cmd === "H") add((x = n[0]), y);
+      else if (cmd === "V") add(x, (y = n[0]));
+      else if (cmd === "A") {
+        // d3's circle: two half arcs of radius n[0] about the origin.
+        add(-n[0], -n[0]);
+        add(n[0], n[0]);
+        x = n[5];
+        y = n[6];
+      } else if (cmd !== "Z" && cmd !== "z") throw new Error(`pathBox: no rule for ${cmd}`);
+    }
+    return box;
+  }
+  const drawnMarkers = (root) =>
+    [...root.querySelectorAll(".frontier-asset .recharts-symbols, .frontier-bench .recharts-symbols, .frontier-mark .recharts-symbols")].map((p) => {
+      const [, cx, cy] = /translate\(\s*([-\d.e]+)[ ,]\s*([-\d.e]+)\s*\)/.exec(p.getAttribute("transform") ?? "") ?? [];
+      const b = pathBox(p.getAttribute("d") ?? "");
+      const half = Number(p.getAttribute("stroke-width") ?? 0) / 2;
+      const name = p.closest("[class*=frontier-]")?.getAttribute("class")?.match(/frontier-(asset|bench|mark--\w+)/)?.[1];
+      return { name, cx: +cx, cy: +cy, lo: +cx + b.lo - half, hi: +cx + b.hi + half, top: +cy + b.top - half, bot: +cy + b.bot + half };
+    });
+  const nameBox = (l) => {
+    const w = textWidth(l.text);
+    return { lo: l.anchor === "end" ? l.x - w : l.x, hi: l.anchor === "end" ? l.x : l.x + w, top: l.y - 6, bot: l.y + 6 };
+  };
+  const meets = (a, b) => a.lo < b.hi && b.lo < a.hi && a.top < b.bot && b.top < a.bot;
+
+  const realRect = window.HTMLElement.prototype.getBoundingClientRect;
+  const drawAt = (width, a, data) => {
+    window.HTMLElement.prototype.getBoundingClientRect = function () {
+      const r = realRect.call(this);
+      return this.classList?.contains("frontier-chart") ? { ...r.toJSON?.(), x: 0, y: 0, top: 0, left: 0, width, height: 0, right: width, bottom: 0 } : r;
+    };
+    setMedia((q) => q === PHONE_QUERY && width < 600);
+    try {
+      return drawFrontier(a, data);
+    } finally {
+      window.HTMLElement.prototype.getBoundingClientRect = realRect;
+      setMedia(() => false);
+    }
+  };
+
+  let cases = 0;
+  const bad = [];
+  const strangers = [];
+  let sawPhone = false;
+  for (const set of ["cross", "megacap", "sectors", "cross_vti", "dirty"]) {
+    for (const allowShort of [false, true]) {
+      const a = fixtureAnalysis(set, { allowShort });
+      for (const width of [343, 560, 720]) {
+        const r = drawAt(width, a, F.frontierData(a, a.ew));
+        const root = r.container;
+        const svg = root.querySelector("svg.recharts-surface");
+        sawPhone ||= width === 343 && svg?.getAttribute("width") === "343";
+        const ms = drawnMarkers(root);
+        const ls = labels(root);
+        const want = a.tickers.length + 1 + 4; // assets, the benchmark, GMV / Tangency / Equal-Weight / Custom
+        if (ms.length < want || ls.length < want) bad.push(`${set} ${allowShort ? "short" : "long"} @${width}: ${ms.length} markers, ${ls.length} names drawn`);
+        for (const l of ls) {
+          const nb = nameBox(l);
+          for (const m of ms) if (meets(nb, m)) bad.push(`${set} ${allowShort ? "short" : "long"} @${width}: "${l.text}" on the ${m.name} marker`);
+          if (nb.lo < 0 || nb.hi > width) bad.push(`${set} ${allowShort ? "short" : "long"} @${width}: "${l.text}" runs off the chart`);
+        }
+        for (const c of collisions(ls)) bad.push(`${set} ${allowShort ? "short" : "long"} @${width}: names ${c} overlap`);
+        // Whose marker each name is: assets in the order drawn, then the benchmark and the four marks.
+        const assetsDrawn = ms.filter((m) => m.name === "asset");
+        const owner = new Map([
+          ...a.tickers.map((t, k) => [t, assetsDrawn[k]]),
+          [a.benchLabel, ms.find((m) => m.name === "bench")],
+          ...[["GMV", "gmv"], ["Tangency", "tangency"], ["Equal-Weight", "ew"], ["Custom", "custom"]].map(([t, role]) => [t, ms.find((m) => m.name === `mark--${role}`)]),
+        ]);
+        const hairlines = [...root.querySelectorAll(".direct-label")].flatMap((g) => {
+          const ln = g.querySelector("line");
+          return ln ? [{ text: g.getAttribute("data-label"), a: { x: +ln.getAttribute("x1"), y: +ln.getAttribute("y1") }, b: { x: +ln.getAttribute("x2"), y: +ln.getAttribute("y2") } }] : [];
+        });
+        const side = (p, q, o) => Math.sign((q.x - p.x) * (o.y - p.y) - (q.y - p.y) * (o.x - p.x));
+        const cross = (u, v) => side(u.a, u.b, v.a) * side(u.a, u.b, v.b) < 0 && side(v.a, v.b, u.a) * side(v.a, v.b, u.b) < 0;
+        hairlines.forEach((u, k) => hairlines.slice(k + 1).forEach((v) => {
+          if (cross(u, v)) strangers.push(`${set} ${allowShort ? "short" : "long"} @${width}: the hairlines of "${u.text}" and "${v.text}" cross`);
+        }));
+        const level = new Set(ls.map((l) => l.text).filter((t) => !hairlines.some((h) => h.text === t)));
+        for (const l of ls) {
+          const own = owner.get(l.text);
+          if (!own || !level.has(l.text)) continue;
+          const nb = nameBox(l);
+          const dist = (m) => Math.hypot(Math.max(nb.lo - m.cx, 0, m.cx - nb.hi), Math.max(nb.top - m.cy, 0, m.cy - nb.bot));
+          const nearer = ms.filter((m) => Math.hypot(m.cx - own.cx, m.cy - own.cy) > 0.5 && dist(m) < dist(own));
+          if (nearer.length) strangers.push(`${set} ${allowShort ? "short" : "long"} @${width}: "${l.text}" is nearer the ${nearer.map((m) => m.name).join(", ")} marker than its own`);
+        }
+        cases += 1;
+        r.unmount();
+      }
+    }
+  }
+  check(sawPhone, "frontier markers: the phone case really drew at 343px, so the checks below saw a phone's crowding");
+  // One known gap, pinned so it can neither spread nor go quietly: the densest layout here (nine sectors
+  // and shorting at 343px put thirteen markers in about 45 by 100px) keeps ONE hairline crossing. Which
+  // pair it is moves with any change to placeLabels' costs (XLU/XLRE, then XLV/XLI); untangling it needs
+  // three names moved at once, which the pair repair does not try. Every other layout has none, and this
+  // one exactly one: if it clears, drop the pin.
+  const PINNED = "sectors short @343";
+  const elsewhere = strangers.filter((x) => !x.startsWith(`${PINNED}:`));
+  const pinned = strangers.filter((x) => x.startsWith(`${PINNED}:`));
+  check(cases === 30 && elsewhere.length === 0 && pinned.length === 1 && /hairlines of .* cross$/.test(pinned[0]),
+    `frontier markers: a name level with its point is nearer its own marker than any other, and no two hairlines cross (one crossing pinned in ${PINNED})`,
+    strangers.slice(0, 6).join("; ") + (strangers.length > 6 ? `; and ${strangers.length - 6} more` : ""));
+  check(cases === 30 && bad.length === 0, `frontier markers: on ${cases} frontiers (5 sets, long and short, 343/560/720px) no name overlaps any marker, another name, or the chart's edge`,
+    bad.slice(0, 6).join("; ") + (bad.length > 6 ? `; and ${bad.length - 6} more` : ""));
+
+  // The name widths the placement and the checks above use, against what Chromium measured for these
+  // strings in the self-hosted Space Grotesk at 12px (canvas measureText, Sep 28 2026): never short,
+  // and at most 4% over. The old estimate, 7px a character, was 19% short on "GMV".
+  const MEASURED = { Tangency: 57.0, GMV: 25.7, "S&P 500": 47.5, "Capital allocation line": 124.2, "Efficient frontier": 95.9, "Equal-Weight": 77.7, GOOGL: 38.4, "BRK-B": 35.7, "EURUSD=X": 60.7, "^GSPC": 37.6 };
+  const wide = Object.entries(MEASURED).filter(([t, w]) => !(textWidth(t) >= w && textWidth(t) <= w * 1.04 + 0.5)).map(([t, w]) => `${t} ${textWidth(t).toFixed(1)} vs ${w}`);
+  check(wide.length === 0, "frontier markers: textWidth matches the face as Chromium draws it, never short, at most 4% over", wide.join("; "));
+
+  // The placement's model of each marker agrees with what Recharts draws, to a tenth of a pixel.
+  const r = drawAt(720, long, F.frontierData(long, long.ew));
+  const ms = drawnMarkers(r.container);
+  const model = { asset: F.symbolExtent("circle", 56), bench: F.symbolExtent("cross", 110), "mark--gmv": F.symbolExtent("diamond", 170),
+    "mark--tangency": F.symbolExtent("star", 240), "mark--ew": F.symbolExtent("square", 110), "mark--custom": F.symbolExtent("triangle", 150) };
+  const off = [];
+  for (const m of ms) {
+    const e = model[m.name];
+    const w = m.hi - m.lo;
+    const hgt = m.bot - m.top;
+    if (!e || Math.abs(w - (e.left + e.right)) > 0.1 || Math.abs(hgt - (e.up + e.down)) > 0.1) off.push(`${m.name} drawn ${w.toFixed(2)}x${hgt.toFixed(2)}, modelled ${(e.left + e.right).toFixed(2)}x${(e.up + e.down).toFixed(2)}`);
+  }
+  check(ms.length >= 6 && off.length === 0, "frontier markers: symbolExtent matches the drawn size of every marker kind", off.join("; "));
   r.unmount();
 }
 

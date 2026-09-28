@@ -12,7 +12,8 @@ const DEFAULT_HEIGHT = 320;
 type NoteKind = "loading" | "empty" | "error";
 const NOTE_ROLE: Record<NoteKind, "status" | "alert" | undefined> = { loading: "status", empty: undefined, error: "alert" };
 
-function Note({ height, kind, children }: { height: number; kind: NoteKind; children: ReactNode }) {
+// Exported for App's loading line while a tab's chunk arrives, so it reads like a chart's own.
+export function ChartNote({ height, kind, children }: { height: number; kind: NoteKind; children: ReactNode }) {
   return (
     <p className={`chart-note chart-note--${kind}`} style={{ minHeight: height }} role={NOTE_ROLE[kind]}>
       <span>{children}</span>
@@ -22,9 +23,9 @@ function Note({ height, kind, children }: { height: number; kind: NoteKind; chil
 
 function Failed({ name, message, height }: { name: string; message: string; height: number }) {
   return (
-    <Note height={height} kind="error">
+    <ChartNote height={height} kind="error">
       Chart not drawn: <span className="chart-note-name">{name}</span> failed. {message}
-    </Note>
+    </ChartNote>
   );
 }
 
@@ -68,10 +69,10 @@ export default function ChartFrame<T>({ title, state, children, subtitle, height
   let body: ReactNode;
   switch (state.status) {
     case "loading":
-      body = <Note height={height} kind="loading">Loading</Note>;
+      body = <ChartNote height={height} kind="loading">Loading</ChartNote>;
       break;
     case "empty":
-      body = <Note height={height} kind="empty">{state.reason}</Note>;
+      body = <ChartNote height={height} kind="empty">{state.reason}</ChartNote>;
       break;
     case "error":
       body = <Failed name={state.name} message={state.message} height={height} />;

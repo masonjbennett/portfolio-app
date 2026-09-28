@@ -8,7 +8,7 @@
 //   1816), and style_chart (983-995), applied after, overrides it with "x unified", so a hover listed
 //   every series at that volatility. Recharts 3.10 gives a ScatterChart only the closest-point ("item")
 //   tooltip, which is why this is a ScatterChart with a <Scatter line> and not a ComposedChart.
-// - No legend. Every point carries its name beside it, moved apart where two names would collide
+// - No legend. Every point carries its name beside it, clear of every other name and every marker
 //   (Custom sits exactly on Equal-Weight until the weights are changed, 1631-1634).
 // - With shorting on, the caption states the bounds: each weight in [-1, 1] (780-782). The toggle's
 //   help calls that frontier "unconstrained" (750); it is not.
@@ -42,7 +42,7 @@ import { annualizedStats } from "../lib/stats.ts";
 import { tokens } from "../styles/tokens.ts";
 import type { Analysis, LoadState } from "../types.ts";
 import { labelFill } from "./contrast.ts";
-import { spreadLabels } from "./labels.ts";
+import { textWidth } from "./labels.ts";
 import { axisProps, chartTheme, DASH, gridProps, ROLE, tooltipProps, type Hover } from "./theme.ts";
 
 const c = tokens.color;
@@ -184,7 +184,12 @@ export function frontierData(a: Analysis, custom: Vec | null = null, points: rea
 export const CHAR_PX = 7;
 const LABEL_FONT = { fontFamily: tokens.font.sans, fontSize: 12 } as const;
 const LABEL_GAP = 14; // px between two labels' centres: a 12px line and a hair of air
-const LABEL_OFFSET = 9; // px from a point to its label
+const LABEL_HALF = LABEL_GAP / 2; // a name's box, centred on its line
+const CLEAR = 3; // px of paper kept between a name and any marker
+const LABEL_OFFSET = CLEAR + 1; // px from the edge of a point's own marker to its name
+const SLIDE_LEADER = 6; // px of sideways slide past which a name is drawn with a hairline to its point
+const MAX_SLIDE = 18; // px a name may slide sideways past something in its way before that side is given up
+const MAX_DY = 60; // px a name may move up or down from its point, with a hairline back to it
 
 /**
  * The width a chart has to draw in, measured from its own box. Recharts' `responsive` never draws
@@ -216,6 +221,22 @@ interface Box {
   height: number;
 }
 
+/** How far a marker reaches from its centre, in px. */
+export interface Extent {
+  left: number;
+  right: number;
+  up: number;
+  down: number;
+}
+const NO_EXTENT: Extent = { left: 0, right: 0, up: 0, down: 0 };
+
+/** A marker drawn on the plot: its centre and its reach. Names are kept off every one. */
+export interface Obstacle {
+  x: number;
+  y: number;
+  extent: Extent;
+}
+
 /** A label where it is drawn: `x`, `y` the text's anchor, `px`, `py` the point it names. */
 export interface PlacedLabel {
   key: string;
@@ -227,45 +248,285 @@ export interface PlacedLabel {
   py: number;
   anchor: "start" | "end";
   width: number;
+  /** Drawn with a hairline back to its point; when absent, a name more than half a line off its point gets one. */
+  leader?: boolean;
 }
 
+// d3's symbols, which Recharts' <Symbols> draws, sized by AREA in px squared: how far each reaches from
+// its centre (d3-shape's own geometry), plus half the paper outline every marker here is drawn with.
+export function symbolExtent(type: SymbolKind, size: number, stroke = 1.5): Extent {
+  const s = stroke / 2;
+  const all = (r: number): Extent => ({ left: r + s, right: r + s, up: r + s, down: r + s });
+  switch (type) {
+    case "circle":
+      return all(Math.sqrt(size / Math.PI));
+    case "cross":
+      return all(1.5 * Math.sqrt(size / 5));
+    case "square":
+      return all(Math.sqrt(size) / 2);
+    case "diamond": {
+      const y = Math.sqrt(size / (2 * Math.tan(Math.PI / 6)));
+      const x = y * Math.tan(Math.PI / 6);
+      return { left: x + s, right: x + s, up: y + s, down: y + s };
+    }
+    case "star": {
+      const r = Math.sqrt(size * 0.8908130915292852);
+      const x = r * Math.sin((2 * Math.PI) / 5);
+      return { left: x + s, right: x + s, up: r + s, down: r * Math.cos(Math.PI / 5) + s };
+    }
+    case "triangle": {
+      const y = Math.sqrt(size / (Math.sqrt(3) * 3));
+      return { left: Math.sqrt(3) * y + s, right: Math.sqrt(3) * y + s, up: 2 * y + s, down: y + s };
+    }
+  }
+}
+
+interface Rect {
+  lo: number;
+  hi: number;
+  top: number;
+  bot: number;
+}
+interface Spot {
+  /** What the spot costs in all (see placeLabels), and the part of that which is moving the name. */
+  cost: number;
+  move: number;
+  /** False for a spot taken only because none was clear: it overlaps something. */
+  clear: boolean;
+  anchor: "start" | "end";
+  box: Rect;
+  /** The point the name sits beside: its own, or for a line one further along it. */
+  pt: { px: number; py: number };
+  /** The hairline back to the point, when the name sits off its level. */
+  leader: [Pt, Pt] | null;
+}
+const hits = (a: Rect, b: Rect) => a.lo < b.hi && b.lo < a.hi && a.top < b.bot && b.top < a.bot;
+const overlapArea = (a: Rect, b: Rect) =>
+  Math.max(0, Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo)) * Math.max(0, Math.min(a.bot, b.bot) - Math.max(a.top, b.top));
+
+interface Pt {
+  x: number;
+  y: number;
+}
+/** How far a point is from a box: 0 inside it. */
+const rectDist = (r: Rect, x: number, y: number) => Math.hypot(Math.max(r.lo - x, 0, x - r.hi), Math.max(r.top - y, 0, y - r.bot));
+/** Whether the segment a-b passes through the box (Liang-Barsky clipping). */
+function segHitsRect(a: Pt, b: Pt, r: Rect): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  for (const [pp, q] of [[-dx, a.x - r.lo], [dx, r.hi - a.x], [-dy, a.y - r.top], [dy, r.bot - a.y]]) {
+    if (pp === 0) {
+      if (q < 0) return false;
+    } else {
+      const t = q / pp;
+      if (pp < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 > t1) return false;
+    }
+  }
+  return true;
+}
+/** How far point p is from the segment a-b. */
+function ptSeg(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = dx || dy ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy))) : 0;
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+/** Whether segments a-b and c-d cross (touching at an end does not count). */
+function segsCross(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
+  const side = (p: Pt, q: Pt, o: Pt) => Math.sign((q.x - p.x) * (o.y - p.y) - (q.y - p.y) * (o.x - p.x));
+  return side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+}
+const STRANGER_LED = 30; // the same for a name with a hairline, which says whose it is, if less plainly
+const STRANGER_COST = 100; // a name level with its point but nearer some other marker reads as that marker's
+const CROSS_COST = 200; // a hairline that crosses, or comes within NEAR px of, another name's hairline
+const NEAR = 3;
+const THROUGH_COST = 15; // a hairline drawn through another marker
+const LINE_COST = 25; // a name set across one of the plot's lines
+const BLOCKED = 1e6; // a spot that overlaps something, taken only when no spot is clear
+const REPAIR_ROUNDS = 4;
+const PAIR_TRIES = 16;
+
+// Where a name may go, nearest first: level with its point, then 3px steps up and down.
+const DY: number[] = [0];
+for (let d = 3; d <= MAX_DY; d += 3) DY.push(-d, d);
+
 /**
- * Puts each name beside its point, to the right unless that would run off the plot, then moves names
- * apart vertically so no two overlap. Names whose horizontal extents overlap form one group, and each
- * group is spread with spreadLabels (least movement, order kept) and kept inside the plot.
+ * Puts each name beside its point, clear of every marker and of every name already placed, and inside
+ * the plot. For each name, in the order given (so pass the names that matter most first), it tries
+ * the right side and then the left, level with its point and then a step at a time up or down; at each
+ * height it starts just past its own marker and slides outward past whatever is in the way, up to
+ * MAX_SLIDE. Of the spots that fit, it takes the one that moves the name least: height counts in full,
+ * a sideways slide nearly so, the left side as a little under one step's worth of slide, and a spot far
+ * enough off its point to need a hairline back to it as a few px more. A LINE's name may sit beside
+ * any of the points in `along` (its own point first), at a fifth of a px per px it moves down the line.
+ * Three things cost more, without being ruled out: a spot nearer some other marker than its own point
+ * (it would read as that marker's name; less so with a hairline, which says whose it is), a hairline
+ * crossing or all but touching another name's hairline or passing through a marker, and a name set
+ * across one of `lines` (the frontier, the capital allocation line).
+ * A name no spot fits takes the spot inside the plot that overlaps least; an overlap is visible, where a
+ * dropped name would not be. Placed one at a time, an early name cannot see the hairlines of the names
+ * after it, so a repair pass then re-places each name with every other one known, and keeps the new
+ * spot only if it costs less, until a pass changes nothing (REPAIR_ROUNDS at most).
  */
-export function placeLabels(items: readonly { key: string; text: string; color: string; px: number; py: number }[], plot: Box): PlacedLabel[] {
+export function placeLabels(
+  items: readonly { key: string; text: string; color: string; px: number; py: number; own?: Extent; along?: readonly { px: number; py: number }[] }[],
+  plot: Box,
+  markers: readonly Obstacle[] = [],
+  lines: readonly (readonly Pt[])[] = [],
+): PlacedLabel[] {
+  const left = plot.x;
   const right = plot.x + plot.width;
-  const boxes = items.map((it) => {
-    const width = it.text.length * CHAR_PX;
-    const toRight = it.px + LABEL_OFFSET + width <= right;
-    const x = toRight ? it.px + LABEL_OFFSET : it.px - LABEL_OFFSET;
-    return { ...it, width, x, anchor: (toRight ? "start" : "end") as "start" | "end", lo: toRight ? x : x - width, hi: toRight ? x + width : x };
+  const walls: Rect[] = markers.map((m) => ({
+    lo: m.x - m.extent.left - CLEAR,
+    hi: m.x + m.extent.right + CLEAR,
+    top: m.y - m.extent.up - CLEAR,
+    bot: m.y + m.extent.down + CLEAR,
+  }));
+  const inPlot = (r: Rect) => r.lo >= left && r.hi <= right;
+  // What a spot costs beyond moving the name, given the other names' spots: see the doc comment.
+  const extra = (spot: Omit<Spot, "cost">, others: readonly Spot[]): number => {
+    const { box, pt, leader } = spot;
+    if (!spot.clear) return BLOCKED + [...walls, ...others.map((o) => o.box)].reduce((n, q) => n + overlapArea(q, box), 0);
+    // Level with its point, nearness is all that ties a name to it; off it, the hairline does.
+    const mine = rectDist(box, pt.px, pt.py);
+    const strangers = markers.filter((m) => Math.hypot(m.x - pt.px, m.y - pt.py) > 0.5);
+    let cost = strangers.some((m) => rectDist(box, m.x, m.y) < mine) ? (leader ? STRANGER_LED : STRANGER_COST) : 0;
+    cost += LINE_COST * lines.filter((ln) => ln.some((q, k) => k > 0 && segHitsRect(ln[k - 1], q, box))).length;
+    if (leader) {
+      const [a, b] = leader;
+      // Two hairlines from one spot (Custom on Equal-Weight) share a start: only a true crossing counts.
+      const tangle = (c: Pt, d: Pt) =>
+        segsCross(a, b, c, d) || (Math.hypot(a.x - c.x, a.y - c.y) > 0.5 && Math.min(ptSeg(a, c, d), ptSeg(b, c, d), ptSeg(c, a, b), ptSeg(d, a, b)) < NEAR);
+      if (others.some((o) => o.leader && tangle(o.leader[0], o.leader[1]))) cost += CROSS_COST;
+      if (walls.some((w, k) => Math.hypot(markers[k].x - pt.px, markers[k].y - pt.py) > 0.5 && segHitsRect(leader[0], leader[1], w))) cost += THROUGH_COST;
+    }
+    return cost;
+  };
+  const score = (spot: Spot, others: readonly Spot[]) => spot.move + extra(spot, others);
+
+  // Every spot for one name, cheapest first, the other names' spots fixed.
+  const candidates = (it: (typeof items)[number], others: readonly Spot[]): Spot[] => {
+    const width = textWidth(it.text);
+    const own = it.own ?? NO_EXTENT;
+    const found: Spot[] = [];
+    const consider = (spot: Omit<Spot, "cost">) => found.push({ ...spot, cost: spot.move + extra(spot, others) });
+    const points = it.along?.length ? it.along : [{ px: it.px, py: it.py }];
+    for (const pt of points) {
+      const along = Math.hypot(pt.px - points[0].px, pt.py - points[0].py) / 5;
+      for (const anchor of ["start", "end"] as const) {
+        const start = (anchor === "start" ? own.right : own.left) + LABEL_OFFSET;
+        for (const dy of DY) {
+          const top = pt.py + dy - LABEL_HALF;
+          const bot = pt.py + dy + LABEL_HALF;
+          if (top < plot.y || bot > plot.y + plot.height) continue;
+          const at = (gap: number): Rect => {
+            const lo = anchor === "start" ? pt.px + gap : pt.px - gap - width;
+            return { lo, hi: lo + width, top, bot };
+          };
+          const first = at(start);
+          if (!inPlot(first)) continue;
+          let gap = start;
+          let box = first;
+          let clear = false;
+          while (inPlot(box) && gap - start <= MAX_SLIDE) {
+            const hit = walls.find((w) => hits(w, box)) ?? others.find((o) => hits(o.box, box))?.box;
+            if (!hit) {
+              clear = true;
+              break;
+            }
+            // A hair past the edge: (hi - px) + px can round back inside it, and the slide would never end.
+            gap = (anchor === "start" ? hit.hi - pt.px : pt.px - hit.lo) + 0.01;
+            box = at(gap);
+          }
+          if (!clear) {
+            consider({ anchor, box: first, pt, leader: null, clear: false, move: (Math.abs(dy) + along) / 1000 });
+            continue;
+          }
+          // Off its level, or slid sideways past a neighbour, a name takes a hairline back to its point.
+          const leader: [Pt, Pt] | null = Math.abs(dy) > LABEL_HALF || gap - start > SLIDE_LEADER
+            ? [{ x: pt.px, y: pt.py }, { x: anchor === "start" ? box.lo - 2 : box.hi + 2, y: pt.py + dy }]
+            : null;
+          const move = Math.abs(dy) + 0.8 * (gap - start) + (anchor === "end" ? 8 : 0) + (leader ? 6 : 0) + along;
+          consider({ anchor, box, pt, leader, clear: true, move });
+        }
+      }
+    }
+    return found.sort((x, y) => x.cost - y.cost);
+  };
+  const search = (it: (typeof items)[number], others: readonly Spot[]): Spot => {
+    const own = it.own ?? NO_EXTENT;
+    const width = textWidth(it.text);
+    return candidates(it, others)[0] ?? {
+      cost: Infinity,
+      move: Infinity,
+      clear: false,
+      anchor: "start",
+      box: { lo: it.px + own.right + LABEL_OFFSET, hi: it.px + own.right + LABEL_OFFSET + width, top: it.py - LABEL_HALF, bot: it.py + LABEL_HALF },
+      pt: { px: it.px, py: it.py },
+      leader: null,
+    };
+  };
+
+  let spots: Spot[] = [];
+  for (const it of items) spots.push(search(it, spots));
+  const total = (all: readonly Spot[]) => all.reduce((n, sp, i) => n + score(sp, all.filter((_, j) => j !== i)), 0);
+  for (let round = 0; round < REPAIR_ROUNDS; round++) {
+    let changed = false;
+    items.forEach((it, i) => {
+      const others = spots.filter((_, j) => j !== i);
+      const now = score(spots[i], others);
+      const next = search(it, others);
+      if (next.cost < now - 1e-6) {
+        spots[i] = next;
+        changed = true;
+      }
+    });
+    // Two hairlines that cross need both names moved at once: for each of the first name's PAIR_TRIES
+    // cheapest spots, the second's best around it, in either order; the pair's best layout, if it is better.
+    for (let i = 0; i < spots.length; i++) {
+      for (let j = i + 1; j < spots.length; j++) {
+        const li = spots[i].leader;
+        const lj = spots[j].leader;
+        if (!li || !lj || !segsCross(li[0], li[1], lj[0], lj[1])) continue;
+        const rest = spots.filter((_, k) => k !== i && k !== j);
+        let bestTotal = total(spots) - 1e-6;
+        let bestTrial: Spot[] | null = null;
+        for (const [first, second] of [[i, j], [j, i]]) {
+          for (const a of candidates(items[first], rest).slice(0, PAIR_TRIES)) {
+            const b = search(items[second], [...rest, a]);
+            const trial = spots.map((sp, k) => (k === first ? a : k === second ? b : sp));
+            const t = total(trial);
+            if (t < bestTotal) {
+              bestTotal = t;
+              bestTrial = trial;
+            }
+          }
+        }
+        if (bestTrial) {
+          spots = bestTrial;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  return items.map((it, i) => {
+    const got = spots[i];
+    const x = got.anchor === "start" ? got.box.lo : got.box.hi;
+    return {
+      key: it.key, text: it.text, color: it.color, x, y: (got.box.top + got.box.bot) / 2, px: got.pt.px, py: got.pt.py,
+      anchor: got.anchor, width: textWidth(it.text), leader: got.leader !== null,
+    };
   });
-  const order = boxes.map((_, i) => i).sort((a, b) => boxes[a].lo - boxes[b].lo || a - b);
-  const groups: number[][] = [];
-  let reach = -Infinity;
-  for (const i of order) {
-    if (groups.length && boxes[i].lo < reach + 4) groups[groups.length - 1].push(i);
-    else groups.push([i]);
-    reach = groups[groups.length - 1].length === 1 ? boxes[i].hi : Math.max(reach, boxes[i].hi);
-  }
-  const top = plot.y + LABEL_GAP / 2;
-  const bottom = plot.y + plot.height - LABEL_GAP / 2;
-  const ys = new Array<number>(boxes.length);
-  for (const g of groups) {
-    const got = spreadLabels(g.map((i) => boxes[i].py), LABEL_GAP);
-    const lo = Math.min(...got);
-    const hi = Math.max(...got);
-    const shift = lo < top ? top - lo : hi > bottom ? Math.max(bottom - hi, top - lo) : 0;
-    g.forEach((i, k) => (ys[i] = got[k] + shift));
-  }
-  return boxes.map((b, i) => ({ key: b.key, text: b.text, color: b.color, x: b.x, y: ys[i], px: b.px, py: b.py, anchor: b.anchor, width: b.width }));
 }
 
 /** One placed name, with a hairline back to its point when it had to move; bronze names are set in ink2 (./contrast.ts). */
 export function LabelText({ l }: { l: PlacedLabel }) {
-  const moved = Math.abs(l.y - l.py) > LABEL_GAP / 2;
+  const moved = l.leader ?? Math.abs(l.y - l.py) > LABEL_GAP / 2;
   return (
     <g className="direct-label" data-label={l.text}>
       {moved ? (
@@ -335,6 +596,8 @@ const MARKER: Record<MarkRole, { type: SymbolKind; size: number }> = {
   ew: { type: "square", size: 110 },
   custom: { type: "triangle", size: 150 },
 };
+const ASSET_MARKER = { type: "circle", size: 56 } as const;
+const BENCH_MARKER = { type: "cross", size: 110 } as const;
 
 function marker(type: SymbolKind, size: number, color: string, opacity = 1) {
   return (p: { cx?: number; cy?: number }): ReactNode => (
@@ -380,10 +643,14 @@ interface LabelItem {
   color: string;
   sigma: number;
   mu: number;
+  /** The marker drawn at the point, if any: the name starts past it. */
+  own?: Extent;
+  /** For a line: further points along it, in data units, where its name may sit instead. */
+  along?: { sigma: number; mu: number }[];
 }
 
 // Runs inside the chart, where the axes' scales are known, so names are placed in pixels.
-function FrontierLabels({ items, cal }: { items: LabelItem[]; cal: CalSegment | null }) {
+function FrontierLabels({ items, cal, line }: { items: LabelItem[]; cal: CalSegment | null; line: readonly Datum[] }) {
   const xs = useXAxisScale();
   const ys = useYAxisScale();
   const yDomain = useYAxisDomain();
@@ -394,14 +661,31 @@ function FrontierLabels({ items, cal }: { items: LabelItem[]; cal: CalSegment | 
     // Name the line where it leaves the plot: its far end, or the top edge if it is clipped there.
     const top = Array.isArray(yDomain) && typeof yDomain[1] === "number" ? yDomain[1] : cal.y1;
     const x = cal.y1 > top && cal.slope > 0 ? (top - cal.y0) / cal.slope : cal.x1;
-    all.push({ key: "cal", text: "Capital allocation line", color: ROLE.cal, sigma: x, mu: cal.y0 + cal.slope * x });
+    // Its name may sit anywhere along what is drawn of it, from where it leaves the plot back to rf.
+    const along = Array.from({ length: 25 }, (_, k) => {
+      const sigma = x * (1 - k / 24);
+      return { sigma, mu: cal.y0 + cal.slope * sigma };
+    });
+    all.push({ key: "cal", text: "Capital allocation line", color: ROLE.cal, sigma: x, mu: cal.y0 + cal.slope * x, along });
   }
   const at = all
-    .map((it) => ({ ...it, px: xs(it.sigma) ?? NaN, py: ys(it.mu) ?? NaN }))
+    .map(({ along, ...it }) => ({
+      ...it,
+      px: xs(it.sigma) ?? NaN,
+      py: ys(it.mu) ?? NaN,
+      along: along?.map((q) => ({ px: xs(q.sigma) ?? NaN, py: ys(q.mu) ?? NaN })).filter((q) => finite(q.px) && finite(q.py)),
+    }))
     .filter((it) => finite(it.px) && finite(it.py));
+  // Every drawn marker is an obstacle, the name's own included: the frontier line's points are not drawn.
+  const markers: Obstacle[] = at.flatMap((it) => (it.own ? [{ x: it.px, y: it.py, extent: it.own }] : []));
+  const px = (sigma: number, mu: number) => ({ x: xs(sigma) ?? NaN, y: ys(mu) ?? NaN });
+  const drawn: Pt[][] = [line.map((d) => px(d.sigma, d.mu))];
+  const calEnd = all.find((it) => it.key === "cal");
+  if (cal && calEnd) drawn.push([px(cal.x0, cal.y0), px(calEnd.sigma, calEnd.mu)]);
+  const lines = drawn.map((ln) => ln.filter((q) => finite(q.x) && finite(q.y))).filter((ln) => ln.length > 1);
   return (
     <g className="frontier-labels">
-      {placeLabels(at, plot).map((l) => (
+      {placeLabels(at, plot, markers, lines).map((l) => (
         <LabelText key={l.key} l={l} />
       ))}
     </g>
@@ -430,11 +714,20 @@ function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
   const pad = (yHi - yLo) * 0.04;
   const yTicks = niceTicks(yLo - pad, yHi + pad);
 
+  // Placed in this order, so the marked portfolios get first choice of spot, then the benchmark, the
+  // assets and the line's own name; the capital allocation line's name comes last (FrontierLabels).
   const labels: LabelItem[] = [
-    ...assets.map((a) => ({ key: `asset-${a.ticker}`, text: a.ticker, color: ASSET, sigma: a.sigma, mu: a.mu })),
-    ...(bench ? [{ key: "bench", text: bench.label, color: ROLE.bench, sigma: bench.sigma, mu: bench.mu }] : []),
-    ...marks.map((m) => ({ key: `mark-${m.role}`, text: m.label, color: ROLE[m.role], sigma: m.sigma, mu: m.mu })),
-    { key: "frontier", text: "Efficient frontier", color: ROLE.frontier, sigma: line[line.length - 1].sigma, mu: line[line.length - 1].mu },
+    ...marks.map((m) => ({
+      key: `mark-${m.role}`, text: m.label, color: ROLE[m.role], sigma: m.sigma, mu: m.mu,
+      own: symbolExtent(MARKER[m.role].type, MARKER[m.role].size),
+    })),
+    ...(bench ? [{ key: "bench", text: bench.label, color: ROLE.bench, sigma: bench.sigma, mu: bench.mu, own: symbolExtent(BENCH_MARKER.type, BENCH_MARKER.size) }] : []),
+    ...assets.map((a) => ({ key: `asset-${a.ticker}`, text: a.ticker, color: ASSET, sigma: a.sigma, mu: a.mu, own: symbolExtent(ASSET_MARKER.type, ASSET_MARKER.size) })),
+    {
+      key: "frontier", text: "Efficient frontier", color: ROLE.frontier, sigma: line[line.length - 1].sigma, mu: line[line.length - 1].mu,
+      // Its name may sit anywhere along the upper half of the line, from its end back.
+      along: line.slice(Math.floor(line.length / 2)).reverse().map((d) => ({ sigma: d.sigma, mu: d.mu })),
+    },
   ];
   const axisTitle = { fill: chartTheme.axis.fill, fontFamily: tokens.font.sans, fontSize: 12 };
 
@@ -489,7 +782,7 @@ function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
             className="frontier-asset"
             name={a.ticker}
             data={[{ sigma: a.sigma, mu: a.mu, name: a.ticker }]}
-            shape={marker("circle", 56, ASSET, 0.8)}
+            shape={marker(ASSET_MARKER.type, ASSET_MARKER.size, ASSET, 0.8)}
             isAnimationActive={false}
           />
         ))}
@@ -498,7 +791,7 @@ function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
             className="frontier-bench"
             name={bench.label}
             data={[{ sigma: bench.sigma, mu: bench.mu, name: bench.label }]}
-            shape={marker("cross", 110, ROLE.bench)}
+            shape={marker(BENCH_MARKER.type, BENCH_MARKER.size, ROLE.bench)}
             isAnimationActive={false}
           />
         ) : null}
@@ -512,7 +805,7 @@ function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
             isAnimationActive={false}
           />
         ))}
-        <FrontierLabels items={labels} cal={cal} />
+        <FrontierLabels items={labels} cal={cal} line={line} />
       </ScatterChart>
     </div>
   );
