@@ -1,17 +1,19 @@
 // Direct labels: name a point or a line's end on the chart instead of sending the eye to a legend.
 import { tokens } from "../styles/tokens.ts";
+import { labelFill } from "./contrast.ts";
 
 export type LabelSide = "right" | "left" | "top" | "bottom";
 
 // Label props for a Recharts <ReferenceDot label={...}> or <ReferenceLine label={...}>: the name in
-// Space Grotesk, in the series' own colour, beside the point. Put it on a <ReferenceDot r={0}> at a
+// Space Grotesk, in the series' own colour where that reads on paper (labelFill: bronze is set in ink2),
+// beside the point. Put it on a <ReferenceDot r={0}> at a
 // line's last point to label the line's end.
 export function pointLabel(text: string, color: string, side: LabelSide = "right") {
   return {
     value: text,
     position: side,
     offset: 8,
-    fill: color,
+    fill: labelFill(color),
     fontFamily: tokens.font.sans,
     fontSize: 12,
   } as const;

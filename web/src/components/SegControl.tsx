@@ -6,6 +6,13 @@
 // Keyboard: the row is one tab stop (roving tabindex). Left and Right move to the neighbouring
 // option, wrapping at the ends, and Home and End jump to the first and last; moving selects, as the
 // app's st.tabs and st.radio (1213-1220, 650-656) switch on the first click.
+//
+// With an idPrefix the row switches panels, so it is a tablist: each pill names the panel it controls
+// (tabPanelId) and the page gives the panel it shows that id. Only the selected tab's panel is mounted;
+// an unselected tab's aria-controls points at a panel that is not in the page until it is chosen, which
+// the tab pattern allows. Without one the row is a choice that controls no panel (the reading level, a
+// chart's asset or window), so it is a radio group: the same keys and single tab stop, the choice
+// aria-checked. A tablist there would announce "tab 3 of 9" with no panel behind it.
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import type { SegControlProps } from "../types.ts";
 import "./SegControl.css";
@@ -28,10 +35,15 @@ export function stepIndex(key: string, i: number, n: number): number | null {
   return null;
 }
 
-export default function SegControl<T extends string>({ options, value, onChange, ariaLabel }: SegControlProps<T>) {
+// The ids a switching row and its panels share.
+export const tabId = (prefix: string, value: string): string => `${prefix}-tab-${value}`;
+export const tabPanelId = (prefix: string, value: string): string => `${prefix}-panel-${value}`;
+
+export default function SegControl<T extends string>({ options, value, onChange, ariaLabel, idPrefix }: SegControlProps<T>) {
   const row = useRef<HTMLDivElement>(null);
   const pills = useRef<(HTMLButtonElement | null)[]>([]);
   const active = options.findIndex((o) => o.value === value);
+  const tabs = idPrefix !== undefined;
 
   // Scroll the ROW, never the page: scrollIntoView would also move the window to reach a row that is
   // below the fold when the page loads.
@@ -53,7 +65,7 @@ export default function SegControl<T extends string>({ options, value, onChange,
   }
 
   return (
-    <div className="seg" role="tablist" aria-label={ariaLabel} aria-orientation="horizontal" ref={row} onKeyDown={onKeyDown}>
+    <div className="seg" role={tabs ? "tablist" : "radiogroup"} aria-label={ariaLabel} aria-orientation="horizontal" ref={row} onKeyDown={onKeyDown}>
       {options.map((o, i) => {
         const on = i === active;
         return (
@@ -63,9 +75,12 @@ export default function SegControl<T extends string>({ options, value, onChange,
               pills.current[i] = el;
             }}
             type="button"
-            role="tab"
+            role={tabs ? "tab" : "radio"}
+            id={idPrefix ? tabId(idPrefix, o.value) : undefined}
+            aria-controls={idPrefix ? tabPanelId(idPrefix, o.value) : undefined}
             className={on ? "seg-pill is-on" : "seg-pill"}
-            aria-selected={on}
+            aria-selected={tabs ? on : undefined}
+            aria-checked={tabs ? undefined : on}
             // One tab stop: the selected pill, or the first when nothing matches the value.
             tabIndex={on || (active < 0 && i === 0) ? 0 : -1}
             onClick={() => {

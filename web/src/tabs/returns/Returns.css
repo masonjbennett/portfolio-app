@@ -1,0 +1,136 @@
+/* The Returns & Statistics tab: the finding in the headline face, then the chart, then the tables.
+   Every colour is a token; the one inline colour on the page is a toggle's swatch, which is its
+   line's colour from src/charts/theme.ts. */
+.ret {
+  min-width: 0;
+}
+
+.ret-lead {
+  margin: 0 0 var(--space-5);
+}
+
+.ret-kicker {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+.ret-finding {
+  margin: 0 0 var(--space-2);
+}
+
+.ret-dek {
+  margin: 0;
+  color: var(--color-ink2);
+  font-size: 0.95rem;
+}
+
+/* The series toggles: the app's multiselect (1259). Each pill carries its line's colour. */
+.ret-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.ret-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ret-toggle[aria-pressed="false"] {
+  color: var(--color-ink2);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-hairline);
+}
+
+.ret-toggle:focus-visible,
+.ret-pick select:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+.ret-swatch {
+  width: 10px;
+  height: 10px;
+  border: 2px solid;
+  border-radius: 50%;
+}
+
+.ret-chart {
+  min-width: 0;
+}
+
+.ret-svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.ret-key {
+  margin: 0 0 var(--space-3);
+  max-width: 46em;
+  color: var(--color-ink2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ret-term {
+  white-space: nowrap;
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.ret-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  margin: 0 0 var(--space-4);
+}
+
+.ret-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.85rem;
+  color: var(--color-ink2);
+}
+
+.ret-pick select {
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 6px;
+}
+
+/* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
+@media (max-width: 760px) {
+  /* 16px on a phone: a smaller select makes iOS zoom the page on focus (as the rail's inputs). */
+  .ret-pick select {
+    font-size: 16px;
+  }
+
+  .ret-lead {
+    margin-bottom: var(--space-4);
+  }
+
+  .ret-controls {
+    gap: var(--space-3);
+  }
+}

@@ -50,7 +50,22 @@
   min-width: 0;
 }
 
+/* A tab's finding, the sentence that opens each of the six tabs: one element (h2), one face, one size.
+   Each tab's own class keeps only its spacing. */
+.tab-finding {
+  max-width: 40ch;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 1.15;
+  color: var(--color-ink);
+}
+
 @media (max-width: 760px) {
+  .tab-finding {
+    font-size: 24px;
+  }
+
   .app {
     padding: var(--space-4) var(--space-4) var(--space-6);
   }

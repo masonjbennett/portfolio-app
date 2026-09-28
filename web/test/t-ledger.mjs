@@ -2,8 +2,10 @@
 //
 // Each entry asserts BOTH sides, the app's value (reproduced, or read from the oracle dump) and the
 // port's, so a divergence cannot quietly become a match or a different divergence. Entries that live
-// in the page rather than the engine are listed as PENDING until the page exists to assert them;
-// the suite prints how many remain, so the list cannot be forgotten.
+// in the page rather than the engine were listed as PENDING until the page existed; they are CLOSED
+// now, each mapped to the suites that assert it, and this suite holds that map to the suites' text.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { transformSync } from "esbuild";
 import { check, near, maxAbsDiff, done } from "./_assert.mjs";
 import { derive, load } from "./_fixtures.mjs";
 import { mean, covMatrix, dot, matVec } from "../src/lib/num.ts";
@@ -126,21 +128,98 @@ const LEDGER = {
   },
 };
 
-// In the page, not the engine: asserted when the page shell and its six tabs are built.
-const PENDING = [
-  "st.stop() in one tab blanks the later tabs -> per-card boundary",
-  "failed tangency shows EW figures labelled Tangency -> say it failed",
-  "rf edit ignored until Run -> live",
-  "'Kurtosis' is excess kurtosis -> label it",
-  "downloads carry formatted text -> numbers with number formats",
-  "tables without downloads -> CSV + Excel for every table",
-  "tab-6 metrics in-sample, wealth daily-rebalanced, unlabelled -> say so",
-  "short frontier called unconstrained; tooltips say long-only with shorting on -> [-1, 1], follow the toggle",
-  "frontier hover x-unified by accident -> closest point",
-  "start date floor 2009-01-01 -> what Yahoo returns",
+// In the page, not the engine. These ten were PENDING until the shell and the six tabs existed; each
+// sentence is kept word for word as it was listed, and now maps to the ids that assert it and the
+// suites that carry each id's "ledger:<id>" checks. Between them an id's suites assert both sides, the
+// app's behaviour and the port's; one suite may hold only one side (t-components tests the Boundary
+// alone, t-app the app's st.stop()). This suite proves each listed suite tags the id in a real check,
+// never only in a comment. That each side is really asserted is a reviewer's job, not a regex's.
+const CLOSED = {
+  "st.stop() in one tab blanks the later tabs -> per-card boundary": {
+    boundary: ["t-app", "t-components", "t-tab-correlation", "t-tab-custom", "t-tab-optimization", "t-tab-risk", "t-tab-sensitivity"],
+  },
+  "failed tangency shows EW figures labelled Tangency -> say it failed": {
+    "failed-tangency": ["t-app", "t-tab-custom", "t-tab-optimization", "t-tab-sensitivity"],
+  },
+  "rf edit ignored until Run -> live": {
+    "rf-live": ["t-tab-custom", "t-tab-optimization", "t-tab-risk", "t-workbench"],
+  },
+  "'Kurtosis' is excess kurtosis -> label it": {
+    "excess-kurtosis": ["t-tab-returns"],
+  },
+  "downloads carry formatted text -> numbers with number formats": {
+    "numeric-downloads": ["t-tab-custom", "t-tab-optimization", "t-tab-returns", "t-tab-risk", "t-tab-sensitivity", "t-tables"],
+  },
+  "tables without downloads -> CSV + Excel for every table": {
+    "downloads-everywhere": ["t-tab-correlation", "t-tab-custom", "t-tab-optimization", "t-tab-returns", "t-tab-risk", "t-tab-sensitivity", "t-tables"],
+  },
+  "tab-6 metrics in-sample, wealth daily-rebalanced, unlabelled -> say so": {
+    "in-sample-label": ["t-tab-sensitivity"],
+    "daily-rebalanced-label": ["t-charts-portfolio", "t-tab-custom", "t-tab-optimization"],
+  },
+  "short frontier called unconstrained; tooltips say long-only with shorting on -> [-1, 1], follow the toggle": {
+    "short-bounds-copy": ["t-app", "t-charts-portfolio", "t-tab-custom", "t-tab-optimization", "t-tooltips"],
+  },
+  "frontier hover x-unified by accident -> closest point": {
+    "frontier-hover": ["t-charts", "t-charts-portfolio", "t-tab-custom"],
+  },
+  "start date floor 2009-01-01 -> what Yahoo returns": {
+    "start-date-floor": ["t-api", "t-app"],
+  },
+};
+// Found while building the tabs, never on the list above.
+const FOUND = {
+  "beta rounded to 3 dp before it is coloured -> colour on the raw beta": {
+    "beta-rounding": ["t-tab-risk"],
+  },
+};
+const PENDING = [];
+
+// The ids the page's entries were built against; each must be asserted somewhere.
+const PAGE_IDS = [
+  "boundary", "failed-tangency", "rf-live", "excess-kurtosis", "numeric-downloads", "downloads-everywhere",
+  "in-sample-label", "daily-rebalanced-label", "short-bounds-copy", "frontier-hover", "start-date-floor",
 ];
 
 for (const [name, fn] of Object.entries(LEDGER)) fn(name);
-console.log(`t-ledger: ${Object.keys(LEDGER).length} entries asserted, ${PENDING.length} pending the page`);
+
+// Every suite's CODE, comments stripped by esbuild, and the ids it tags. A tag named only in a comment
+// (a suite's header lists its ids) proves nothing, so it does not count. A tag is "ledger:<id>" not
+// followed by more of an id, so "ledger:boundary" is not found inside "ledger:boundary-x".
+const suiteDir = new URL("./", import.meta.url);
+const suites = readdirSync(suiteDir).filter((f) => /^t-.*\.mjs$/.test(f) && f !== "t-ledger.mjs");
+const code = (src) => transformSync(src, { loader: "js", format: "esm" }).code;
+const source = Object.fromEntries(suites.map((f) => [f.replace(/\.mjs$/, ""), code(readFileSync(new URL(f, suiteDir), "utf8"))]));
+const tagged = (src, id) => new RegExp(`ledger:${id}(?![a-z0-9-])`).test(src); // ids are [a-z0-9-]: nothing to escape
+
+check(PENDING.length === 0, "ledger: nothing is pending the page", PENDING.join(" | "));
+const listed = { ...CLOSED, ...FOUND };
+let tags = 0;
+for (const [sentence, ids] of Object.entries(listed)) {
+  check(Object.keys(ids).length > 0, `ledger: "${sentence}" names at least one id`);
+  for (const [id, files] of Object.entries(ids)) {
+    check(files.length > 0, `ledger: ${id} lists at least one suite`);
+    for (const f of files) {
+      check(existsSync(new URL(`${f}.mjs`, suiteDir)), `ledger: ${id}'s suite ${f}.mjs exists`);
+      check(tagged(source[f] ?? "", id), `ledger: ${f}.mjs asserts ledger:${id}`);
+      tags += 1;
+    }
+    // The other direction: a suite that tags the id is on the list, so the list cannot fall behind.
+    const carriers = Object.keys(source).filter((f) => tagged(source[f], id)).sort();
+    check(carriers.join() === [...files].sort().join(), `ledger: every suite that asserts ledger:${id} is listed`,
+      `listed ${[...files].sort().join()} / found ${carriers.join()}`);
+  }
+}
+const closedIds = new Set(Object.values(listed).flatMap((ids) => Object.keys(ids)));
+for (const id of PAGE_IDS) check(closedIds.has(id), `ledger: ${id} is closed by at least one suite`);
+// Every tag in any suite belongs to an engine entry above or to a page entry: none is unregistered.
+const known = new Set([...Object.keys(LEDGER), ...closedIds]);
+const stray = [...new Set(Object.values(source).flatMap((src) => [...src.matchAll(/ledger:([a-z0-9-]+)/g)].map((m) => m[1])))].filter((id) => !known.has(id));
+check(stray.length === 0, "ledger: every ledger:<id> tag in the suites is a registered entry", stray.join(", "));
+
+console.log(
+  `t-ledger: ${Object.keys(LEDGER).length} engine entries asserted here; ${Object.keys(CLOSED).length} page entries closed ` +
+    `and ${Object.keys(FOUND).length} found in the tabs (${closedIds.size} ids, ${tags} suite tags); ${PENDING.length} pending`,
+);
 void load;
 done("t-ledger");

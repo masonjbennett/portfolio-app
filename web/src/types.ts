@@ -348,6 +348,13 @@ export interface SegControlProps<T extends string> {
   onChange: (value: T) => void;
   /** Accessible name for the group. */
   ariaLabel: string;
+  /**
+   * When the row switches panels (the six tabs): each pill gets id `${idPrefix}-tab-${value}` and
+   * aria-controls `${idPrefix}-panel-${value}`, and the page gives the panel it shows that id,
+   * role="tabpanel" and aria-labelledby the pill. Left out, the row controls no panel, so it is a radio
+   * group (role radiogroup, each pill role radio with aria-checked) and the pills carry no ids.
+   */
+  idPrefix?: string;
 }
 
 /** A section header: a teal bar on a hairline. */

@@ -10,9 +10,10 @@ import { check, done } from "./_assert.mjs";
 import { act, render, setMedia, text } from "./_dom.mjs";
 
 const { createElement: h, useState } = await import("react");
-const { AppView } = await import("../src/App.tsx");
+const { AppView, TABS } = await import("../src/App.tsx");
+const { default: Boundary } = await import("../src/components/Boundary.tsx");
 const { snapshotPlates, finding } = await import("../src/chrome/Band.tsx");
-const { default: Rail } = await import("../src/chrome/Rail.tsx");
+const { default: Rail, symbolMessage } = await import("../src/chrome/Rail.tsx");
 const { default: SummaryChip, summaryText } = await import("../src/chrome/SummaryChip.tsx");
 const { titleChip } = await import("../src/chrome/Masthead.tsx");
 const { format, DASH } = await import("../src/format.ts");
@@ -170,6 +171,71 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   }
 }
 
+// ---- the tab row and its panel: tab / tabpanel ids tie each to the other ---------------------------
+{
+  const r = page({});
+  const row = r.container.querySelector(".app-tabs [role=tablist]");
+  const pills = row ? [...row.querySelectorAll("[role=tab]")] : [];
+  check(pills.length === TAB_IDS.length && pills.every((t, i) => t.id === `analysis-tab-${TAB_IDS[i]}` && t.getAttribute("aria-controls") === `analysis-panel-${TAB_IDS[i]}`),
+    "tabs: every tab pill has an id and aria-controls naming its panel", pills.map((t) => `${t.id}>${t.getAttribute("aria-controls")}`).join(" "));
+  // The one panel on the page is the selected pill's, labelled by that pill.
+  const panelOk = (id) => {
+    const panels = [...r.container.querySelectorAll("[role=tabpanel]")];
+    const on = pills.find((t) => t.getAttribute("aria-selected") === "true");
+    const label = panels[0] ? r.container.querySelector(`#${panels[0].getAttribute("aria-labelledby")}`) : null;
+    return panels.length === 1 && on?.getAttribute("aria-controls") === panels[0].id && panels[0].id === `analysis-panel-${id}` &&
+      label === on && text(label) === TAB_LABELS[id] && !!panels[0].querySelector(`[data-tab="${id}"]`);
+  };
+  check(panelOk("returns"), "tabs: the active tab's content is its role=tabpanel, labelled by the selected pill");
+  click(byLabel(row, TAB_LABELS.correlation));
+  check(panelOk("correlation"), "tabs: switching tab moves the panel's id and label to the new pill");
+  r.unmount();
+}
+
+// ---- a card that failed draws again on the next analysis, on every tab ------------------------------
+// App resets each tab's own Boundary on a new analysis, but the tab stays mounted when only the rate or the
+// prices change, so a CARD Boundary with no resetKey kept its "could not be shown" line until the reader
+// left the tab. Each real tab, inside a Boundary as App mounts it, gets an analysis whose daily returns
+// throw, then a good one: something must fail the first time and nothing may stay failed the second.
+{
+  const poisoned = new Proxy(EX, { get: (t, k) => { if (k === "returns") throw new Error("poisoned returns"); return Reflect.get(t, k); } });
+  const props = (analysis) => ({ analysis, settings: EX_SETTINGS, level: "plain", weights: {}, setWeights() {}, requestSettings() {} });
+  const mount = (id, analysis) => h(Boundary, { name: TAB_LABELS[id], resetKey: analysis }, h(TABS[id], props(analysis)));
+  for (const id of TAB_IDS) {
+    let failed = [];
+    let after = ["never rendered"];
+    try {
+      const r = quietly(() => render(mount(id, poisoned)));
+      failed = [...r.container.querySelectorAll(".boundary")].map(text);
+      quietly(() => r.rerender(mount(id, { ...EX })));
+      after = [...r.container.querySelectorAll(".boundary")].map(text);
+      r.unmount();
+    } catch (err) {
+      after = [`threw: ${err.message}`];
+    }
+    check(failed.length > 0 && after.length === 0, `boundary: every ${id} card that failed draws again on the next analysis`,
+      `failed: ${failed.join(" | ")} / after: ${after.join(" | ")}`);
+  }
+}
+
+// ---- every tab opens on its finding: the same element and class on all six, above any section -----
+// The REAL tabs here, on the baked example, not the stand-ins the rest of this suite uses.
+{
+  const r = page({}, TABS);
+  const row = r.container.querySelector(".app-tabs [role=tablist]");
+  const seen = [];
+  for (const id of TAB_IDS) {
+    click(byLabel(row, TAB_LABELS[id]));
+    const panel = r.container.querySelector("[role=tabpanel]");
+    const first = panel?.querySelector("h1, h2, h3, h4, h5, h6");
+    const finding = first ? text(first) : "";
+    seen.push(`${id}: ${first?.tagName}.${first?.className} "${finding.slice(0, 40)}"`);
+    check(first?.tagName === "H2" && first.classList.contains("tab-finding") && /[.?]$/.test(finding) && !/NaN|undefined/.test(finding),
+      `tabs: the ${id} tab's first heading is its finding, an h2.tab-finding that ends as a sentence`, seen.at(-1));
+  }
+  r.unmount();
+}
+
 // ---- (c) nothing ready: a named message in place of the band and tabs -----------------------------
 {
   const e = page({ analysis: { status: "error", name: "prices", message: "The price service did not answer." } });
@@ -269,6 +335,19 @@ function rail(over = {}) {
   key(field(root, "tickers"), "Enter");
   check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ tickers: ["VTI", "AGG", "GLD"] }) && !text(root).includes(MESSAGES["too-many"]),
     "rail: a valid list commits, parsed, and the message clears", JSON.stringify(calls.settings.at(-1)));
+  // Yahoo's alphabet: a share class, a coin and a currency pair commit (the app passes them to
+  // yfinance, 1007); a symbol the price endpoint would refuse is named and nothing is fetched.
+  setValue(field(root, "tickers"), "brk-b, BTC-USD, EURUSD=X");
+  key(field(root, "tickers"), "Enter");
+  check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ tickers: ["BRK-B", "BTC-USD", "EURUSD=X"] }),
+    "rail: BRK-B, BTC-USD and EURUSD=X commit", JSON.stringify(calls.settings.at(-1)));
+  const sym = calls.settings.length;
+  setValue(field(root, "tickers"), "VTI, AGG, GL/D");
+  key(field(root, "tickers"), "Enter");
+  check(calls.settings.length === sym && text(root).includes(symbolMessage("GL/D")) && field(root, "tickers").getAttribute("aria-invalid") === "true",
+    "rail: a symbol outside Yahoo's alphabet is refused, named, and not fetched", text(root.querySelector("[role=alert]") ?? root).slice(0, 160));
+  setValue(field(root, "tickers"), "VTI, AGG, GLD");
+  key(field(root, "tickers"), "Enter");
 
   // Dates. ledger:start-date-floor: the app's picker floors at 2009-01-01; the port's sets none.
   const call = ORACLE.find((l) => /st\.date_input\(\s*"Start"/.test(l)) ?? "";
@@ -294,6 +373,16 @@ function rail(over = {}) {
   check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ benchmark: "^NDX" }), "rail: the benchmark applies");
   click(field(root, "allowShort"));
   check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ allowShort: true }), "rail: the shorting switch applies");
+  // ledger:short-bounds-copy, the rail half. The app's toggle help (750-751) calls the short frontier
+  // "unconstrained", while its own optimiser bounds each weight to [-1, 1] (780-782).
+  const help = ORACLE.slice(746, 751).join(" ");
+  const bounds = ORACLE.slice(777, 783).join(" ");
+  check(/"Allow short positions"/.test(ORACLE[747]) && /unconstrained frontier/.test(ORACLE[750]) && /\[−1,\s*1\]/.test(bounds),
+    "ledger:short-bounds-copy: the app's shorting help says 'unconstrained' (750-751) while its bounds are [−1, 1] (780-782)", help.trim());
+  const shortGroup = field(root, "allowShort").closest(".rail-group");
+  const shortHelp = shortGroup ? text(shortGroup) : "";
+  check(/each asset's weight is bounded to \[−1, 1\]/.test(shortHelp) && !/unconstrained/i.test(text(root)),
+    "ledger:short-bounds-copy: the rail's shorting help states [−1, 1] per asset and never says unconstrained", shortHelp);
   n = calls.settings.length;
   setValue(field(root, "amount"), "50");
   check(calls.settings.length === n && /at least \$100/.test(text(root)), "rail: an amount under the app's $100 minimum is refused (724)");

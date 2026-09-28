@@ -6,6 +6,7 @@
 // truncated, pasted into chat apps and edited by hand, so every field is parsed on its own, and a
 // field that does not parse is left out (the caller falls back to storage, then the defaults).
 // Nothing here throws.
+import { SYMBOL } from "../data/prices.ts";
 import { MAX_TICKERS, parseTickers } from "../lib/clean.ts";
 import { BENCHMARKS } from "./defaults.ts";
 import { TAB_IDS } from "../types.ts";
@@ -15,8 +16,8 @@ import type { CustomWeights, ShareSettings, ShareState, TabId } from "../types.t
 const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", w: "w", tab: "tab" };
 
 // The app does not validate ticker characters (1007); a URL is hostile input, so a symbol is held
-// to what exchanges and Yahoo use: letters, digits, and . - ^ = (BRK-B, ^GSPC, EURUSD=X).
-const SYMBOL = /^[A-Z0-9.^=-]{1,15}$/;
+// to the pattern the price endpoint accepts (Yahoo's alphabet: BRK-B, ^GSPC, EURUSD=X), and a link
+// can never carry a ticker the endpoint would refuse.
 // Longer than any honest value (ten tickers, ten weights); a longer one is not parsed at all.
 const MAX_PARAM = 400;
 // The rate field has no bounds in the app (717). A link gets a sane one: -100% to 100%.

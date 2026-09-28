@@ -109,8 +109,30 @@ check(eq(spreadLabels([5, 0, 6], 4), [11 / 3, -1 / 3, 23 / 3]), "labels: runs me
   check(ok, "labels: on 200 random sets, order is kept, every gap is at least the gap, and the mean does not move");
 }
 const lab = pointLabel("Tangency", ROLE.tangency);
-check(lab.value === "Tangency" && lab.fill === ROLE.tangency && lab.position === "right" && lab.fontFamily === tokens.font.sans,
-  "labels: pointLabel names the point in the series' colour, beside it", JSON.stringify(lab));
+const gmvLab = pointLabel("GMV", ROLE.gmv);
+check(lab.value === "Tangency" && lab.position === "right" && lab.fontFamily === tokens.font.sans && gmvLab.fill === ROLE.gmv,
+  "labels: pointLabel names the point in the series' colour, beside it", JSON.stringify(gmvLab));
+check(lab.fill === tokens.color.ink2 && ROLE.tangency === tokens.color.bronze,
+  "labels: a bronze series is named in ink2, since bronze text on paper is under 4.5:1", JSON.stringify(lab));
+
+// Every Recharts hover box names its rows in a colour that reads on paper: the default content writes each
+// row in the series colour (bronze, 3.6:1), so every <Tooltip> in src/ passes a content of its own.
+{
+  const { readdirSync } = await import("node:fs");
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(new URL(e.name + "/", dir)) : e.name.endsWith(".tsx") ? [new URL(e.name, dir)] : []);
+  const bare = [];
+  let seen = 0;
+  for (const f of walk(new URL("../src/", import.meta.url))) {
+    const src = readFileSync(f, "utf8");
+    // To the element's own "/>": its attributes hold arrow functions, so a ">" does not end it. An element
+    // has whitespace after its name; "<Tooltip>" in a doc comment does not.
+    for (const m of src.matchAll(/<Tooltip\s[\s\S]*?\/>/g)) {
+      seen += 1;
+      if (!/\bcontent=\{/.test(m[0])) bare.push(`${f.pathname.split("/src/")[1]}: ${m[0].replace(/\s+/g, " ").slice(0, 60)}`);
+    }
+  }
+  check(seen >= 8 && bare.length === 0, `tooltips: all ${seen} Recharts hover boxes in src/ pass their own content`, bare.join(" | "));
+}
 
 // ---- (d) ChartFrame --------------------------------------------------------------------------------
 let drew = [];

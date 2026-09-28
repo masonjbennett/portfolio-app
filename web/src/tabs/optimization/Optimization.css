@@ -1,0 +1,64 @@
+/* The Portfolio Optimization tab: the headline, the three rows of plates and the notes. Charts, tables,
+   plates and section headers bring their own styles; every colour here is a token. */
+.opt {
+  min-width: 0;
+}
+
+/* The headline states the finding; its face and size are .tab-finding's (App.css), this is its spacing. */
+.opt-headline {
+  margin: 0 0 var(--space-6);
+}
+
+.opt-section {
+  min-width: 0;
+  margin-bottom: var(--space-7);
+}
+
+.opt-tile {
+  min-width: 0;
+  margin: var(--space-4) 0 var(--space-5);
+}
+
+.opt-tile-title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+/* Five plates in a row, so each figure sits above the same figure of the next portfolio. */
+.opt-plates {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.opt-note {
+  margin: var(--space-3) 0 0;
+  max-width: 72ch;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-ink2);
+}
+
+.opt-note--failed,
+.opt-note--error {
+  padding-left: var(--space-2);
+  border-left: var(--line-bar) solid var(--color-claret);
+  color: var(--color-ink);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
+@media (max-width: 760px) {
+  .opt-headline {
+    margin-bottom: var(--space-5);
+  }
+
+  .opt-plates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,103 @@
+/* The Sensitivity tab: the finding in the headline face, captions in the body face, notes set off by
+   a bar. Metrics tables sit two to a row on a desktop and stack on a phone; each stays a table. */
+.sens {
+  display: grid;
+  /* One column no wider than the page: an implicit track sizes to its widest child's min-content,
+     which let a metrics table push the tab to 446px on a 375px phone instead of scrolling inside. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* The finding's face and size are .tab-finding's (App.css); the grid's gap spaces it. */
+.sens-finding {
+  margin: 0;
+}
+
+.sens-caption {
+  margin: 0;
+  max-width: 60em;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--color-ink2);
+}
+
+.sens-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.sens-switch {
+  justify-self: start;
+  max-width: 100%;
+}
+
+.sens-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--color-ink2);
+}
+
+.sens-tips > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.sens-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.sens-custom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.sens-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.sens-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-teal);
+}
+
+.sens-note {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: var(--line-bar) solid var(--color-hairline);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--color-ink2);
+}
+
+.sens-note--error {
+  border-left-color: var(--color-claret);
+  color: var(--color-claret);
+}
+
+@media (max-width: 760px) {
+  .sens-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,6 +1,10 @@
 /* Plates are the one place boxes are used: a hairline box on paper around a single figure. */
 .plate {
   min-width: 0;
+  /* The plate is the size container its figure scales against: five plates across a column, as the
+     Optimization and Custom tabs set them, left a 28px "−24.12%" wider than its box, and it broke
+     mid-number. Every plate sits in a grid track of its own, so containing its width is safe. */
+  container-type: inline-size;
   padding: var(--space-3) var(--space-4);
   border: var(--line-hair) solid var(--color-hairline);
   background: var(--color-paper);
@@ -22,6 +26,8 @@
   color: var(--color-ink);
   font-family: var(--font-mono);
   font-size: 28px;
+  /* About eight mono figures fit the plate's width; 28px is the most it grows. */
+  font-size: clamp(16px, 20cqi, 28px);
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -36,5 +42,6 @@
 @media (max-width: 760px) {
   .plate-value {
     font-size: 22px;
+    font-size: clamp(16px, 20cqi, 22px);
   }
 }

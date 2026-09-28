@@ -5,6 +5,7 @@
 // app's message under it and nothing is fetched.
 import { useEffect, useId, useState } from "react";
 import SegControl from "../components/SegControl.tsx";
+import { SYMBOL } from "../data/prices.ts";
 import { parseTickers, validateRequest } from "../lib/clean.ts";
 import { MESSAGES } from "../state/analyze.ts";
 import { AMOUNT_STEP, BENCHMARKS, MIN_AMOUNT, PRESETS, RF_FALLBACK, RF_STEP } from "../state/defaults.ts";
@@ -20,6 +21,11 @@ const LEVEL_OPTIONS: { value: Level; label: string }[] = LEVELS.map((l) => ({ va
 // minus ten years, 702).
 function complete(iso: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(iso) && Number(iso.slice(0, 4)) >= 1000;
+}
+
+// Why a typed symbol is refused, in the reader's terms.
+export function symbolMessage(symbol: string): string {
+  return `"${symbol}" is not a Yahoo Finance symbol. Symbols use letters, digits, ".", "-" and "=", with an optional leading "^" (BRK-B, EURUSD=X, ^GSPC).`;
 }
 
 // A decimal rate as the percent the field shows: 0.0389 -> "3.89".
@@ -46,6 +52,13 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
     const bad = validateRequest(tickers, settings.start, endValue);
     if (bad === "too-few" || bad === "too-many") {
       setTickerError(MESSAGES[bad]);
+      return;
+    }
+    // The app hands any string to yfinance (1007). The price endpoint takes Yahoo's alphabet only
+    // (SYMBOL), so a symbol outside it is named here instead of coming back as a failed request.
+    const odd = tickers.find((t) => !SYMBOL.test(t));
+    if (odd !== undefined) {
+      setTickerError(symbolMessage(odd));
       return;
     }
     setTickerError(null);
@@ -317,10 +330,11 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
           />
           <span>Allow short positions</span>
         </label>
-        {/* The app's help (750-751) called the short frontier "unconstrained"; it is bounded (780-782). */}
+        {/* ledger:short-bounds-copy. The app's help (750-751) calls the short frontier "unconstrained";
+            its optimiser bounds every weight to [-1, 1] (780-782), and so does the port's. */}
         <p className="rail-note">
-          Weights may go negative: each lies between −100% and 100% instead of between 0% and 100%. Switching recomputes
-          the optimisations from the prices already loaded.
+          Weights may go negative: each asset's weight is bounded to [−1, 1] (−100% to 100%) instead of [0, 1].
+          Switching recomputes the optimisations from the prices already loaded.
         </p>
       </section>
     </div>

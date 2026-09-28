@@ -29,10 +29,14 @@ export interface PricesQuery {
 
 const KEYS = ["tickers", "benchmark", "start", "end"] as const;
 
-// Upper-case letters with an optional leading caret. Every preset (60-85) and every benchmark
-// (728-735) fits, and nothing else is needed for them. The app hands any typed string to yfinance;
-// here a share class (BRK-B), a foreign listing (.L) or a currency pair (=X) is refused, not guessed at.
-export const SYMBOL = /^\^?[A-Z]{1,5}$/;
+// Yahoo's symbol alphabet: an optional leading caret (an index, ^GSPC), then a letter or digit, then
+// letters, digits, ".", "-" and "=", at most 15 characters in all. That takes what the app hands to
+// yfinance from its ticker box (1007): a share class (BRK-B), a foreign listing (VOD.L, 0700.HK), a
+// currency pair (EURUSD=X), a future (GC=F) or a coin (BTC-USD). It refuses what no symbol carries:
+// lower case (the rail upper-cases), a slash, a space, a caret past the first place, a leading "." or
+// "-", and anything longer. chartUrl() percent-encodes the symbol as well, so this is the canonical
+// spelling, not the only guard on the path.
+export const SYMBOL = /^(?=.{1,15}$)\^?[A-Z0-9][A-Z0-9.=-]*$/;
 
 // The benchmark is the app's selectbox (728-735), so only its six symbols are accepted.
 export const BENCHMARK_SYMBOLS: readonly string[] = BENCHMARKS.map((b) => b.symbol);

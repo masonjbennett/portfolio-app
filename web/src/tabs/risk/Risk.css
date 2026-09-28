@@ -1,0 +1,75 @@
+/* The Risk Analysis tab: the headline, the section controls and the notes. Charts, tables, plates and
+   section headers bring their own styles; every colour here is a token. */
+.risk {
+  min-width: 0;
+}
+
+/* The headline states the finding, in the headline face. */
+.risk-headline {
+  margin: 0 0 var(--space-6);
+}
+
+.risk-section {
+  min-width: 0;
+  margin-bottom: var(--space-7);
+}
+
+.risk-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0 var(--space-4);
+  min-width: 0;
+}
+
+/* A SegControl row scrolls sideways inside itself; let it shrink instead of pushing the page wide. */
+.risk-controls > .seg {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.risk-control-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+.risk-plates {
+  display: grid;
+  grid-template-columns: minmax(0, 240px);
+  margin-bottom: var(--space-4);
+}
+
+.risk-terms {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-ink2);
+}
+
+.risk-note {
+  margin: var(--space-3) 0 0;
+  max-width: 72ch;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-ink2);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
+@media (max-width: 760px) {
+  .risk-headline {
+    margin-bottom: var(--space-5);
+  }
+
+  .risk-plates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

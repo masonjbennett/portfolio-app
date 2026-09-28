@@ -13,7 +13,7 @@ import Rail from "./chrome/Rail.tsx";
 import SummaryChip, { Sheet } from "./chrome/SummaryChip.tsx";
 import { usePhone } from "./chrome/usePhone.ts";
 import Boundary from "./components/Boundary.tsx";
-import SegControl from "./components/SegControl.tsx";
+import SegControl, { tabId, tabPanelId } from "./components/SegControl.tsx";
 import { useWorkbench } from "./state/useWorkbench.ts";
 import Correlation from "./tabs/Correlation.tsx";
 import Custom from "./tabs/Custom.tsx";
@@ -34,6 +34,8 @@ export const TABS: Readonly<Record<TabId, ComponentType<TabProps>>> = {
 };
 
 const TAB_OPTIONS = TAB_IDS.map((id) => ({ value: id, label: TAB_LABELS[id] }));
+// The tab row's ids: pill `analysis-tab-<id>`, the panel it shows `analysis-panel-<id>`.
+const TAB_PREFIX = "analysis";
 
 export interface AppViewProps {
   /** The page's state (useWorkbench in the app; a stand-in in test/t-app.mjs). */
@@ -89,10 +91,15 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
           {ready ? (
             <>
               <nav className="app-tabs" aria-label="Analysis tabs">
-                <SegControl options={TAB_OPTIONS} value={wb.tab} onChange={wb.setTab} ariaLabel="Analysis" />
+                <SegControl options={TAB_OPTIONS} value={wb.tab} onChange={wb.setTab} ariaLabel="Analysis" idPrefix={TAB_PREFIX} />
               </nav>
               <Boundary key={wb.tab} name={TAB_LABELS[wb.tab]} resetKey={ready}>
-                <section className="app-tab" aria-label={TAB_LABELS[wb.tab]}>
+                <section
+                  className="app-tab"
+                  role="tabpanel"
+                  id={tabPanelId(TAB_PREFIX, wb.tab)}
+                  aria-labelledby={tabId(TAB_PREFIX, wb.tab)}
+                >
                   <Tab
                     analysis={ready}
                     settings={wb.settings}

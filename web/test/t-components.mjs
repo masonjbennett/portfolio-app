@@ -121,11 +121,13 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   const picks = [];
   const el = () => h(SegControl, { options: OPTS, value, onChange: (v) => picks.push(v), ariaLabel: "Analysis tabs" });
   const r = render(el());
-  const list = r.container.querySelector("[role=tablist]");
-  const tabs = [...r.container.querySelectorAll("[role=tab]")];
-  check(list?.getAttribute("aria-label") === "Analysis tabs" && tabs.length === 6, "segcontrol: a named tablist of six tabs", `${tabs.length}`);
-  check(tabs.map((t) => t.getAttribute("aria-selected")).join() === "true,false,false,false,false,false",
-    "segcontrol: aria-selected marks only the chosen tab", tabs.map((t) => t.getAttribute("aria-selected")).join());
+  // No idPrefix: a choice that controls no panel, so a radio group, never a tablist with no panels.
+  const list = r.container.querySelector("[role=radiogroup]");
+  const tabs = [...r.container.querySelectorAll("[role=radio]")];
+  check(list?.getAttribute("aria-label") === "Analysis tabs" && tabs.length === 6 && !r.container.querySelector("[role=tablist], [role=tab]"),
+    "segcontrol: with no idPrefix, a named radio group of six, and no tab roles", `${tabs.length}`);
+  check(tabs.map((t) => t.getAttribute("aria-checked")).join() === "true,false,false,false,false,false" && tabs.every((t) => !t.hasAttribute("aria-selected")),
+    "segcontrol: aria-checked marks only the chosen option", tabs.map((t) => t.getAttribute("aria-checked")).join());
   check(tabs.map((t) => t.tabIndex).join() === "0,-1,-1,-1,-1,-1", "segcontrol: one tab stop, on the chosen tab", tabs.map((t) => t.tabIndex).join());
 
   const key = (k) => act(() => {
@@ -136,7 +138,7 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   check(picks.at(-1) === "risk" && document.activeElement === tabs[1], "segcontrol: ArrowRight selects and focuses the next tab", `${picks.at(-1)}`);
   value = "risk";
   r.rerender(el());
-  check(tabs[1].getAttribute("aria-selected") === "true" && tabs[1].tabIndex === 0, "segcontrol: the selection follows the value prop");
+  check(tabs[1].getAttribute("aria-checked") === "true" && tabs[1].tabIndex === 0, "segcontrol: the selection follows the value prop");
   tabs[0].focus();
   key("ArrowLeft");
   check(picks.at(-1) === "sensitivity" && document.activeElement === tabs[5], "segcontrol: ArrowLeft from the first wraps to the last", `${picks.at(-1)}`);
@@ -147,7 +149,21 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   const before = picks.length;
   key("a");
   check(picks.length === before, "segcontrol: other keys do nothing");
+  check(tabs.every((t) => !t.id && !t.hasAttribute("aria-controls")), "segcontrol: with no idPrefix the pills carry no ids");
   r.unmount();
+
+  // With an idPrefix, every pill has an id and names the panel it controls.
+  const p = render(h(SegControl, { options: OPTS, value: "risk", onChange: () => {}, ariaLabel: "Analysis tabs", idPrefix: "x" }));
+  const pills = [...p.container.querySelectorAll("[role=tab]")];
+  check(p.container.querySelector("[role=tablist]")?.getAttribute("aria-label") === "Analysis tabs" && pills.length === 6 &&
+    pills.map((t) => t.getAttribute("aria-selected")).join() === "false,true,false,false,false,false" && pills.every((t) => !t.hasAttribute("aria-checked")),
+    "segcontrol: an idPrefix makes it a tablist, aria-selected on the chosen tab", pills.map((t) => t.getAttribute("aria-selected")).join());
+  check(pills.map((t) => t.id).join() === OPTS.map((o) => `x-tab-${o.value}`).join() &&
+    pills.map((t) => t.getAttribute("aria-controls")).join() === OPTS.map((o) => `x-panel-${o.value}`).join(),
+    "segcontrol: an idPrefix gives each pill an id and aria-controls naming its panel", pills.map((t) => `${t.id}>${t.getAttribute("aria-controls")}`).join(" "));
+  check(SegModule.tabId("x", "risk") === "x-tab-risk" && SegModule.tabPanelId("x", "risk") === "x-panel-risk",
+    "segcontrol: tabId and tabPanelId are the ids the pills carry");
+  p.unmount();
 }
 
 // The row never wraps: it scrolls sideways inside itself, and the pills never shrink to fit.
@@ -157,6 +173,14 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   check(/flex-wrap:\s*nowrap/.test(row) && /white-space:\s*nowrap/.test(row), "segcontrol: the row never wraps", row);
   check(/overflow-x:\s*auto/.test(row) && /max-width:\s*100%/.test(row), "segcontrol: a row wider than its container scrolls inside itself", row);
   check(/flex:\s*0 0 auto/.test(block(sheet, ".seg-pill")), "segcontrol: pills keep their width instead of shrinking", block(sheet, ".seg-pill"));
+}
+
+// A plate's figure fits its plate: the plate is the size container and the figure scales with it,
+// capped at 28px, so five plates across a column never break "−24.12%" over two lines.
+{
+  const sheet = css("Plate.css");
+  check(/container-type:\s*inline-size/.test(block(sheet, ".plate")), "plate: the plate is the size container of its figure", block(sheet, ".plate"));
+  check(/font-size:\s*clamp\(16px,\s*20cqi,\s*28px\)/.test(block(sheet, ".plate-value")), "plate: the figure scales with the plate's width, 16px to 28px", block(sheet, ".plate-value"));
 }
 
 // The chosen pill is scrolled into view, by scrolling the row and never the page. jsdom has no
@@ -174,7 +198,7 @@ check(revealLeft(400, 90, 0, 200) === 314 && revealLeft(0, 90, 314, 200) === 0 &
   try {
     const el = (value) => h(SegControl, { options: OPTS, value, onChange: () => {}, ariaLabel: "Tabs" });
     const r = render(el("custom"));
-    const list = r.container.querySelector("[role=tablist]");
+    const list = r.container.querySelector(".seg");
     check(list.scrollLeft === 314, "segcontrol: the chosen pill is scrolled into view on load", `${list.scrollLeft}`);
     r.rerender(el("returns"));
     check(list.scrollLeft === 0, "segcontrol: choosing a pill off the left edge scrolls back to it", `${list.scrollLeft}`);

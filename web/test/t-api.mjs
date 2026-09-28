@@ -191,8 +191,18 @@ function sameFrame(a, b) {
     ["tickers given twice", twice],
     ["an empty tickers value", query(px, { tickers: "" })],
     ["a lower-case ticker", query(px, { tickers: "vti,AGG,GLD" })],
-    ["a share-class symbol", query(px, { tickers: "BRK-B,AGG,GLD" })],
-    ["a six-letter symbol", query(px, { tickers: "ABCDEF,AGG,GLD" })],
+    // Outside Yahoo's symbol alphabet: each would put a path, a space or a stray caret into the
+    // upstream url, or is longer than any symbol.
+    ["a path in a symbol", query(px, { tickers: "../AGG,VTI,GLD" })],
+    ["a slash in a symbol", query(px, { tickers: "A/B,AGG,GLD" })],
+    ["a space in a symbol", query(px, { tickers: "BRK B,AGG,GLD" })],
+    ["a caret past the first place", query(px, { tickers: "A^B,AGG,GLD" })],
+    ["two carets", query(px, { tickers: "^^GSPC,AGG,GLD" })],
+    ["a caret alone", query(px, { tickers: "^,AGG,GLD" })],
+    ["a leading dot", query(px, { tickers: ".L,AGG,GLD" })],
+    ["a leading dash", query(px, { tickers: "-B,AGG,GLD" })],
+    ["a percent sign", query(px, { tickers: "A%B,AGG,GLD" })],
+    ["a sixteen-character symbol", query(px, { tickers: "ABCDEFGHIJKLMNOP,AGG,GLD" })],
     ["an empty list entry", query(px, { tickers: "VTI,,GLD" })],
     ["a repeated ticker", query(px, { tickers: "VTI,AGG,VTI" })],
     ["eleven tickers", query(px, { tickers: eleven })],
@@ -214,6 +224,10 @@ function sameFrame(a, b) {
 
   const good = [
     ["ten tickers", query(px, { tickers: eleven.split(",").slice(0, 10).join(",") })],
+    // Symbols the app hands to yfinance from its ticker box (1007), each a Yahoo symbol.
+    ["a share class, a coin and a currency pair", query(px, { tickers: "BRK-B,BTC-USD,EURUSD=X" })],
+    ["a foreign listing, a future and an index", query(px, { tickers: "VOD.L,0700.HK,GC=F,^N225" })],
+    ["a fifteen-character symbol", query(px, { tickers: "ABCDEFGHIJKLMNO,AGG,GLD" })],
     ["an end one day ahead (a reader east of UTC)", query(px, { end: plus(TODAY, 1) })],
     ["the page's url with the comma and caret percent-encoded", "tickers=VTI%2CAGG%2CGLD%2CVNQ%2CEFA&benchmark=%5EGSPC&start=2019-01-01&end=2026-09-26"],
   ];
@@ -222,6 +236,12 @@ function sameFrame(a, b) {
     const res = await pricesGET(req(params));
     check(res.status === 200, `prices: ${label} is canonical and answers 200`, String(res.status));
   }
+  // The widened alphabet reaches Yahoo percent-encoded, one request per symbol, each decoding back.
+  stub(() => ok(bars(40)));
+  await pricesGET(req(query(px, { tickers: "BRK-B,EURUSD=X,^N225" })));
+  const sent = calls.map((c) => c.url.match(/chart\/([^?]+)/)?.[1]);
+  check(same(sent, ["BRK-B", "EURUSD%3DX", "%5EN225", "%5EGSPC"]),
+    "prices: a share class, a currency pair and an index go upstream percent-encoded", sent.join(" "));
   const q = { tickers: ["VTI", "AGG"], benchmark: "^GSPC", start: "2019-01-01", end: "2026-09-26" };
   const round = parsePricesQuery(new URL(pricesUrl(q), "http://localhost").searchParams, TODAY);
   check(round.ok && same(round.query, q), "prices: pricesUrl builds the url the handler parses back to the same query", pricesUrl(q));

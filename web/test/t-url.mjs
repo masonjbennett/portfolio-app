@@ -42,6 +42,10 @@ const absent = [
   ["tickers", `?tickers=${Array.from({ length: 21 }, (_, i) => `T${i}`).join(",")}`],
   ["tickers", `?tickers=${"A,".repeat(300)}`],
   ["tickers", "?tickers=%E0%A4%A"],
+  // Held to the price endpoint's own pattern: nothing a link carries is a symbol it would refuse.
+  ["tickers", "?tickers=VTI,AGG,A%5EB"],
+  ["tickers", "?tickers=VTI,AGG,..%2FX"],
+  ["tickers", "?tickers=VTI,AGG,-B"],
   ["start", "?start=2026-02-31"],
   ["start", "?start=2019-1-1"],
   ["start", "?start=yesterday"],
