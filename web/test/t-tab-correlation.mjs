@@ -222,10 +222,18 @@ check(!SRC.slice(1420, 1462).some((l) => /download_button|to_csv|df_to_excel/.te
   /st\.dataframe\(cov_matrix\.style\.format\("\{:\.6f\}"\)/.test(line(1462)) && /px\.imshow/.test(line(1427)),
   "ledger:downloads-everywhere the app offers no download for the heatmap or the covariance matrix (1421-1462)");
 const tables = [...t.container.querySelectorAll(".tbl")];
-const caption = (tb) => (tb.querySelector("caption")?.textContent ?? "").trim();
+const caption = (tb) => (tb.querySelector("caption .tbl-title")?.textContent ?? "").trim();
 const buttons = (tb) => [...tb.querySelectorAll(".tbl-dl button")].map((b) => text(b));
 check(tables.length === 2 && caption(tables[0]) === "Pairwise correlation of daily returns" && caption(tables[1]) === "Daily covariance matrix",
   "tab: two tables, the correlation under the heatmap and the covariance matrix", tables.map(caption).join(" | "));
+{
+  const an = t.container.querySelector(".corr-kicker") ? text(t.container.querySelector(".corr-kicker")) : "none";
+  check(an === "How the assets move together" && !/Correlation & Covariance Analysis/.test(text(t.container)),
+    "kicker: names the view in plain words, not the assignment's heading", an);
+  const spans = tables.map((tb) => text(tb.querySelector(".tbl-span")));
+  check(spans.length === 2 && spans.every((s) => /^Daily returns, \d{4}-\d\d-\d\d to \d{4}-\d\d-\d\d$/.test(s)) && spans[0] === spans[1],
+    "spans: both matrices state their window and that the returns are daily", spans.join(" | "));
+}
 check(tables.every((tb) => buttons(tb).includes("Download CSV") && buttons(tb).includes("Download Excel")),
   "ledger:downloads-everywhere both matrices carry CSV and Excel downloads", tables.map((tb) => buttons(tb).join("+")).join(" | "));
 

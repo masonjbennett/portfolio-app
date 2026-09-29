@@ -28,6 +28,31 @@
   color: var(--color-ink);
 }
 
+/* The caption's two lines: the title, then the dates and return frequency behind the figures. */
+.tbl-title,
+.tbl-span {
+  display: block;
+}
+
+.tbl-span {
+  margin-top: 2px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--color-ink2);
+}
+
+/* A head's sub-line: how that portfolio's weights were chosen, or where a window ends. It wraps, so a
+   column is not widened to the length of the phrase. */
+.tbl-sub {
+  display: block;
+  min-width: 8em;
+  white-space: normal;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--color-ink2);
+}
+
 .tbl th,
 .tbl td {
   padding: 6px var(--space-3);

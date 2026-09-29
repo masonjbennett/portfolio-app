@@ -126,7 +126,7 @@ for (const set of ["cross", "megacap"]) {
       nearAll(tag(`custom ${k} weights (1966-1969)`), cw.w, c.w, REL, 1e-15);
       const rows = M.customRows(fits, cw.w, o.rf);
       for (const f of ["mu", "sigma", "sharpe"]) near(tag(`custom ${k} ${f}, full sample`), rows.at(-1)[f], c.perf[f], 1e-11);
-      check(rows.length === fits.length && rows.every((r, i) => r.window === fits[i].label), tag(`custom ${k}: a row for every window (no solver, 1981)`));
+      check(rows.length === fits.length && rows.every((r, i) => r.window === fits[i].named), tag(`custom ${k}: a row for every window (no solver, 1981)`));
       const own = rows.map((r, i) => portfolioPerformance(cw.w, fits[i].m, fits[i].S, o.rf).sharpe);
       nearAll(tag(`custom ${k} Sharpe on each window's own moments`), rows.map((r) => r.sharpe), own, 0, 0);
       check(rows.every((r, i) => r.sharpe <= tRows[i].sharpe + 1e-12), tag(`custom ${k}: never above the in-window tangency (the caption's claim)`));
@@ -156,7 +156,7 @@ for (const set of ["cross", "megacap"]) {
     "chart: a group per ticker in the entered order (1939), a bar per window");
   const failed = fits.map((f, k) => (k === 1 ? { ...f, tan: null } : f));
   const fr = M.metricRows(failed, "tan", a.rf);
-  check(fr[1].mu === null && fr[1].sigma === null && fr[1].sharpe === null && fr[1].window === fits[1].label && fr[0].sharpe !== null,
+  check(fr[1].mu === null && fr[1].sigma === null && fr[1].sharpe === null && fr[1].window === fits[1].named && fr[0].sharpe !== null,
     "tables: a window whose solve failed keeps its row, as dashes (the app drops it silently, 1891)");
   check(JSON.stringify(M.failedWindows(failed, "tan")) === JSON.stringify([fits[1].label]) && M.tableState(failed, "tan", fr).status === "ready",
     "tables: the failed window is named, and the table still shows");
@@ -174,7 +174,7 @@ for (const set of ["cross", "megacap"]) {
     a.tickers.forEach((t, i) => {
       const vs = fits.map((f) => (p === "gmv" ? f.gmv : f.tan).w[i]);
       const r = Math.max(...vs) - Math.min(...vs);
-      if (!best || r > best.r) best = { t, r, lo: Math.min(...vs), hi: Math.max(...vs), loW: fits[vs.indexOf(Math.min(...vs))].label, hiW: fits[vs.indexOf(Math.max(...vs))].label };
+      if (!best || r > best.r) best = { t, r, lo: Math.min(...vs), hi: Math.max(...vs), loW: fits[vs.indexOf(Math.min(...vs))].named, hiW: fits[vs.indexOf(Math.max(...vs))].named };
     });
     return best;
   };
@@ -182,7 +182,7 @@ for (const set of ["cross", "megacap"]) {
   const g = widest("gmv");
   const head = M.headline(fits, a.tickers);
   const want =
-    `Re-estimated over 5 trailing windows, the tangency (best-Sharpe) portfolio's weight in ${t.t} runs from ${format(t.lo, "pct1")} (${t.loW}) ` +
+    `Re-estimated over 5 trailing windows, the tangency (maximum-Sharpe) portfolio's weight in ${t.t} runs from ${format(t.lo, "pct1")} (${t.loW}) ` +
     `to ${format(t.hi, "pct1")} (${t.hiW}), and the minimum-variance (GMV) portfolio's weight in ${g.t} runs from ${format(g.lo, "pct1")} (${g.loW}) ` +
     `to ${format(g.hi, "pct1")} (${g.hiW}).`;
   check(head === want, "headline: states the widest swing of each portfolio's weights, literally", `${head}\n   want ${want}`);
@@ -250,7 +250,7 @@ HTMLElement.prototype.getBoundingClientRect = function () {
 };
 
 const buttons = (root) => [...root.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") ?? "");
-const captions = (root) => [...root.querySelectorAll("caption")].map(text);
+const captions = (root) => [...root.querySelectorAll("caption .tbl-title")].map(text);
 const hasBoth = (root, title) => {
   const b = buttons(root);
   return b.includes(`Download CSV of ${title}`) && b.includes(`Download Excel of ${title}`);
@@ -272,12 +272,12 @@ const page = () => text(r.container);
   check(clean(page()), "page: no NaN, undefined, Infinity or null in the text");
   check(page().includes(`Each window is the most recent 1, 2, 3 or 5 years of daily returns (252 trading days to a year), or the full sample, all ending ${a.asOf}.`),
     "page: says what each window is and the day they all end");
-  check(page().includes(`Every window is scored at the same risk-free rate, ${format(a.rf, "pct2")}, the one this page uses throughout, not the rate that prevailed during the window.`),
+  check(page().includes(`Every window is scored at the same risk-free rate, ${format(a.rf, "pct2")}, the one this page uses throughout (by default the mean over the whole date range), not the rate that prevailed during each shorter window.`),
     "page: says every window uses the one current risk-free rate (the app does too, 1882, and does not say so)");
   // The metric table prints the window rows with their numbers.
   const gmvT = r.container.querySelectorAll("table")[0];
   const g0 = M.metricRows(fits, "gmv", a.rf)[0];
-  check(text(gmvT).includes(`1 Year${fits[0].from}${format(g0.mu, "pct2")}${format(g0.sigma, "pct2")}${format(g0.sharpe, "num3")}`),
+  check(text(gmvT).includes(`${fits[0].named}${fits[0].from}${format(g0.mu, "pct2")}${format(g0.sigma, "pct2")}${format(g0.sharpe, "num3")}`),
     "page: the GMV table's first row is the 1 Year window's figures", text(gmvT).slice(0, 160));
 
   // ledger:in-sample-label
@@ -305,7 +305,7 @@ const page = () => text(r.container);
   const mRows = M.metricRows(fits, "tan", a.rf);
   const csv = csvText(M.METRIC_COLUMNS, mRows);
   check(mRows.every((x) => typeof x.mu === "number" && typeof x.sigma === "number" && typeof x.sharpe === "number") &&
-    csv.split("\n")[1] === `1 Year,${fits[0].from},${mRows[0].mu},${mRows[0].sigma},${mRows[0].sharpe}` && !/%/.test(csv),
+    csv.split("\n")[1] === `${fits[0].named},${fits[0].from},${mRows[0].mu},${mRows[0].sigma},${mRows[0].sharpe}` && !/%/.test(csv),
     "ledger:numeric-downloads: the port's metric rows are numbers and its CSV carries them raw", csv.split("\n")[1]);
 
   // The level switch changes the tooltip text.
@@ -324,7 +324,14 @@ const page = () => text(r.container);
   check(fits.every((f) => heroSvg.includes(f.short)) && !hero.querySelector(".recharts-legend-wrapper"),
     "chart: every window is named on the chart itself, and there is no legend", heroSvg.join(" "));
   check(a.tickers.every((t) => heroSvg.includes(t)), "chart: the tickers along the axis, in the entered order");
-  check(text(hero.querySelector(".chart-title")) === M.weightChartTitle(fits, "gmv", a.tickers), "chart: its title is the GMV finding");
+  // The chart opens on Tangency, the portfolio the headline leads with; the GMV pill switches it.
+  const pressed = () => text(hero.querySelector("[role=radio][aria-checked=true]") ?? hero);
+  const openFills = new Set([...hero.querySelectorAll(".recharts-bar-rectangle path")].map((p) => p.getAttribute("fill")));
+  check(pressed() === "Tangency" && text(hero.querySelector(".chart-title")) === M.weightChartTitle(fits, "tan", a.tickers) &&
+    [...openFills].join() === ROLE.tangency && M.headline(fits, a.tickers).includes("the tangency (maximum-Sharpe) portfolio's weight in GLD"),
+    "opens-on-tangency: the weight chart opens on Tangency, the portfolio the headline leads with", `${pressed()}: ${text(hero.querySelector(".chart-title"))}`);
+  act(() => [...hero.querySelectorAll("[role=radio]")].find((b) => text(b) === "GMV").click());
+  check(text(hero.querySelector(".chart-title")) === M.weightChartTitle(fits, "gmv", a.tickers), "chart: the GMV pill shows the GMV finding");
   const fills = (root) => new Set([...root.querySelectorAll(".recharts-bar-rectangle path")].map((p) => p.getAttribute("fill")));
   check([...fills(hero)].join() === ROLE.gmv, "chart: GMV bars in the GMV colour", [...fills(hero)].join());
   // A faded fill alone falls under 3:1 on paper; each bar's edge is drawn in the full token colour.
@@ -396,7 +403,8 @@ const page = () => text(r.container);
   const xt = text(x.container);
   check(captions(x.container).join() === "GMV Portfolio (in-sample),GMV Weights Across Windows",
     "ledger:failed-tangency: the port keeps the GMV tables and shows no tangency table", captions(x.container).join(" | "));
-  check((xt.match(/The Tangency optimisation failed\. It failed in every window/g) ?? []).length === 2 &&
+  // Two tables and the weight chart, which opens on Tangency.
+  check((xt.match(/The Tangency optimisation failed\. It failed in every window/g) ?? []).length === 3 &&
     /Tangency Portfolio \(in-sample\): not shown\./.test(xt) && /the tangency optimisation failed in every window\./.test(xt),
     "ledger:failed-tangency: it names the failed optimisation where each table would be, and in the headline");
   const hero = x.container.querySelector(".sens-hero");
@@ -406,6 +414,30 @@ const page = () => text(r.container);
     "ledger:failed-tangency: the tangency chart is replaced by the named failure, never drawn empty");
   check(clean(text(x.container)) && !text(x.container).includes(DASH + DASH), "ledger:failed-tangency: no NaN, no stand-in figures");
   x.unmount();
+}
+
+// ---- window-ends: every window says the day it ends, so a weight here cannot be read as one fitted
+// on some earlier stretch of history.
+{
+  const a = fixtureAnalysis("cross");
+  const fits = M.fitWindows(a).value;
+  const end = a.dates[a.dates.length - 1];
+  check(end === a.asOf && JSON.stringify(fits.map((f) => f.named)) ===
+    JSON.stringify([`1 year to ${end}`, `2 years to ${end}`, `3 years to ${end}`, `5 years to ${end}`, `Full sample to ${end}`]) &&
+    JSON.stringify(fits.map((f) => f.label)) === JSON.stringify(["1 Year", "2 Years", "3 Years", "5 Years", "Full Sample"]),
+    "window-ends: each window's name carries its end date, and the app's own label is kept beside it", fits.map((f) => f.named).join(" | "));
+  const head = M.headline(fits, a.tickers);
+  const named = [...head.matchAll(/\(([^()]*)\)/g)].map((m) => m[1]).filter((x) => !/maximum-Sharpe|GMV/.test(x));
+  check(named.length === 4 && named.every((x) => x.endsWith(` to ${end}`)), "window-ends: every window the headline names carries its end date", head);
+  const r = render(h(Sensitivity, tabProps(a)));
+  const tables = [...r.container.querySelectorAll(".tbl")];
+  const rowHeads = [...tables[0].querySelectorAll("tbody th")].map(text);
+  check(JSON.stringify(rowHeads) === JSON.stringify(fits.map((f) => f.named)), "window-ends: the metric tables' rows name each window with its end date", rowHeads.join(" | "));
+  const subs = [...tables[2].querySelectorAll("thead th .tbl-sub")].map(text);
+  check(subs.length === fits.length && subs.every((s) => s === `to ${end}`), "window-ends: each window column of the weight tables says the day it ends", subs.join(" | "));
+  const spans = tables.map((t) => text(t.querySelector(".tbl-span")));
+  check(spans.length === 4 && spans.every((s) => s === `Daily returns, each window ending ${end}`), "spans: every table on the tab says its returns are daily and the day each window ends", spans.join(" | "));
+  r.unmount();
 }
 
 // Long-only with a rate no asset beats: the tangency is the least-negative Sharpe (as the app's SLSQP

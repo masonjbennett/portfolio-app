@@ -1,0 +1,51 @@
+/* The starting amount in a growth chart's head: a label that reads as the start of the chart's own
+   phrase, a narrow mono input, and one quiet line under them. */
+.amount-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--space-2);
+  font-size: 14px;
+  color: var(--color-ink);
+}
+
+.amount-field label {
+  font-family: var(--font-sans);
+}
+
+.amount-field input {
+  width: 9em;
+  min-width: 0;
+  padding: 4px 8px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 6px;
+}
+
+.amount-field input[aria-invalid="true"] {
+  border-color: var(--color-claret);
+}
+
+.amount-note,
+.amount-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-ink2);
+}
+
+.amount-error {
+  color: var(--color-claret);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone. Under 16px, iOS zooms the page when the field takes focus. */
+@media (max-width: 760px) {
+  .amount-field input {
+    font-size: 16px;
+  }
+}

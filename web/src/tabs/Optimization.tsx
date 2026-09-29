@@ -19,11 +19,14 @@ import { format, MINUS } from "../format.ts";
 import type { Vec } from "../lib/num.ts";
 import type { Custom } from "../lib/portfolio.ts";
 import type { Analysis, Level, LoadState, TabProps } from "../types.ts";
+import { FITTED, fittedSubs, tableSpan } from "./caption.ts";
+import FittedNote from "./FittedNote.tsx";
 import Bars from "./optimization/Bars.tsx";
 import {
   customWeights,
   customNote,
   FAILED,
+  fittedHeads,
   frontierTitle,
   headline,
   METRICS,
@@ -45,9 +48,13 @@ interface SectionProps {
   level: Level;
 }
 
-// A table, or its own named error line in the table's place.
-function TableState({ state, title, filename }: { state: LoadState<TableData>; title: string; filename: string }) {
-  if (state.status === "ready") return <Table title={title} columns={state.value.columns} rows={state.value.rows} filename={filename} />;
+// A table, or its own named error line in the table's place. Its GMV and Tangency heads say the weights
+// were chosen on this window; its caption says which window, and that the returns are daily.
+function TableState({ state, title, filename, span }: { state: LoadState<TableData>; title: string; filename: string; span: string }) {
+  if (state.status === "ready") {
+    const t = state.value;
+    return <Table title={title} columns={t.columns} rows={t.rows} filename={filename} span={span} subs={fittedSubs(fittedHeads(t))} />;
+  }
   const says =
     state.status === "error"
       ? `${title}: not shown. ${state.name} failed. ${state.message}`
@@ -75,6 +82,9 @@ function Failures({ a }: { a: Analysis }) {
     </>
   );
 }
+
+// Every table on the tab is computed from the whole window's daily returns.
+const spanOf = (a: Analysis) => tableSpan(a.dates[0], a.asOf);
 
 const shortNote = `Shorting is on: each weight is bounded to [${MINUS}100%, 100%], and the weights sum to 100%.`;
 
@@ -106,7 +116,10 @@ function Tiles({ a, level }: SectionProps) {
       <Slug id="opt-tiles">Three portfolios</Slug>
       {list.map((t) => (
         <div key={t.id} className="opt-tile" data-port={t.id}>
-          <h3 className="opt-tile-title">{t.title}</h3>
+          <h3 className="opt-tile-title">
+            {t.title}
+            {t.id !== "ew" && !t.failed ? <span className="opt-tile-sub">{FITTED}</span> : null}
+          </h3>
           {t.failed ? (
             <p className="opt-note opt-note--failed" role="status">
               {t.failed}
@@ -123,6 +136,7 @@ function Tiles({ a, level }: SectionProps) {
         Annual figures at the {format(a.rf, "pct2")} risk-free rate this analysis used. Each portfolio holds its weights fixed,
         rebalanced daily. Max DD is measured from the amount invested.
       </p>
+      <FittedNote className="opt-note" />
     </section>
   );
 }
@@ -143,7 +157,7 @@ function Weights({ a, height }: { a: Analysis; height: number }) {
         {(v) => <Bars data={v} height={height} />}
       </ChartFrame>
       <Failures a={a} />
-      <TableState state={table} title="Portfolio weights" filename="portfolio_weights" />
+      <TableState state={table} title="Portfolio weights" filename="portfolio_weights" span={spanOf(a)} />
       {a.allowShort ? <p className="opt-note">{shortNote}</p> : null}
     </section>
   );
@@ -164,18 +178,18 @@ function RiskContribution({ a, height }: { a: Analysis; height: number }) {
       <ChartFrame title={prcTitle(a)} subtitle="Each asset's share of the GMV and Tangency portfolios' variance." state={bars} height={height}>
         {(v) => <Bars data={v} height={height} />}
       </ChartFrame>
-      <TableState state={table} title="Weight and risk contribution" filename="risk_contribution" />
+      <TableState state={table} title="Weight and risk contribution" filename="risk_contribution" span={spanOf(a)} />
     </section>
   );
 }
 
 // The growth of the starting amount (1660-1674): the shared Wealth chart.
-function Growth({ a, custom, amount }: { a: Analysis; custom: Vec | null; amount: number }) {
+function Growth({ a, custom, amount, onAmount }: { a: Analysis; custom: Vec | null; amount: number; onAmount: (n: number) => void }) {
   const state = useMemo(() => ({ status: "ready" as const, value: wealthData(a, custom) }), [a, custom]);
   return (
     <section className="opt-section" aria-labelledby="opt-wealth">
       <Slug id="opt-wealth">Portfolio Comparison: Cumulative Wealth</Slug>
-      <Wealth title={wealthTitle(a, custom, amount)} state={state} amount={amount} />
+      <Wealth title={wealthTitle(a, custom, amount)} state={state} amount={amount} onAmount={onAmount} />
     </section>
   );
 }
@@ -187,7 +201,7 @@ function Summary({ a, c }: { a: Analysis; c: Custom }) {
   return (
     <section className="opt-section" aria-labelledby="opt-summary">
       <Slug id="opt-summary">Summary Comparison</Slug>
-      <TableState state={table} title="Summary comparison" filename="portfolio_comparison" />
+      <TableState state={table} title="Summary comparison" filename="portfolio_comparison" span={spanOf(a)} />
       <Failures a={a} />
       {note ? <p className="opt-note">{note}</p> : null}
       <p className="opt-note">
@@ -197,7 +211,7 @@ function Summary({ a, c }: { a: Analysis; c: Custom }) {
   );
 }
 
-export default function Optimization({ analysis: a, settings, level, weights }: TabProps) {
+export default function Optimization({ analysis: a, settings, level, weights, requestSettings }: TabProps) {
   const phone = usePhone();
   const barHeight = phone ? 320 : 400;
   // c changes with the analysis or the custom weights, so the cards that draw the custom book re-arm on either.
@@ -221,7 +235,7 @@ export default function Optimization({ analysis: a, settings, level, weights }: 
         <RiskContribution a={a} height={barHeight} />
       </Boundary>
       <Boundary name="Cumulative wealth" resetKey={c}>
-        <Growth a={a} custom={custom} amount={settings.amount} />
+        <Growth a={a} custom={custom} amount={settings.amount} onAmount={(n) => requestSettings({ amount: n })} />
       </Boundary>
       <Boundary name="Summary comparison" resetKey={c}>
         <Summary a={a} c={c} />

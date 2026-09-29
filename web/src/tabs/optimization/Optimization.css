@@ -36,6 +36,16 @@
   gap: var(--space-3);
 }
 
+/* Under a GMV or Tangency tile's title: how its weights were chosen. */
+.opt-tile-sub {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-ink2);
+}
+
 .opt-note {
   margin: var(--space-3) 0 0;
   max-width: 72ch;

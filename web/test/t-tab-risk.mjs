@@ -247,7 +247,13 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
 
   // Every table, and each carries both downloads (downloads-everywhere, the tab half).
   const tables = [...r.container.querySelectorAll(".tbl")];
-  const captions = tables.map((t) => text(t.querySelector("caption")));
+  const captions = tables.map((t) => text(t.querySelector("caption .tbl-title")));
+  const spans = tables.map((t) => text(t.querySelector(".tbl-span")));
+  check(JSON.stringify(spans) === JSON.stringify([
+    `Daily closes, ${props.analysis.prices.dates[0]} to ${props.analysis.asOf}`,
+    `Daily returns, ${props.analysis.dates[0]} to ${props.analysis.asOf}`,
+    `Daily returns, ${props.analysis.dates[0]} to ${props.analysis.asOf}`,
+  ]), "spans: the drawdowns state their closes and the ratios their daily returns, each with its window", spans.join(" | "));
   check(JSON.stringify(captions) === JSON.stringify(["Worst drawdown by asset", "Risk-adjusted metrics", "CAPM beta and alpha"]), "tab: its three tables", captions.join(" | "));
   check(tables.length === 3 && tables.every((t) => {
     const b = [...t.querySelectorAll("button")].map(text);

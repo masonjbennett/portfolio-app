@@ -15,6 +15,7 @@ import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import Tip from "../components/Tip.tsx";
 import type { Analysis, Level, TabProps } from "../types.ts";
+import { tableSpan } from "./caption.ts";
 import Heatmap from "./correlation/Heatmap.tsx";
 import Rolling from "./correlation/Rolling.tsx";
 import {
@@ -54,7 +55,7 @@ export default function Correlation({ analysis, level, settings }: TabProps) {
 function Headline({ analysis }: { analysis: Analysis }) {
   return (
     <header className="corr-head">
-      <p className="corr-kicker">Correlation &amp; Covariance Analysis</p>
+      <p className="corr-kicker">How the assets move together</p>
       <h2 className="tab-finding corr-headline" id="corr-headline">
         {headline(corrView(analysis))}
       </h2>
@@ -74,6 +75,7 @@ function HeatCard({ analysis }: { analysis: Analysis }) {
         columns={matrixColumns(v.tickers, CORR_FORMAT)}
         rows={matrixRows(v.tickers, v.matrix)}
         filename="pairwise-correlation"
+        span={tableSpan(analysis.dates[0], analysis.asOf)}
       />
     </>
   );
@@ -88,7 +90,13 @@ function CovCard({ analysis, level, allowShort }: { analysis: Analysis; level: L
         uses. The diagonal is each asset's daily variance; its square root times √252 is the annual volatility.
         <Tip tip="volatility" level={level} allowShort={allowShort} />
       </p>
-      <Table title="Daily covariance matrix" columns={matrixColumns(tickers, COV_FORMAT)} rows={matrixRows(tickers, S)} filename="daily-covariance" />
+      <Table
+        title="Daily covariance matrix"
+        columns={matrixColumns(tickers, COV_FORMAT)}
+        rows={matrixRows(tickers, S)}
+        filename="daily-covariance"
+        span={tableSpan(analysis.dates[0], analysis.asOf)}
+      />
     </>
   );
 }

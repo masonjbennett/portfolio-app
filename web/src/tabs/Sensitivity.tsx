@@ -17,6 +17,7 @@ import Tip from "../components/Tip.tsx";
 import { ROLE } from "../charts/theme.ts";
 import { format, MINUS } from "../format.ts";
 import type { Column, LoadState, TableRow, TabProps } from "../types.ts";
+import { windowsSpan } from "./caption.ts";
 import GroupedBars, { type Series } from "./sensitivity/GroupedBars.tsx";
 import {
   belowRf,
@@ -37,6 +38,7 @@ import {
   weightColumns,
   weightGroups,
   weightRows,
+  windowSubs,
   type Port,
   type WindowFit,
 } from "./sensitivity/model.ts";
@@ -47,9 +49,17 @@ const PORT_OPTIONS: readonly { value: Port; label: string }[] = [
   { value: "tan", label: "Tangency" },
 ];
 
-// A table, or its own named empty or error line in the table's place.
-function TableState({ state, title, columns, filename }: { state: LoadState<TableRow[]>; title: string; columns: Column[]; filename: string }) {
-  if (state.status === "ready") return <Table title={title} columns={columns} rows={state.value} filename={filename} />;
+// A table, or its own named empty or error line in the table's place. The caption's span says the
+// windows all end on the same day; `subs` puts that day under each window's column head.
+function TableState({ state, title, columns, filename, span, subs }: {
+  state: LoadState<TableRow[]>;
+  title: string;
+  columns: Column[];
+  filename: string;
+  span: string;
+  subs?: Readonly<Record<string, string>>;
+}) {
+  if (state.status === "ready") return <Table title={title} columns={columns} rows={state.value} filename={filename} span={span} subs={subs} />;
   const says =
     state.status === "error"
       ? `${title}: not shown. ${state.name} failed. ${state.message}`
@@ -100,7 +110,8 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
   // cards below re-arm on the next fit (a new analysis), the custom card on new weights as well.
   const fitted = useMemo(() => fitWindows(a), [a]);
   const customKey = useMemo(() => [fitted, weights], [fitted, weights]);
-  const [port, setPort] = useState<Port>("gmv");
+  // Tangency first: the headline leads with tangency's swing, so the first picture is the one it describes.
+  const [port, setPort] = useState<Port>("tan");
   const [withCustom, setWithCustom] = useState(false);
 
   if (fitted.status !== "ready") {
@@ -125,7 +136,7 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
       <p className="sens-caption">
         Mean-variance optimization is sensitive to its inputs: small changes in the lookback period used to estimate returns and
         covariances can produce very different portfolio weights. {windowsSentence(fits, a.asOf)} Every window is scored at the same risk-free rate, {format(a.rf, "pct2")}, the one this page
-        uses throughout, not the rate that prevailed during the window.
+        uses throughout (by default the mean over the whole date range), not the rate that prevailed during each shorter window.
       </p>
 
       <Boundary name="Weight comparison chart" resetKey={fitted}>
@@ -146,6 +157,8 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
             title={`${PORT_NAME[p]} Weights Across Windows`}
             columns={weightColumns(fits)}
             filename={p === "gmv" ? "gmv_sensitivity" : "tangency_sensitivity"}
+            span={windowsSpan(fits[0].to)}
+            subs={windowSubs(fits)}
           />
         ))}
       </Boundary>
@@ -226,6 +239,7 @@ function Metrics({ fits, rf, level, allowShort }: { fits: WindowFit[]; rf: numbe
             title={`${PORT_NAME[p]} Portfolio (in-sample)`}
             columns={METRIC_COLUMNS}
             filename={p === "gmv" ? "gmv_window_metrics" : "tangency_window_metrics"}
+            span={windowsSpan(fits[0].to)}
           />
         ))}
       </div>
@@ -282,12 +296,14 @@ function CustomSection({ fits, tickers, weights, rf, allowShort }: {
           Some custom weights were outside the current bounds and were clamped to them before normalising.
         </p>
       ) : null}
-      <Table title="Custom weights being evaluated" columns={table.columns} rows={table.rows} filename="custom_weights_evaluated" />
+      {/* No span: these are the weights as typed, which come from no dates. */}
+      <Table title="Custom weights being evaluated" columns={table.columns} rows={table.rows} filename="custom_weights_evaluated" span={null} />
       <TableState
         state={{ status: "ready", value: customRows(fits, c.w, rf) }}
         title="Custom Portfolio (in-sample)"
         columns={METRIC_COLUMNS}
         filename="custom_window_metrics"
+        span={windowsSpan(fits[0].to)}
       />
       <p className="sens-caption">The GMV and Tangency figures for the same windows are in the in-sample tables above.</p>
       <ChartFrame

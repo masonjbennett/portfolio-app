@@ -12,6 +12,7 @@ import { useMemo, type ReactNode } from "react";
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis, usePlotArea, useYAxisScale } from "recharts";
 import { usePhone } from "../chrome/usePhone.ts";
 import ChartFrame from "../components/ChartFrame.tsx";
+import AmountField from "./AmountField.tsx";
 import { format } from "../format.ts";
 import type { Vec } from "../lib/num.ts";
 import { portfolioReturns } from "../lib/portfolio.ts";
@@ -56,6 +57,8 @@ export interface WealthProps {
   amount: number;
   /** Height in px; 400 on a desktop and 320 on a phone when left out. */
   height?: number;
+  /** Set the starting amount from the chart's own field; without it the chart shows no field. */
+  onAmount?: (next: number) => void;
 }
 
 // ---- pure helpers --------------------------------------------------------------------------------
@@ -80,10 +83,22 @@ export function wealthData(a: Analysis, custom: Vec | null = null): WealthData {
   return { start: a.prices.dates[0], dates: a.dates, series };
 }
 
-/** The caption under the wealth chart's title. */
-export function wealthCaption(amount: number, start?: string, end?: string): string {
+/**
+ * The caption under the wealth chart's title. `fitted` names the lines whose weights an optimiser chose
+ * from the same prices the chart then runs them over (GMV and Tangency): their growth is hypothetical,
+ * and the caption says so in those words. Equal weights, a custom mix and the benchmark chose nothing.
+ */
+export function wealthCaption(amount: number, start?: string, end?: string, fitted: readonly string[] = []): string {
   const span = start && end ? ` from ${format(start, "date")} to ${format(end, "date")}` : "";
-  return `Growth of ${format(amount, "usd0")}${span}. Each portfolio is rebalanced daily to the target weights.`;
+  const base = `Growth of ${format(amount, "usd0")}${span}. Each portfolio is rebalanced daily to the target weights.`;
+  if (!fitted.length) return base;
+  const names = fitted.length === 1 ? `${fitted[0]} is` : `${fitted.slice(0, -1).join(", ")} and ${fitted[fitted.length - 1]} are`;
+  return `${base} ${names} hypothetical: weights chosen with the whole period's prices.`;
+}
+
+/** The lines whose weights were chosen with the chart's own prices, in series order. */
+export function fittedLines(series: readonly WealthSeries[]): string[] {
+  return series.filter((s) => s.role === "gmv" || s.role === "tangency").map((s) => s.label);
 }
 
 /** One chart row: the date, then each line's value under `s0`, `s1`, ... in series order. */
@@ -208,17 +223,19 @@ function WealthLines({ plot, height }: { plot: WealthPlot; height: number }): Re
   );
 }
 
-export default function Wealth({ title, state, amount, height }: WealthProps) {
+export default function Wealth({ title, state, amount, height, onAmount }: WealthProps) {
   const phone = usePhone();
   const h = height ?? (phone ? 320 : 400);
   const plot = useMemo(() => wealthPlot(state, amount), [state, amount]);
   const span = state.status === "ready" && state.value.dates.length ? state.value : null;
+  const fitted = state.status === "ready" ? fittedLines(state.value.series) : [];
   return (
     <ChartFrame
       title={title}
-      subtitle={wealthCaption(amount, span?.start, span ? span.dates[span.dates.length - 1] : undefined)}
+      subtitle={wealthCaption(amount, span?.start, span ? span.dates[span.dates.length - 1] : undefined, fitted)}
       state={plot}
       height={h}
+      control={onAmount ? <AmountField amount={amount} onAmount={onAmount} /> : undefined}
     >
       {(value) => <WealthLines plot={value} height={h} />}
     </ChartFrame>

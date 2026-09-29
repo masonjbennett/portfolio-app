@@ -147,6 +147,19 @@ export interface TableData {
   rows: TableRow[];
 }
 
+/**
+ * The heads in a table that name a solved GMV or Tangency portfolio: its column labels, and its label
+ * column's cells. They carry "weights chosen on this window" (../caption.ts). Equal-Weight, Custom, the
+ * benchmark and a failed solve do not: nothing was chosen for them.
+ */
+export function fittedHeads(t: TableData): string[] {
+  const first = (t.columns.find((c) => c.first) ?? t.columns[0])?.key;
+  const heads = [...t.columns.map((c) => c.label), ...t.rows.map((r) => (first === undefined ? null : r[first]))];
+  const named = (h: unknown): h is string =>
+    typeof h === "string" && !h.includes("(failed)") && [PORT_LABEL.gmv, PORT_LABEL.tangency].some((p) => h === p || h.startsWith(`${p} `));
+  return [...new Set(heads.filter(named))];
+}
+
 const finiteRow = (r: TableRow) => Object.values(r).every((v) => typeof v !== "number" || Number.isFinite(v));
 
 // A table's state: every number finite, or the table is refused by name. A dash in a table means
@@ -339,7 +352,11 @@ export function mixPhrase(w: Vec, tickers: readonly string[]): string {
   return s;
 }
 
-/** The tab's headline: what the maximum-Sharpe solve found, against equal weights. */
+/**
+ * The tab's headline: what the maximum-Sharpe solve found, against equal weights. The weights were
+ * chosen with the very prices the Sharpe ratio is then computed on, so the sentence says "with
+ * hindsight" and "in-sample", and points at the tab that shows how much the answer moves with the window.
+ */
 export function headline(a: Analysis): string {
   const ew = portRow(a, a.ew);
   const t = a.tangency;
@@ -351,9 +368,12 @@ export function headline(a: Analysis): string {
   if (!t.beatsRf) {
     // Only the mixes inside the current bounds were searched, so the sentence names them (as the Band does).
     const which = a.allowShort ? `mix of these assets with weights inside [${MINUS}1, 1]` : "long-only mix of these assets";
-    return `No ${which} earned more than the ${pct2(a.rf)} risk-free rate: the best Sharpe ratio is ${num3(t.sharpe)}.`;
+    return `No ${which} earned more than the ${pct2(a.rf)} risk-free rate, even with hindsight: the highest in-sample Sharpe ratio is ${num3(t.sharpe)}.`;
   }
-  return `The maximum-Sharpe portfolio ${mixPhrase(t.w, a.tickers)}, for a Sharpe ratio of ${num3(t.sharpe)} against ${num3(ew.sharpe)} for equal weights.`;
+  return (
+    `With hindsight, the maximum-Sharpe portfolio ${mixPhrase(t.w, a.tickers)}, for an in-sample Sharpe of ${num3(t.sharpe)} ` +
+    `against ${num3(ew.sharpe)} for equal weights; ${SENSITIVITY_POINTER}.`
+  );
 }
 
 /** The frontier's title: where the two optimised portfolios sit on it. */
@@ -412,7 +432,16 @@ export function wealthEnds(a: Analysis, custom: Vec | null, amount: number): { l
   return out;
 }
 
-/** The wealth chart's title: which line ended highest, and where the benchmark ended. */
+/** Where the headline sends the reader to see how much the in-sample answer depends on the window. */
+export const SENSITIVITY_POINTER = "the Sensitivity tab shows how much that depends on the window";
+
+/** The lines whose weights an optimiser chose with this chart's own prices. */
+const HINDSIGHT: ReadonlySet<string> = new Set([PORT_LABEL.gmv, PORT_LABEL.tangency]);
+
+/**
+ * The wealth chart's title: which line ended highest, and where the benchmark ended. A GMV or Tangency
+ * line that ends highest does so with weights chosen from the same prices, and the title says so.
+ */
 export function wealthTitle(a: Analysis, custom: Vec | null, amount: number): string {
   const fallback = "Portfolio Comparison: Cumulative Wealth";
   if (!(Number.isFinite(amount) && amount > 0)) return fallback;
@@ -421,6 +450,7 @@ export function wealthTitle(a: Analysis, custom: Vec | null, amount: number): st
   let best = ends[0];
   for (const e of ends) if (e.end > best.end) best = e;
   const bench = ends[ends.length - 1];
-  const lead = `${best.bench ? `The ${best.label}` : best.label} ended highest, at ${format(best.end, "usd0")} from ${format(amount, "usd0")}`;
+  const hindsight = !best.bench && HINDSIGHT.has(best.label) ? " with hindsight weights" : "";
+  const lead = `${best.bench ? `The ${best.label}` : best.label} ended highest, at ${format(best.end, "usd0")} from ${format(amount, "usd0")}${hindsight}`;
   return best.bench ? lead : `${lead}; the ${bench.label} ended at ${format(bench.end, "usd0")}`;
 }

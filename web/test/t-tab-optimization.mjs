@@ -163,13 +163,13 @@ for (const set of ["cross", "megacap"]) {
   check(M.mixPhrase([0.7, 0.3, 0.0004, -0.0004], T) === "holds 70.0% AAA and 30.0% BBB", "phrase: a weight that prints as 0.0% is not a holding");
 
   const a = fixtureAnalysis("cross");
-  check(M.headline(a) === "The maximum-Sharpe portfolio holds 54.2% GLD and 45.8% VTI, for a Sharpe ratio of 0.946 against 0.597 for equal weights.",
+  check(M.headline(a) === "With hindsight, the maximum-Sharpe portfolio holds 54.2% GLD and 45.8% VTI, for an in-sample Sharpe of 0.946 against 0.597 for equal weights; the Sensitivity tab shows how much that depends on the window.",
     "headline: cross, long-only, literal", M.headline(a));
   check(M.frontierTitle(a) === `Tangency has the highest Sharpe ratio on the frontier, at ${format(a.tangency.sigma, "pct2")} volatility; GMV the lowest volatility, ${format(a.gmv.sigma, "pct2")}`,
     "frontier title: where Tangency and GMV sit", M.frontierTitle(a));
   check(M.weightsTitle(a) === "GMV's largest weight is AGG, 95.4%; Tangency's is GLD, 54.2%", "weights title: each largest weight", M.weightsTitle(a));
   const rich = fixtureAnalysis("cross", { rf: 0.5 });
-  check(!rich.tangency.beatsRf && M.headline(rich) === `No long-only mix of these assets earned more than the 50.00% risk-free rate: the best Sharpe ratio is ${format(rich.tangency.sharpe, "num3")}.`,
+  check(!rich.tangency.beatsRf && M.headline(rich) === `No long-only mix of these assets earned more than the 50.00% risk-free rate, even with hindsight: the highest in-sample Sharpe ratio is ${format(rich.tangency.sharpe, "num3")}.`,
     "headline: a rate no portfolio beats is said, not dressed as a tangency mix, and names the long-only bounds searched", M.headline(rich));
   check(M.headline({ ...rich, allowShort: true }).startsWith(`No mix of these assets with weights inside [${MINUS}1, 1] earned more than the 50.00% risk-free rate`),
     "headline: with shorting on it names those bounds instead", M.headline({ ...rich, allowShort: true }));
@@ -189,7 +189,8 @@ for (const set of ["cross", "megacap"]) {
   // Wealth title: the highest line, then the benchmark; a bad amount falls back, never "NaN".
   const ends = M.wealthEnds(a, null, 10000);
   const best = ends.reduce((x, y) => (y.end > x.end ? y : x));
-  check(M.wealthTitle(a, null, 10000) === `${best.label} ended highest, at ${format(best.end, "usd0")} from $10,000; the S&P 500 ended at ${format(ends.at(-1).end, "usd0")}`,
+  const hind = ["GMV", "Tangency"].includes(best.label) ? " with hindsight weights" : "";
+  check(M.wealthTitle(a, null, 10000) === `${best.label} ended highest, at ${format(best.end, "usd0")} from $10,000${hind}; the S&P 500 ended at ${format(ends.at(-1).end, "usd0")}`,
     "wealth title: the highest line and the benchmark", M.wealthTitle(a, null, 10000));
   check(M.wealthTitle(a, null, NaN) === "Portfolio Comparison: Cumulative Wealth", "wealth title: an unusable amount prints no figure");
 
@@ -333,7 +334,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const all = text(r.container);
   check(!/NaN|undefined|Infinity|\bnan\b/.test(all), "tab: no NaN, undefined or Infinity anywhere on it");
   const head = r.container.querySelector(".opt-headline");
-  check(head && text(head) === M.headline(a) && text(head).startsWith("The maximum-Sharpe portfolio holds 54.2% GLD"), "tab: the headline is on it, literal", head ? text(head) : "none");
+  check(head && text(head) === M.headline(a) && text(head).startsWith("With hindsight, the maximum-Sharpe portfolio holds 54.2% GLD"), "tab: the headline is on it, literal", head ? text(head) : "none");
   // The hero chart comes right after the headline.
   const order = [...r.container.querySelectorAll(".opt-headline, section[aria-labelledby]")].map((e) => e.getAttribute("aria-labelledby") ?? "headline");
   check(JSON.stringify(order) === JSON.stringify(["headline", "opt-frontier", "opt-tiles", "opt-weights", "opt-prc", "opt-wealth", "opt-summary"]),
@@ -343,7 +344,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
 
   // Every table, and each carries both downloads (downloads-everywhere, the tab half).
   const tables = tablesOf(r);
-  const captions = tables.map((t) => text(t.querySelector("caption")));
+  const captions = tables.map((t) => text(t.querySelector("caption .tbl-title")));
   check(JSON.stringify(captions) === JSON.stringify(["Portfolio weights", "Weight and risk contribution", "Summary comparison"]), "tab: its three tables", captions.join(" | "));
   check(tables.length === 3 && tables.every((t) => {
     const b = [...t.querySelectorAll("button")].map(text);
@@ -428,6 +429,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const w = M.customWeights(a, props.weights);
   const title = text(sectionOf(r, "opt-wealth").querySelector(".chart-title"));
   check(w.ok && title === M.wealthTitle(a, w.w, props.settings.amount) && title.startsWith("Custom ended highest"), "tab: a custom mix that ends highest leads the wealth title", title);
+  check(!/hindsight/.test(title), "in-sample: a custom mix that ends highest was typed, not chosen with hindsight, and the title does not say it was", title);
   check(text(sectionOf(r, "opt-wealth").querySelector(".recharts-surface")).includes("Custom"), "tab: the wealth chart draws the custom line");
   r.unmount();
 }
@@ -443,6 +445,73 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     "ledger:short-bounds-copy the weights state the bounds and nothing says unconstrained");
   check(text(r.container.querySelector(".opt-headline")).includes("with 3 short positions"), "short: the headline counts the tangency's shorts");
   check(!/NaN|undefined|Infinity/.test(text(r.container)) && r.container.querySelectorAll(".recharts-surface").length === 4, "short: the tab renders whole");
+  r.unmount();
+}
+
+// ---- (e) in-sample: what the tab says about weights chosen with the prices they are scored on ------------
+{
+  const { FITTED } = await import("../src/tabs/caption.ts");
+  const { withSubs } = await import("../src/components/Table.tsx");
+  const { PUBLISHED_URL } = await import("../src/content/published.ts");
+  const a = fixtureAnalysis("cross");
+  const calls = [];
+  const props = tabProps(a, { requestSettings: (p) => calls.push(p) });
+  const r = quiet(() => render(h(Optimization, props)));
+  const head = M.headline(a);
+  check(head.startsWith("With hindsight, ") && head.includes(", for an in-sample Sharpe of ") && head.endsWith(`; ${M.SENSITIVITY_POINTER}.`) &&
+    text(r.container.querySelector(".opt-headline")) === head,
+    "in-sample: the headline says with hindsight and in-sample, and points at the Sensitivity tab", head);
+  const title = text(sectionOf(r, "opt-wealth").querySelector(".chart-title"));
+  check(title.startsWith("Tangency ended highest") && title.includes(" with hindsight weights;"),
+    "in-sample: a Tangency line that ends highest does so with hindsight weights, and the title says so", title);
+
+  // The wealth caption: GMV and Tangency are hypothetical.
+  const wcap = text(sectionOf(r, "opt-wealth").querySelector(".chart-sub"));
+  check(wcap === wealthCaption(props.settings.amount, a.prices.dates[0], a.asOf, ["GMV", "Tangency"]) &&
+    wcap.endsWith(" GMV and Tangency are hypothetical: weights chosen with the whole period's prices."),
+    "hypothetical: the wealth caption names GMV and Tangency as hypothetical, weights chosen with the whole period's prices", wcap);
+
+  // Every GMV and Tangency head in a table carries the sub-line; Equal-Weight, Custom and the benchmark do not.
+  const own = (th) => (th.firstChild?.nodeType === 3 ? th.firstChild.textContent : text(th)).trim();
+  const heads = [...r.container.querySelectorAll(".tbl thead th, .tbl tbody th")].map((th) => ({ own: own(th), sub: th.querySelector(".tbl-sub") ? text(th.querySelector(".tbl-sub")) : null }));
+  const fitted = heads.filter((x) => /^(GMV|Tangency)\b/.test(x.own));
+  const plain = heads.filter((x) => /^(Equal-Weight|Custom|S&P 500)/.test(x.own));
+  check(fitted.length === 8 && fitted.every((x) => x.sub === FITTED) && plain.length >= 3 && plain.every((x) => x.sub === null),
+    "fitted-heads: every GMV and Tangency head in the tab's tables says weights chosen on this window, and no Equal-Weight head does",
+    heads.map((x) => `${x.own}=${x.sub}`).join(" | "));
+  const tiles = [...r.container.querySelectorAll(".opt-tile")].map((t) => [t.dataset.port, t.querySelector(".opt-tile-sub") ? text(t.querySelector(".opt-tile-sub")) : null]);
+  check(JSON.stringify(tiles) === JSON.stringify([["ew", null], ["gmv", FITTED], ["tangency", FITTED]]),
+    "fitted-heads: the GMV and Tangency plate rows carry it, and the Equal-Weight row does not", JSON.stringify(tiles));
+  const notes = r.container.querySelectorAll('[data-note="in-sample"]');
+  const link = notes[0]?.querySelector("a");
+  check(notes.length === 1 && link && link.getAttribute("href") === PUBLISHED_URL && PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method" &&
+    /in-sample/.test(text(notes[0])) && /what happened next/.test(text(notes[0])),
+    "fitted-heads: one note says reviews like this print in-sample figures and links the walk-forward on the method card", notes[0] ? text(notes[0]) : "none");
+  const wt = M.weightTable(a).value;
+  const flat = withSubs(wt.columns, wt.rows, Object.fromEntries(M.fittedHeads(wt).map((x) => [x, FITTED])));
+  check(csvText(flat.columns, flat.rows).split("\n")[0] === "Asset,GMV (weights chosen on this window),Tangency (weights chosen on this window),Equal-Weight",
+    "fitted-heads: the weights CSV header carries it too", csvText(flat.columns, flat.rows).split("\n")[0]);
+  check(JSON.stringify(M.fittedHeads(M.summaryTable({ ...a, gmv: null }, M.customWeights(a, {})).value)) === JSON.stringify(["Tangency"]),
+    "fitted-heads: a failed GMV row chose nothing and carries nothing");
+
+  // Every table says which window and which frequency.
+  const spans = tablesOf(r).map((t) => text(t.querySelector(".tbl-span")));
+  check(spans.length === 3 && spans.every((s) => s === `Daily returns, ${a.dates[0]} to ${a.asOf}`),
+    "spans: every table's caption states its window and that the returns are daily", spans.join(" | "));
+
+  // The starting amount is edited on the wealth chart itself.
+  const input = sectionOf(r, "opt-wealth").querySelector(".amount-field input");
+  const type = (v) => act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, v);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  check(!!input && input.value === "10000" && text(sectionOf(r, "opt-wealth").querySelector(".amount-field label")) === "Growth of $",
+    "amount: the wealth chart carries its own Growth of $ field, at the $10,000 default");
+  type("25000");
+  type("50");
+  const alert = sectionOf(r, "opt-wealth").querySelector(".amount-field [role=alert]");
+  check(JSON.stringify(calls) === JSON.stringify([{ amount: 25000 }]) && alert && /at least \$100/.test(text(alert)),
+    "amount: a valid amount on the chart becomes the setting, one under $100 is refused and says why", JSON.stringify(calls));
   r.unmount();
 }
 

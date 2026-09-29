@@ -212,5 +212,59 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   }
 }
 
+// ---- spans and head sub-lines ---------------------------------------------------------------------
+
+{
+  const { withSubs } = await import("../src/components/Table.tsx");
+  const subs = { GMV: "weights chosen on this window", Sharpe: "in-sample" };
+  const t = render(h(Table, { title: "Portfolio comparison", columns: COLS, rows: ROWS, filename: "c", span: "Daily returns, 2019-01-03 to 2026-09-25", subs }));
+  const cap = t.container.querySelector("caption");
+  check(text(cap.querySelector(".tbl-title")) === "Portfolio comparison" && text(cap.querySelector(".tbl-span")) === "Daily returns, 2019-01-03 to 2026-09-25",
+    "spans: the caption prints the title, then the dates and frequency under it", text(cap));
+  const subOf = (th) => (th.querySelector(".tbl-sub") ? text(th.querySelector(".tbl-sub")) : null);
+  const col = [...t.container.querySelectorAll("thead th")].map(subOf);
+  const row = [...t.container.querySelectorAll("tbody th")].map(subOf);
+  check(JSON.stringify(col) === JSON.stringify([null, null, "in-sample", null]) && JSON.stringify(row) === JSON.stringify(["weights chosen on this window", null, null]),
+    "subs: a head whose text is a key carries its sub-line, a column head or a row head, and no other head does", `${col} / ${row}`);
+  const flat = withSubs(COLS, ROWS, subs);
+  check(csvText(flat.columns, flat.rows).split("\n").slice(0, 2).join("|") === "Portfolio,Ann. Return,Sharpe (in-sample),As of|GMV (weights chosen on this window),0.1234,0.87654,2026-09-25" &&
+    same(withSubs(COLS, ROWS, undefined), { columns: COLS, rows: ROWS }) && ROWS[0].name === "GMV",
+    "subs: the downloads carry each sub-line in brackets after its head, and the rows passed in are not changed");
+  const bare = render(h(Table, { title: "Typed", columns: COLS, rows: ROWS, filename: "t", span: null }));
+  check(!bare.container.querySelector(".tbl-span") && text(bare.container.querySelector("caption")) === "Typed", "spans: a table given no span claims no dates");
+  t.unmount();
+  bare.unmount();
+}
+
+// Every table on every tab states its window and its return frequency, except the two that echo weights
+// as typed, which come from no dates at all.
+{
+  const { fixtureAnalysis, tabProps } = await import("./_analysis.mjs");
+  const TYPED = ["Normalized Weights", "Custom weights being evaluated"];
+  const SPAN = /^(Daily|Monthly) (returns|closes), \d{4}-\d\d-\d\d to \d{4}-\d\d-\d\d$|^(Daily|Monthly) returns, each window ending \d{4}-\d\d-\d\d$/;
+  const { error, warn } = console;
+  console.error = console.warn = () => {};
+  const found = [];
+  try {
+    for (const name of ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensitivity"]) {
+      const Tab = (await import(`../src/tabs/${name}.tsx`)).default;
+      const tr = render(h(Tab, tabProps(fixtureAnalysis("cross"))));
+      const box = tr.container.querySelector(".sens-check input");
+      if (box) act(() => box.click());
+      for (const tb of tr.container.querySelectorAll(".tbl")) {
+        found.push({ tab: name, title: text(tb.querySelector(".tbl-title")), span: tb.querySelector(".tbl-span") ? text(tb.querySelector(".tbl-span")) : null });
+      }
+      tr.unmount();
+    }
+  } finally {
+    console.error = error;
+    console.warn = warn;
+  }
+  const bad = found.filter((f) => (TYPED.includes(f.title) ? f.span !== null : !SPAN.test(f.span ?? "")));
+  check(found.length >= 17 && TYPED.every((t) => found.some((f) => f.title === t)) && bad.length === 0,
+    "spans: every table on the six tabs states its window and return frequency; only the typed weights claim none",
+    `${found.length} tables; ${bad.map((f) => `${f.tab}/${f.title}=${f.span}`).join(" | ")}`);
+}
+
 r.unmount();
 done("t-tables");

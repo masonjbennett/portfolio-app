@@ -13,6 +13,9 @@
 // - The too-short message states the rule the code applies (one year of returns, 1855, 1870); the
 //   app's says two years (1871).
 // - The Sharpe comparison uses the numbers, not the 3-dp strings parsed back (2011-2013).
+// - Where a window is named in a sentence or a table row, it carries the day it ends ("5 years to
+//   2026-09-28"), so a weight read off this tab cannot be mistaken for one fitted on some other,
+//   earlier stretch of history. The app's own label ("5 Years") stays on the chart and the columns.
 import { gmv, tangency, type Solution, type Tangency } from "../../lib/optimize.ts";
 import { normalizeCustom, portfolioPerformance, windowMoments, windows, type Custom, type Performance } from "../../lib/portfolio.ts";
 import type { Mat, Vec } from "../../lib/num.ts";
@@ -30,6 +33,10 @@ export interface WindowFit {
   label: string;
   /** The label on the chart, short enough to sit on a bar: "2Y". */
   short: string;
+  /** The label with the day the window ends, for sentences and table rows: "2 years to 2026-09-28". */
+  named: string;
+  /** The last return date in the window, ISO: the same for every window. */
+  to: string;
   /** Return rows in the window. */
   lb: number;
   /** The first return date in the window, ISO. */
@@ -42,6 +49,20 @@ export interface WindowFit {
   gmv: Solution | null;
   /** Maximum Sharpe on this window; null when the solve failed. */
   tan: Tangency | null;
+}
+
+// The app's labels in sentence case, for "5 years to 2026-09-28".
+const PLAIN: Readonly<Record<string, string>> = {
+  "1 Year": "1 year",
+  "2 Years": "2 years",
+  "3 Years": "3 years",
+  "5 Years": "5 years",
+  "Full Sample": "Full sample",
+};
+
+/** A window's label with the day it ends. */
+export function windowName(label: string, to: string): string {
+  return `${PLAIN[label] ?? label} to ${format(to, "date")}`;
 }
 
 const SHORT: Readonly<Record<string, string>> = {
@@ -65,6 +86,7 @@ export function fitWindows(a: Analysis): LoadState<WindowFit[]> {
   const T = a.dates.length;
   const ws = windows(T);
   if (ws.length < 2) return { status: "empty", reason: tooShort(T) };
+  const to = a.dates[T - 1];
   return {
     status: "ready",
     value: ws.map(({ label, lb }) => {
@@ -72,6 +94,8 @@ export function fitWindows(a: Analysis): LoadState<WindowFit[]> {
       return {
         label,
         short: SHORT[label] ?? label,
+        named: windowName(label, to),
+        to,
         lb,
         from: a.dates[T - lb],
         m,
@@ -108,9 +132,9 @@ export const METRIC_COLUMNS: Column[] = [
 ];
 
 function metricRow(f: WindowFit, w: Vec | null, rf: number): TableRow {
-  if (!w) return { window: f.label, from: f.from, mu: null, sigma: null, sharpe: null };
+  if (!w) return { window: f.named, from: f.from, mu: null, sigma: null, sharpe: null };
   const p = scoreOn(f, w, rf);
-  return { window: f.label, from: f.from, mu: fin(p.mu), sigma: fin(p.sigma), sharpe: fin(p.sharpe) };
+  return { window: f.named, from: f.from, mu: fin(p.mu), sigma: fin(p.sigma), sharpe: fin(p.sharpe) };
 }
 
 /** One portfolio's metrics per window, in window order; a failed window's row holds nulls. */
@@ -146,6 +170,11 @@ export function tableState(fits: WindowFit[], p: Port, rows: TableRow[]): LoadSt
 }
 
 // ---- weights across windows (1918-1932) -------------------------------------------------------
+
+/** Each window column's sub-line on the weight tables: the day it ends ("to 2026-09-28"). */
+export function windowSubs(fits: WindowFit[]): Record<string, string> {
+  return Object.fromEntries(fits.map((f) => [f.label, `to ${format(f.to, "date")}`]));
+}
 
 /** The weight tables' columns: Ticker, then one per window in window order (the CSV header at 1930). */
 export function weightColumns(fits: WindowFit[]): Column[] {
@@ -270,10 +299,10 @@ export function swing(fits: WindowFit[], p: Port, tickers: readonly string[]): S
     let s: Swing | null = null;
     for (const f of ok) {
       const v = (weightsOf(f, p) as Vec)[i];
-      if (!s) s = { ticker: t, lo: v, hi: v, loWindow: f.label, hiWindow: f.label };
+      if (!s) s = { ticker: t, lo: v, hi: v, loWindow: f.named, hiWindow: f.named };
       else {
-        if (v < s.lo) Object.assign(s, { lo: v, loWindow: f.label });
-        if (v > s.hi) Object.assign(s, { hi: v, hiWindow: f.label });
+        if (v < s.lo) Object.assign(s, { lo: v, loWindow: f.named });
+        if (v > s.hi) Object.assign(s, { hi: v, hiWindow: f.named });
       }
     }
     if (s && (!best || s.hi - s.lo > best.hi - best.lo)) best = s;
@@ -281,7 +310,7 @@ export function swing(fits: WindowFit[], p: Port, tickers: readonly string[]): S
   return best;
 }
 
-const PORT_PHRASE: Readonly<Record<Port, string>> = { gmv: "minimum-variance (GMV)", tan: "tangency (best-Sharpe)" };
+const PORT_PHRASE: Readonly<Record<Port, string>> = { gmv: "minimum-variance (GMV)", tan: "tangency (maximum-Sharpe)" };
 
 function swingClause(p: Port, s: Swing): string {
   const lo = format(s.lo, "pct1");

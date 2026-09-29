@@ -368,6 +368,25 @@ function Harness({ a, init = {}, level = "plain" }) {
 }
 
 {
+  // The wealth chart carries the amount field, and says which lines are hypothetical.
+  const a = fixtureAnalysis("cross");
+  const calls = [];
+  const r = render(h(Custom, tabProps(a, { requestSettings: (p) => calls.push(p) })));
+  const we = figures(r.container)[1];
+  const input = we.querySelector(".amount-field input");
+  act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, "12000");
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  check(JSON.stringify(calls) === JSON.stringify([{ amount: 12000 }]), "amount: the Custom tab's wealth chart edits the same starting amount", JSON.stringify(calls));
+  check(text(we.querySelector(".chart-sub")).endsWith("GMV and Tangency are hypothetical: weights chosen with the whole period's prices."),
+    "hypothetical: the Custom tab's wealth caption names GMV and Tangency as hypothetical", text(we.querySelector(".chart-sub")));
+  const tb = r.container.querySelector(".tbl");
+  check(tb && !tb.querySelector(".tbl-span"), "spans: the normalized weights come from no dates, and their table claims none");
+  r.unmount();
+}
+
+{
   // Max DD from the amount invested (the engine's default), on a book whose worst fall starts on day
   // one: 10% down, then up. The app's path starts after that day and sees no drawdown at all (904-908).
   const cols = [[-0.1, 0.05, 0.01], [-0.1, 0.03, 0.02]];
@@ -562,7 +581,8 @@ function Harness({ a, init = {}, level = "plain" }) {
   const phone = css.slice(css.indexOf("{", at) + 1, end).replace(/\/\*[\s\S]*?\*\//g, "");
   const sixteen = [...phone.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /font-size:\s*16px/.test(m[2])).flatMap((m) => m[1].split(",").map((x) => x.trim()));
   const r = render(h(Custom, tabProps(fixtureAnalysis("cross"))));
-  const typed = [...r.container.querySelectorAll("input, select, textarea")].filter((el) => !["range", "checkbox", "radio"].includes(el.type));
+  // The wealth chart's starting amount is the chart's own field, held to 16px by its own sheet (t-charts-portfolio).
+  const typed = [...r.container.querySelectorAll("input, select, textarea")].filter((el) => !["range", "checkbox", "radio"].includes(el.type) && !el.closest(".amount-field"));
   const missing = typed.filter((el) => ![...el.classList].some((k) => sixteen.includes(`.${k}`)));
   check(at >= 0 && typed.length === 5 && missing.length === 0,
     "phone: every weight field is 16px under the 760px query, so focusing one does not zoom the page", `${typed.length} fields; ${sixteen.join(" ")}`);

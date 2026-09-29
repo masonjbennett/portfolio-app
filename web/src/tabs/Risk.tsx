@@ -15,6 +15,7 @@ import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import Tip from "../components/Tip.tsx";
 import { format } from "../format.ts";
+import { tableSpan } from "./caption.ts";
 import type { Analysis, Level, TabProps } from "../types.ts";
 import {
   betaChart,
@@ -77,7 +78,13 @@ function Drawdowns({ a, level, allowShort }: SectionProps) {
       >
         {(v) => <DrawdownPlot data={v} name={shown.name} />}
       </ChartFrame>
-      <Table title="Worst drawdown by asset" columns={DRAWDOWN_COLUMNS} rows={rows} filename="drawdowns" />
+      <Table
+        title="Worst drawdown by asset"
+        columns={DRAWDOWN_COLUMNS}
+        rows={rows}
+        filename="drawdowns"
+        span={tableSpan(a.prices.dates[0], a.asOf, "daily", "closes")}
+      />
       <p className="risk-note">
         High is the close the fall started from, Low the bottom of it. A dash under Back at the high means the asset had not
         closed at that level again by {a.asOf}.
@@ -129,7 +136,7 @@ function Metrics({ a, level, allowShort }: SectionProps) {
         <span aria-hidden="true"> · </span>
         Sortino ratio <Tip tip="sortino" level={level} allowShort={allowShort} />
       </p>
-      <Table title="Risk-adjusted metrics" columns={RISK_COLUMNS} rows={rows} filename="risk_metrics" />
+      <Table title="Risk-adjusted metrics" columns={RISK_COLUMNS} rows={rows} filename="risk_metrics" span={tableSpan(a.dates[0], a.asOf)} />
       <p className="risk-note">
         Annual figures at the {format(a.rf, "pct2")} risk-free rate this analysis used. Sortino divides by the shortfall below the
         daily risk-free rate, averaged over every day.
@@ -164,7 +171,7 @@ function Capm({ a, level, allowShort }: SectionProps) {
       >
         {(v) => <BetaPlot data={v} />}
       </ChartFrame>
-      <Table title="CAPM beta and alpha" columns={CAPM_COLUMNS} rows={rows} filename="capm_beta_alpha" />
+      <Table title="CAPM beta and alpha" columns={CAPM_COLUMNS} rows={rows} filename="capm_beta_alpha" span={tableSpan(a.dates[0], a.asOf)} />
     </section>
   );
 }

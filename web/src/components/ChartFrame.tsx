@@ -3,11 +3,19 @@
 // a throw while drawing replaces the whole chart with the named error line, so a half-drawn chart
 // never reaches the page. (In the app one st.stop() or exception ends the script, and every chart
 // after it on the page goes with it.)
+//
+// A chart may carry one control of its own in the head, under the subtitle (the starting amount on a
+// growth chart): it sits outside the drawing's boundary, so a chart that fails to draw keeps it.
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import type { ChartFrameProps } from "../types.ts";
 import "./ChartFrame.css";
 
 const DEFAULT_HEIGHT = 320;
+
+type Props<T> = ChartFrameProps<T> & {
+  /** A control that acts on this chart, drawn in the head under the subtitle. */
+  control?: ReactNode;
+};
 
 type NoteKind = "loading" | "empty" | "error";
 const NOTE_ROLE: Record<NoteKind, "status" | "alert" | undefined> = { loading: "status", empty: undefined, error: "alert" };
@@ -65,7 +73,7 @@ class Draw extends Component<DrawProps, { error: Error | null }> {
   }
 }
 
-export default function ChartFrame<T>({ title, state, children, subtitle, height = DEFAULT_HEIGHT }: ChartFrameProps<T>) {
+export default function ChartFrame<T>({ title, state, children, subtitle, height = DEFAULT_HEIGHT, control }: Props<T>) {
   let body: ReactNode;
   switch (state.status) {
     case "loading":
@@ -90,6 +98,7 @@ export default function ChartFrame<T>({ title, state, children, subtitle, height
       <figcaption className="chart-head">
         <h3 className="chart-title">{title}</h3>
         {subtitle ? <p className="chart-sub">{subtitle}</p> : null}
+        {control ? <div className="chart-control">{control}</div> : null}
       </figcaption>
       <div className="chart-body">{body}</div>
     </figure>

@@ -13,8 +13,10 @@ import SegControl from "../components/SegControl.tsx";
 import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import Tip from "../components/Tip.tsx";
+import AmountField from "../charts/AmountField.tsx";
 import { format } from "../format.ts";
 import type { Analysis, Level, TabProps } from "../types.ts";
+import { tableSpan } from "./caption.ts";
 import { HistChart, QQChart } from "./returns/DistCharts.tsx";
 import GrowthChart from "./returns/GrowthChart.tsx";
 import {
@@ -31,7 +33,7 @@ function Lead({ a, amount }: { a: Analysis; amount: number }) {
   const g = useMemo(() => growth(a, amount), [a, amount]);
   return (
     <header className="ret-lead">
-      <p className="ret-kicker">Return computation and exploratory analysis</p>
+      <p className="ret-kicker">Growth, summary statistics and the shape of daily returns</p>
       <h2 className="tab-finding ret-finding">{headline(g)}</h2>
       <p className="ret-dek">{dek(a)}</p>
     </header>
@@ -39,8 +41,9 @@ function Lead({ a, amount }: { a: Analysis; amount: number }) {
 }
 
 // C1 and the table of where each line ended. The app's multiselect (1259) is a row of toggles here,
-// each carrying its line's colour, which on a phone is also the chart's key.
-function GrowthCard({ a, amount }: { a: Analysis; amount: number }) {
+// each carrying its line's colour, which on a phone is also the chart's key. The starting amount is
+// edited in the chart's own head, where it acts.
+function GrowthCard({ a, amount, onAmount }: { a: Analysis; amount: number; onAmount: (n: number) => void }) {
   const g = useMemo(() => growth(a, amount), [a, amount]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [ref, width] = useWidth<HTMLDivElement>();
@@ -68,11 +71,18 @@ function GrowthCard({ a, amount }: { a: Analysis; amount: number }) {
           subtitle={`Invested on ${format(d[0], "date")} in each line separately and held to ${format(d[d.length - 1], "date")}. The dashed line is the ${format(amount, "usd0")} invested.`}
           state={state}
           height={GROWTH_H}
+          control={<AmountField amount={amount} onAmount={onAmount} />}
         >
           {(lines) => <GrowthChart growth={g} lines={lines} width={width} height={GROWTH_H} />}
         </ChartFrame>
       </div>
-      <Table title={title} columns={GROWTH_COLUMNS} rows={growthRows(g)} filename={GROWTH_FILE} />
+      <Table
+        title={title}
+        columns={GROWTH_COLUMNS}
+        rows={growthRows(g)}
+        filename={GROWTH_FILE}
+        span={tableSpan(d[0], d[d.length - 1], "daily", "closes")}
+      />
     </>
   );
 }
@@ -96,7 +106,7 @@ function SummaryCard({ a, level, allowShort }: { a: Analysis; level: Level; allo
         is the daily standard deviation times the square root of 252. Excess kurtosis is 0 for a normal
         distribution; above 0, extreme days are more common than a normal curve allows.
       </p>
-      <Table title="Summary Statistics" columns={SUMMARY_COLUMNS} rows={rows} filename={SUMMARY_FILE} />
+      <Table title="Summary Statistics" columns={SUMMARY_COLUMNS} rows={rows} filename={SUMMARY_FILE} span={tableSpan(a.dates[0], a.asOf)} />
     </>
   );
 }
@@ -160,7 +170,7 @@ function DistributionCard({ a }: { a: Analysis }) {
   );
 }
 
-export default function Returns({ analysis, settings, level }: TabProps) {
+export default function Returns({ analysis, settings, level, requestSettings }: TabProps) {
   const amount = settings.amount;
   return (
     <div className="ret">
@@ -168,7 +178,7 @@ export default function Returns({ analysis, settings, level }: TabProps) {
         <Lead a={analysis} amount={amount} />
       </Boundary>
       <Boundary name="Cumulative growth" resetKey={analysis}>
-        <GrowthCard a={analysis} amount={amount} />
+        <GrowthCard a={analysis} amount={amount} onAmount={(n) => requestSettings({ amount: n })} />
       </Boundary>
       <Boundary name="Summary Statistics" resetKey={analysis}>
         <SummaryCard a={analysis} level={level} allowShort={settings.allowShort} />

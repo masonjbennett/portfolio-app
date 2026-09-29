@@ -227,12 +227,12 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
 
   // Tables: two, each through Table with both downloads; no raw table outside them.
   const tbls = $$(".tbl");
-  const caps = tbls.map((t) => text(t.querySelector("caption")));
+  const caps = tbls.map((t) => text(t.querySelector("caption .tbl-title")));
   check(tbls.length === 2 && caps.includes("Summary Statistics") && caps.includes("Growth of $10,000"), "tab: the Summary Statistics and growth tables", caps.join(" | "));
   check(tbls.every((t) => ["Download CSV", "Download Excel"].every((b) => [...t.querySelectorAll("button")].some((x) => text(x) === b))),
     "ledger:downloads-everywhere every table on the tab carries CSV and Excel downloads");
   check($$("table").length === $$(".tbl table").length, "tab: every table goes through Table");
-  const sum = tbls.find((t) => text(t.querySelector("caption")) === "Summary Statistics");
+  const sum = tbls.find((t) => text(t.querySelector("caption .tbl-title")) === "Summary Statistics");
   const heads = [...sum.querySelectorAll("thead th")].map(text);
   check(heads.includes("Excess kurtosis") && !heads.includes("Kurtosis"), "ledger:excess-kurtosis the rendered header says \"Excess kurtosis\"", heads.join());
   const vtiRow = [...sum.querySelectorAll("tbody tr")][0];
@@ -320,6 +320,37 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
   check(/Enter a starting amount above \$0/.test(text(r.container)) && /returned the most/.test(text(r.container.querySelector(".ret-finding"))),
     "tab: with no usable amount the chart says so and the headline speaks in returns", text(r.container.querySelector(".ret-finding")));
   check(clean(r.container.innerHTML), "tab: no NaN with no usable amount");
+  r.unmount();
+}
+
+const typeInto = (input, v) => act(() => {
+  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, v);
+  input.dispatchEvent(new window.Event("input", { bubbles: true }));
+});
+
+// ---- the kicker, the tables' spans, and the starting amount on the growth chart ------------------------
+{
+  const calls = [];
+  const r = render(h(Returns, tabProps(cross, { requestSettings: (p) => calls.push(p) })));
+  const kicker = text(r.container.querySelector(".ret-kicker"));
+  check(kicker === "Growth, summary statistics and the shape of daily returns" && !/Return computation|exploratory analysis/i.test(text(r.container)),
+    "kicker: names the view in plain words, not the assignment's heading", kicker);
+  const spans = [...r.container.querySelectorAll(".tbl")].map((t) => [text(t.querySelector(".tbl-title")), text(t.querySelector(".tbl-span"))]);
+  check(JSON.stringify(spans) === JSON.stringify([
+    ["Growth of $10,000", `Daily closes, ${cross.prices.dates[0]} to ${cross.asOf}`],
+    ["Summary Statistics", `Daily returns, ${cross.dates[0]} to ${cross.asOf}`],
+  ]), "spans: the growth table states its closes and the statistics their daily returns, each with its window", JSON.stringify(spans));
+  const frame = r.container.querySelector(".ret-chart .chart-frame");
+  const input = frame?.querySelector(".chart-head .amount-field input");
+  check(!!input && input.value === "10000" && text(frame.querySelector(".amount-field label")) === "Growth of $",
+    "amount: the growth chart carries its own Growth of $ field, at the $10,000 default");
+  typeInto(input, "25000");
+  typeInto(input, "");
+  check(JSON.stringify(calls) === JSON.stringify([{ amount: 25000 }]) && /at least \$100/.test(text(frame.querySelector(".amount-field [role=alert]") ?? frame)),
+    "amount: a valid amount on the growth chart becomes the setting, an empty one is refused and says why", JSON.stringify(calls));
+  r.rerender(h(Returns, tabProps(cross, { settings: { ...tabProps(cross).settings, amount: 40000 } })));
+  check(input.value === "40000" && text(r.container.querySelector(".ret-chart .chart-title")).includes("$40,000"),
+    "amount: an amount set elsewhere shows in the chart's field and its title", input.value);
   r.unmount();
 }
 

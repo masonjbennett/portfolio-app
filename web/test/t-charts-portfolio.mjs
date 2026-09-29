@@ -362,8 +362,15 @@ const W0 = o.w0;
   check(!/rebalanc/i.test(app), "ledger:daily-rebalanced-label: and nowhere says they are rebalanced daily");
   const r = render(h(Wealth, { title: "Growth", state: ready(W.wealthData(long, long.ew)), amount: W0 }));
   const cap = subtitle(r.container);
-  check(cap === `Growth of $10,000 from ${long.prices.dates[0]} to ${long.dates[long.dates.length - 1]}. Each portfolio is rebalanced daily to the target weights.`,
+  check(cap === `Growth of $10,000 from ${long.prices.dates[0]} to ${long.dates[long.dates.length - 1]}. Each portfolio is rebalanced daily to the target weights. ` +
+    "GMV and Tangency are hypothetical: weights chosen with the whole period's prices.",
     "ledger:daily-rebalanced-label: the port's caption says each portfolio is rebalanced daily to the target weights", cap);
+  // hypothetical: only the lines an optimiser fitted to these prices are called hypothetical.
+  check(W.wealthCaption(W0, "2020-01-02", "2020-12-31") === "Growth of $10,000 from 2020-01-02 to 2020-12-31. Each portfolio is rebalanced daily to the target weights." &&
+    W.wealthCaption(W0, "2020-01-02", "2020-12-31", ["Tangency"]).endsWith(" Tangency is hypothetical: weights chosen with the whole period's prices.") &&
+    JSON.stringify(W.fittedLines(W.wealthData(long, long.ew).series)) === JSON.stringify(["GMV", "Tangency"]) &&
+    JSON.stringify(W.fittedLines(W.wealthData({ ...long, gmv: null, tangency: null }, long.ew).series)) === "[]",
+    "hypothetical: the caption calls GMV and Tangency hypothetical, and never Equal-Weight, Custom or the benchmark");
   r.unmount();
 }
 
@@ -552,6 +559,22 @@ const W0 = o.w0;
   }
   check(ms.length >= 6 && off.length === 0, "frontier markers: symbolExtent matches the drawn size of every marker kind", off.join("; "));
   r.unmount();
+}
+
+// ---- the starting amount's own field ------------------------------------------------------------------
+{
+  const { amountProblem } = await import("../src/charts/AmountField.tsx");
+  check(amountProblem("10000") === null && amountProblem("100") === null && /at least \$100/.test(amountProblem("99.5") ?? "") &&
+    amountProblem("") !== null && amountProblem("abc") !== null,
+    "amount: the chart's field takes $100 and up, and refuses an empty, non-numeric or smaller amount");
+  // Under 16px iOS zooms the page when a field takes focus; the field's phone rule holds it there.
+  const css = readFileSync(new URL("../src/charts/AmountField.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const phone = css.slice(css.indexOf("@media (max-width: 760px)"));
+  check(phone.length > 0 && /\.amount-field input\s*\{[^}]*font-size:\s*16px/.test(phone),
+    "amount: under the 760px query the field is 16px, so focusing it does not zoom the page");
+  const W1 = render(h(W.default, { title: "Growth", state: { status: "ready", value: W.wealthData(long, long.ew) }, amount: 10000 }));
+  check(!W1.container.querySelector(".amount-field"), "amount: a wealth chart given no setter shows no field");
+  W1.unmount();
 }
 
 done("t-charts-portfolio");

@@ -162,7 +162,7 @@ function FrontierCard({ a, v }: { a: Analysis; v: CustomView }) {
   );
 }
 
-function WealthCard({ a, v, amount }: { a: Analysis; v: CustomView; amount: number }) {
+function WealthCard({ a, v, amount, onAmount }: { a: Analysis; v: CustomView; amount: number; onAmount: (n: number) => void }) {
   const w = customWeights(v);
   const data = useMemo(() => wealthData(a, w), [a, w]);
   const state = useMemo<LoadState<WealthData>>(() => ({ status: "ready", value: data }), [data]);
@@ -170,7 +170,7 @@ function WealthCard({ a, v, amount }: { a: Analysis; v: CustomView; amount: numb
   return (
     <section className="cust-section" aria-labelledby="cust-wealth">
       <Slug id="cust-wealth">Cumulative Wealth: All Portfolios</Slug>
-      <Wealth title={title} state={state} amount={amount} />
+      <Wealth title={title} state={state} amount={amount} onAmount={onAmount} />
     </section>
   );
 }
@@ -185,7 +185,8 @@ function WeightsTable({ v }: { v: CustomView }) {
       <Slug id="cust-table">{TABLE_TITLE}</Slug>
       {state.status === "ready" ? (
         <>
-          <Table title={TABLE_TITLE} columns={WEIGHT_COLUMNS} rows={state.value} filename="custom_normalized_weights" />
+          {/* No span: these are the weights as typed, which come from no dates. */}
+          <Table title={TABLE_TITLE} columns={WEIGHT_COLUMNS} rows={state.value} filename="custom_normalized_weights" span={null} />
           <p className="cust-note">
             {clamped
               ? `Entered is the weight as set above. A weight outside the bounds counts at the nearest bound, and the normalized weight is that divided by the weight total, ${format(v.custom.total, "num2")}.`
@@ -201,7 +202,7 @@ function WeightsTable({ v }: { v: CustomView }) {
   );
 }
 
-export default function Custom({ analysis: a, settings, level, weights, setWeights }: TabProps) {
+export default function Custom({ analysis: a, settings, level, weights, setWeights, requestSettings }: TabProps) {
   const v = useMemo(() => customView(a, weights), [a, weights]);
   return (
     <div className="cust" data-tab="custom">
@@ -219,7 +220,7 @@ export default function Custom({ analysis: a, settings, level, weights, setWeigh
         <FrontierCard a={a} v={v} />
       </Boundary>
       <Boundary name="Cumulative wealth" resetKey={v}>
-        <WealthCard a={a} v={v} amount={settings.amount} />
+        <WealthCard a={a} v={v} amount={settings.amount} onAmount={(n) => requestSettings({ amount: n })} />
       </Boundary>
       <Boundary name="Normalized weights" resetKey={v}>
         <WeightsTable v={v} />
