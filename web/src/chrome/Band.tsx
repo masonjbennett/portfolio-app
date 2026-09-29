@@ -14,6 +14,7 @@ import { CARD_SENTENCE, MEGA_CAP_IN_SAMPLE, PUBLISHED_SETS, PUBLISHED_URL, PUBLI
 import { format } from "../format.ts";
 import { publishedPresetOf } from "../state/defaults.ts";
 import type { Analysis, BandProps, FormatId, TipKey } from "../types.ts";
+import { usePhone } from "./usePhone.ts";
 import { monthYear } from "./when.ts";
 import "./Band.css";
 
@@ -82,15 +83,28 @@ export function finding(a: Analysis): string {
 
 // The published result: the site's own sentence, the five mega-caps' three out-of-sample Sharpe ratios
 // beside the tangency's in-sample one, the date, and the one link. Every figure is a constant from
-// src/content/published.ts, printed as written; t-app holds each one to it.
+// src/content/published.ts, printed as written; t-app holds each one to it. On a phone the sentence
+// folds behind a closed disclosure, so the figures, the date and the link stay on the first screen
+// without pushing the plates below it.
 export function PublishedResult() {
   const mega = PUBLISHED_SETS[0];
+  const phone = usePhone();
+  const quote = (
+    <blockquote className="band-published-quote" cite={PUBLISHED_URL}>
+      <p>{CARD_SENTENCE}</p>
+    </blockquote>
+  );
   return (
     <figure className="band-published" aria-label="Published result">
       <p className="band-published-kicker">Published result</p>
-      <blockquote className="band-published-quote" cite={PUBLISHED_URL}>
-        <p>{CARD_SENTENCE}</p>
-      </blockquote>
+      {phone ? (
+        <details className="band-published-more">
+          <summary>The published sentence</summary>
+          {quote}
+        </details>
+      ) : (
+        quote
+      )}
       <p className="band-published-figures">
         {mega.name} ({mega.tickers.join(", ")}), Sharpe out of sample: equal weight {mega.ew} · GMV {mega.gmv} · tangency{" "}
         {mega.tangency} ({MEGA_CAP_IN_SAMPLE} in-sample).

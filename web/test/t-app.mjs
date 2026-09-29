@@ -558,10 +558,21 @@ function rail(over = {}) {
   check(!!sheet && !!sheet.querySelector('[aria-label="Explanation level"]') && !!sheet.querySelector('[name="tickers"]'), "phone: the chip opens a sheet holding the rail");
   key(document.body, "Escape");
   check(!document.querySelector("[role=dialog]"), "phone: Escape closes the sheet");
+  // The published strip: the sentence folds away, the figures and the one link do not.
+  const pStrip = r.container.querySelector(".band-published");
+  const fold = pStrip?.querySelector("details.band-published-more");
+  const pFigures = pStrip?.querySelector(".band-published-figures");
+  const pLink = pStrip?.querySelector("a");
+  check(!!fold && !fold.open && text(fold.querySelector("summary")) === "The published sentence" &&
+    text(fold.querySelector("blockquote") ?? {}) === P.CARD_SENTENCE && !!pFigures && !fold.contains(pFigures) && !!pLink && !fold.contains(pLink),
+    "phone: the published sentence folds behind a closed disclosure; the figures and the link stay on the first screen",
+    pStrip ? pStrip.innerHTML.slice(0, 200) : "no strip");
   r.unmount();
   setMedia(() => false);
   const desk = page({});
   check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector("aside [name=tickers]"), "desktop: the rail stands in the left column, no chip");
+  check(!desk.container.querySelector(".band-published details") && text(desk.container.querySelector(".band-published blockquote") ?? {}) === P.CARD_SENTENCE,
+    "desktop: the published sentence is printed open");
   desk.unmount();
 }
 

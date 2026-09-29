@@ -26,6 +26,16 @@
   margin: var(--space-1) 0 0;
 }
 
+/* On a phone the sentence sits behind this line, which reads as the figures' small print. */
+.band-published-more > summary {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--color-ink2);
+  cursor: pointer;
+}
+
 .band-published-quote p {
   margin: 0;
   font-size: 0.9rem;
