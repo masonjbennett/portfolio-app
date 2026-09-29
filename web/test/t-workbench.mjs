@@ -13,7 +13,7 @@ const W = await import("../src/state/useWorkbench.ts");
 const { tangency } = await import("../src/lib/optimize.ts");
 const { MESSAGES } = await import("../src/state/analyze.ts");
 const { PREFS_KEY, SETTINGS_KEY } = await import("../src/state/storage.ts");
-const { EXAMPLE_URL, FETCH_DELAY_MS, FIRST_SETTINGS, RF_URL, URL_DELAY_MS, rfSeriesUrl, todayISO } = W;
+const { EXAMPLE_URL, FETCH_DELAY_MS, FIRST_SETTINGS, RF_HOLD_MS, RF_URL, URL_DELAY_MS, rfSeriesUrl, todayISO } = W;
 
 const bits = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -360,6 +360,11 @@ view.unmount();
   check(r?.source === "example" && r.rf === EX.rf && wb.fetching === true,
     "cold load: live prices that land before the rate wait, with the example still on screen and fetching on",
     `${r?.source} ${r?.rf} fetching ${wb.fetching}`);
+  await settle(RF_HOLD_MS + 150);
+  const r2 = ready();
+  check(r2 === r && wb.fetching === true,
+    "cold load: with no rate known at all, the live prices keep waiting past RF_HOLD_MS rather than show at the placeholder",
+    `${r2?.source} ${r2?.rf} fetching ${wb.fetching}`);
   await act(async () => {
     late.resolve(json(rfAnswer(EX.start)));
     await sleep(0);
@@ -367,6 +372,55 @@ view.unmount();
   const b = ready();
   check(b?.source === "live" && Math.abs(b.rf - meanOver(b)) < 1e-15 && !wb.fetching && changes().length === 2,
     "cold load: when the rate lands the live prices show, at the rate over their window, in one change", changes().join(" | "));
+  v.unmount();
+}
+
+// ---- an earlier window on a slow FRED: today's yield after RF_HOLD_MS, the window's rate when it lands -----------
+{
+  fresh();
+  const slow = deferred();
+  // The same prices 52 weeks earlier (weekdays kept): a window that opens before the series already held.
+  const DAY = 86400000;
+  const EARLY = {
+    ...CROSS,
+    start: "2018-01-01",
+    rows: CROSS.rows.map(([d, ...xs]) => [new Date(Date.parse(d + "T00:00:00Z") - 364 * DAY).toISOString().slice(0, 10), ...xs]),
+  };
+  routes = {
+    [EXAMPLE_URL]: () => Promise.resolve(json(EX)),
+    [RF_URL]: (u) => {
+      const s = new URL(u, "http://x").searchParams.get("start");
+      return s === EX.start ? Promise.resolve(json(rfAnswer(s))) : slow.p;
+    },
+    "/api/prices": (u) => Promise.resolve(json(new URL(u, "http://x").searchParams.get("start") === EX.start ? CROSS : EARLY)),
+  };
+  const v = render(h(Probe));
+  await settle();
+  await later();
+  const before = ready();
+  await act(async () => {
+    wb.setSettings({ start: "2018-01-01" });
+    await sleep(0);
+  });
+  await later();
+  const held = ready();
+  check(before?.source === "live" && held === before && wb.fetching && rfCalls().at(-1)?.url === rfSeriesUrl("2018-01-01"),
+    "slow rate, today's known: the earlier window's prices first wait for their own rate, the last numbers still on screen",
+    `${held?.prices.dates[0]} fetching ${wb.fetching} ${rfCalls().map((c) => c.url).join(" ")}`);
+  await settle(RF_HOLD_MS + 150);
+  const now = ready();
+  check(now?.prices.dates[0] === EARLY.rows[0][0] && now.rf === 0.041 && wb.rf.value.basis === "today" && wb.rf.value.loading === true && !wb.fetching,
+    "slow rate, today's known: after RF_HOLD_MS they show at today's yield, and the view says the window's rate is still loading",
+    `${now?.prices.dates[0]} rf ${now?.rf} basis ${wb.rf.value?.basis} loading ${wb.rf.value?.loading} fetching ${wb.fetching}`);
+  await act(async () => {
+    slow.resolve(json(rfAnswer("2018-01-01")));
+    await sleep(0);
+  });
+  const after = ready();
+  check(after?.prices.dates[0] === EARLY.rows[0][0] && Math.abs(after.rf - meanOver(after)) < 1e-15 && wb.rf.value.basis === "window" &&
+    wb.rf.value.loading === false,
+    "slow rate, today's known: when the window's rate lands the numbers move to it",
+    `rf ${after?.rf} vs ${after && meanOver(after)} basis ${wb.rf.value?.basis}`);
   v.unmount();
 }
 

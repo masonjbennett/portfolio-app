@@ -38,6 +38,11 @@ export const RF_URL = "/api/rf";
 export const FETCH_DELAY_MS = 300;
 // How long the page waits for the rate before giving up on it. The endpoint gives FRED 10 s.
 export const RF_WAIT_MS = 12000;
+// How long live prices wait for their window's rate when today's yield is already known from an
+// earlier answer: after that they show at today's yield, the rail says the window's rate is still
+// loading, and they move to it when it lands. With no rate known at all, as on a cold load, they wait
+// for the answer instead (RF_WAIT_MS), because the only rate to show them at would be the placeholder.
+export const RF_HOLD_MS = 3000;
 // The address bar is rewritten at most this often (browsers throttle history.replaceState).
 export const URL_DELAY_MS = 250;
 
@@ -291,10 +296,19 @@ export function useWorkbench(): Workbench {
   // Live prices whose window rate is still on its way are held back while something else is on
   // screen: shown now at another rate, they would change a second time when it lands. The wait ends
   // when the lookup answers, fails or times out (RF_WAIT_MS); after a failure today's yield, or the
-  // fallback, is used.
+  // fallback, is used. When today's yield is already held, the wait is capped at RF_HOLD_MS, counted
+  // from when these prices arrived, and a slow FRED costs one extra change instead of a stalled page.
   const shown = useRef<{ computed: Analysis | AnalysisError; pick: RfResolved } | null>(null);
-  const hold =
+  const wantHold =
     settings.rf === null && payload !== null && !isExample(payload) && rfPending && pick.basis !== "window" && shown.current !== null;
+  // The prices whose wait ran out. Kept by identity, so newer prices start a wait of their own.
+  const [spentFor, setSpentFor] = useState<PricePayload | null>(null);
+  useEffect(() => {
+    if (!wantHold) return;
+    const t = setTimeout(() => setSpentFor(payload), RF_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [wantHold, payload]);
+  const hold = wantHold && !(spentFor === payload && pick.basis === "today");
   const fresh = useMemo(
     () => (payload && !hold ? safeAnalyze(payload, settings, pick.choice) : null),
     // analyze() reads only allowShort from the settings.
@@ -341,10 +355,10 @@ export function useWorkbench(): Workbench {
   const rfView = useMemo<LoadState<RfRate>>(() => {
     if (rf.status !== "ready") return rf;
     const { rate, date, source } = rf.value;
-    const view: RfView = { rate, date, source, window: win, basis: inUse.basis, inUse: inUse.choice.rate };
+    const view: RfView = { rate, date, source, window: win, basis: inUse.basis, inUse: inUse.choice.rate, loading: rfPending };
     return { status: "ready", value: view };
     // The window by value, not by identity: it is rebuilt on every render.
-  }, [rf, win?.rate, win?.from, win?.to, win?.days, inUse.basis, inUse.choice.rate]);
+  }, [rf, win?.rate, win?.from, win?.to, win?.days, inUse.basis, inUse.choice.rate, rfPending]);
 
   return {
     settings, setSettings, level, setLevel, analysis, fetching: fetching || hold, failure, rf: rfView, weights, setWeights, tab, setTab,

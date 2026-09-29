@@ -134,7 +134,9 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
   } else if (view?.basis === "example") {
     rfNote = `The example on screen keeps the ${pctText(view.inUse)}% it was saved with. Live prices are scored at the rate over their own window.`;
   } else if (view?.basis === "today") {
-    rfNote = `Using today's 3-month Treasury rate (${view.date}): the rate over this window could not be loaded. Override it freely.`;
+    rfNote = view.loading
+      ? `Using today's 3-month Treasury rate (${view.date}) until the rate over this window loads. Override it freely.`
+      : `Using today's 3-month Treasury rate (${view.date}): the rate over this window could not be loaded. Override it freely.`;
   } else if (live) {
     rfNote = `Live: 3-month Treasury, ${live.date} · source ${live.source}. Override it freely.`;
   } else if (unreachable) {

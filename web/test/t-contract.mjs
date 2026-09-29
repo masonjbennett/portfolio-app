@@ -391,6 +391,23 @@ check(JSON.stringify(T.TAB_IDS?.map((id) => T.TAB_LABELS[id])) === JSON.stringif
   check(/^Using a fixed 4\.21%: it stays until changed here and does not follow FRED\.$/.test(note) && !/typed/i.test(note) && back,
     "rail: a fixed rate is called fixed, never typed, with the way back to the window's rate beside it", note);
   fixed.unmount();
+
+  // Today's yield in use: while the window's series is still loading, and once its lookup has failed.
+  const todayNote = (loading) => {
+    const t = render(h(Rail, {
+      settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
+      rf: { status: "ready", value: { ...view, basis: "today", window: null, inUse: 0.0455, loading } }, fetching: false, failure: null,
+    }));
+    const s = text(t.container.querySelector('[name="rf"]')?.closest(".rail-group")?.querySelector(".rail-note"));
+    t.unmount();
+    return s;
+  };
+  const whileLoading = todayNote(true);
+  const afterFailing = todayNote(false);
+  check(/^Using today's 3-month Treasury rate \(2026-09-25\) until the rate over this window loads\./.test(whileLoading) &&
+    !/could not be loaded/.test(whileLoading) && /the rate over this window could not be loaded/.test(afterFailing),
+    "rail: today's rate says the window's is still loading while it is, and 'could not be loaded' only after the lookup failed",
+    `${whileLoading} | ${afterFailing}`);
 }
 
 done("t-contract");

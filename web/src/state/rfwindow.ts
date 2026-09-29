@@ -63,6 +63,8 @@ export interface RfView extends RfRate {
   basis: RfBasis;
   /** The rate the analysis on screen was scored against, decimal. */
   inUse: number;
+  /** A lookup for the series is still out: with basis "today", the window's rate is on its way. */
+  loading: boolean;
 }
 
 export function isRfView(v: RfRate): v is RfView {
