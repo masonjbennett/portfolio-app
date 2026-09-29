@@ -12,7 +12,10 @@ import { act, render, setMedia, text } from "./_dom.mjs";
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
-const { snapshotPlates, finding } = await import("../src/chrome/Band.tsx");
+const { default: Band, snapshotPlates, finding } = await import("../src/chrome/Band.tsx");
+const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
+const { default: Footer } = await import("../src/chrome/Footer.tsx");
+const P = await import("../src/content/published.ts");
 const { default: Rail, symbolMessage } = await import("../src/chrome/Rail.tsx");
 const { default: SummaryChip, summaryText } = await import("../src/chrome/SummaryChip.tsx");
 const { titleChip } = await import("../src/chrome/Masthead.tsx");
@@ -165,7 +168,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const lines = () => [...r.container.querySelectorAll("main [role=alert], main [role=status], main .boundary")].filter((e) => text(e));
   check(lines().length === 1 && text(lines()[0]).includes(TAB_LABELS.returns),
     "ledger:boundary: the port shows one line naming the failed tab", lines().map(text).join(" | "));
-  check(text(r.container).includes("Best Sharpe (Tangency)"), "ledger:boundary: the port's band survives a failed tab");
+  check(text(r.container).includes("Tangency Sharpe (in-sample)"), "ledger:boundary: the port's band survives a failed tab");
   const risk = byLabel(r.container.querySelector(".app-tabs"), TAB_LABELS.risk);
   if (risk) quietly(() => click(risk));
   check(!!r.container.querySelector('[data-tab="risk"]') && lines().length === 0,
@@ -269,13 +272,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const t = EX.tangency;
   const plates = snapshotPlates(EX);
   const want = [
-    ["Best Sharpe (Tangency)", t.sharpe, "num3", "best_sharpe"],
+    ["Tangency Sharpe (in-sample)", t.sharpe, "num3", "best_sharpe"],
     ["Tangency Return", t.mu, "pct2", "tangency_return"],
     [`${EX.benchLabel} Return`, EX.benchStats.mu, "pct2", "bench_return"],
     [`${EX.benchLabel} Volatility`, EX.benchStats.sigma, "pct2", "bench_vol"],
   ];
   check(JSON.stringify(plates.map((p) => [p.label, p.value, p.format, p.tip])) === JSON.stringify(want),
-    "band: the four plates are the Snapshot's labels, figures, formats and tooltips (1205-1208)", JSON.stringify(plates));
+    "band: the four plates are the Snapshot's figures, formats and tooltips (1205-1208), the first labelled in-sample", JSON.stringify(plates));
   const r = page({});
   const band = text(r.container.querySelector("main"));
   check(want.every(([label, v, f]) => band.includes(label) && band.includes(format(v, f))), "band: every plate renders its label and figure", band);
@@ -283,7 +286,111 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(band.includes(sentence) && sentence.includes(format(t.sharpe, "num3")) && sentence.includes(format(EX.benchStats.sharpe, "num3")) &&
     sentence.includes(monthYear(EX.prices.dates[0])) && sentence.includes(monthYear(EX.asOf)) && sentence.includes(EX.benchLabel),
     "band: the sentence states the tangency's and the benchmark's Sharpe over the price span", sentence);
+  check(sentence.startsWith(`On these ${EX.tickers.length} assets, with hindsight, `),
+    "band: the sentence names itself, these assets with hindsight, before any figure", sentence);
+  // On a published basket the live tangency figure is recomputed in-sample, never the published one, and
+  // the sentence says so right after it; on any other basket it says nothing of the kind.
+  const through = `(in-sample, recomputed on prices through ${format(EX.asOf, "date")})`;
+  const onSet = (a, set) => finding({ ...a, tickers: [...set.tickers].reverse() });
+  const high = exampleAnalysis({ rf: 0.4 });
+  const marked = P.PUBLISHED_SETS.flatMap((set) => [onSet(EX, set), onSet(high, set)]);
+  check(EX.tangency?.beatsRf === true && high.tangency?.beatsRf === false &&
+    marked.every((s, i) => s.includes(`${format((i % 2 ? high : EX).tangency.sharpe, "num3")}${i % 2 ? " " : " of annual excess return per unit of volatility "}${through}`)),
+    "band: on a published basket the tangency Sharpe is marked in-sample and recomputed, with the last price day", marked.join(" | "));
+  check(!finding({ ...EX, tickers: ["AAPL", "MSFT"] }).includes("recomputed") && !finding({ ...high, tickers: ["AAPL", "MSFT"] }).includes("recomputed"),
+    "band: on any other basket the sentence carries no recomputed mark");
   r.unmount();
+}
+
+// ---- (d2) the published result: quoted, dated, linked once, there before any price ---------------
+{
+  // The published figures written out a second time, so a slip in either copy goes red. They are the
+  // site's, character for character (the negative carries U+2212, as the site prints it).
+  const nine = P.PUBLISHED_SETS.map((x) => [x.name, x.tickers.join(" "), x.ew, x.gmv, x.tangency]);
+  check(JSON.stringify(nine) === JSON.stringify([
+    ["Five mega-caps", "AAPL MSFT GOOGL AMZN JPM", "0.864", "0.710", "0.659"],
+    ["Seven sector ETFs", "XLK XLF XLV XLE XLI XLP XLY", "0.915", "0.450", "0.661"],
+    ["Cross-asset", "VTI AGG GLD VNQ EFA", "0.704", "\u22120.247", "0.883"],
+  ]) && P.MEGA_CAP_IN_SAMPLE === "1.107" && P.GMV_BOND_SHARE === "95.3%" && P.PUBLISHED_WHEN === "Sep 2026" &&
+    P.PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method",
+    "published: the constants are the nine published Sharpe ratios, 1.107, 95.3%, the date and the method note's address", JSON.stringify(nine));
+  const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  check(P.CARD_SENTENCE.includes(`${P.MEGA_CAP_IN_SAMPLE} in-sample Sharpe became ${P.PUBLISHED_SETS[0].tangency} out of sample`) &&
+    P.HOLDS === 6 && P.CARD_SENTENCE.includes(`over ${WORDS[P.HOLDS]} rolling one-year holding periods`),
+    "published: the site's sentence carries 1.107, 0.659 and the six one-year holds", P.CARD_SENTENCE);
+
+  // The strip in every state the band has: waiting, empty, failed, ready, and ready but not updated.
+  const failure = { message: MESSAGES["too-few-downloaded"] };
+  const states = [
+    ["loading", { analysis: { status: "loading" }, fetching: true, failure: null }],
+    ["empty", { analysis: { status: "empty", reason: "Enter at least two tickers." }, fetching: false, failure: null }],
+    ["error", { analysis: { status: "error", name: "Optimisation", message: "it threw" }, fetching: false, failure: null }],
+    ["failed build", { analysis: { status: "loading" }, fetching: false, failure }],
+    ["ready", { analysis: { status: "ready", value: EX }, fetching: false, failure: null }],
+    ["ready, not updated", { analysis: { status: "ready", value: EX }, fetching: false, failure }],
+  ];
+  const mega = P.PUBLISHED_SETS[0];
+  const allowed = new Set([mega.ew, mega.gmv, mega.tangency, P.MEGA_CAP_IN_SAMPLE, P.PUBLISHED_WHEN.split(" ")[1]]);
+  const needed = [P.MEGA_CAP_IN_SAMPLE, mega.tangency, mega.ew];
+  const faults = [];
+  for (const [name, props] of states) {
+    const r = render(h(Band, { ...props, level: "plain" }));
+    const band = r.container.querySelector("section.band");
+    const strip = band?.querySelector(".band-published");
+    const st = text(strip ?? {});
+    const figures = st.match(/[\u2212-]?\d+(?:\.\d+)?%?/g) ?? [];
+    const links = [...(strip?.querySelectorAll("a") ?? [])];
+    if (!strip) faults.push(`${name}: no strip`);
+    else {
+      if (band.firstElementChild !== strip) faults.push(`${name}: the strip is not first in the band`);
+      if (!st.includes(P.CARD_SENTENCE)) faults.push(`${name}: the site's sentence is not quoted word for word`);
+      const stray = figures.filter((x) => !allowed.has(x));
+      if (stray.length) faults.push(`${name}: figures not among the published constants: ${stray.join(" ")}`);
+      const gone = needed.filter((x) => !figures.includes(x));
+      if (gone.length) faults.push(`${name}: missing ${gone.join(" ")}`);
+      if (!st.includes(`published ${P.PUBLISHED_WHEN}`)) faults.push(`${name}: not dated "published ${P.PUBLISHED_WHEN}"`);
+      if (links.length !== 1 || links[0].getAttribute("href") !== P.PUBLISHED_URL || links[0].hasAttribute("target"))
+        faults.push(`${name}: links ${links.map((a) => a.getAttribute("href")).join(" ")}`);
+    }
+    r.unmount();
+  }
+  check(faults.length === 0,
+    "published: in every band state the strip comes first, quotes the site's sentence, prints only the published figures, dates itself and links the method note once",
+    faults.join("; "));
+
+  // On the page, before any price has arrived.
+  const r = page({ analysis: { status: "loading" }, fetching: true });
+  const main = r.container.querySelector("main");
+  const strip = main?.querySelector(".band-published");
+  const wait = main?.querySelector(".band-wait");
+  check(!!strip && !!wait && !!(strip.compareDocumentPosition(wait) & window.Node.DOCUMENT_POSITION_FOLLOWING) && text(strip).includes(P.CARD_SENTENCE),
+    "published: the page shows the published result while prices are still loading, above the loading line", text(main ?? {}));
+  r.unmount();
+}
+
+// ---- (d3) plain words: no "best" or "optimal" as a label in the band, masthead or footer ----------
+{
+  const bad = /\b(best|optimal)\b/i;
+  // The band's three sentences: a tangency, a tangency that does not beat the rate, a failed solve.
+  const noBeat = exampleAnalysis({ rf: 0.4 });
+  const failed = exampleAnalysis({ allowShort: true, rf: 0.4 });
+  const said = [EX, noBeat, failed].map((a) => finding(a));
+  check(EX.tangency?.beatsRf === true && noBeat.tangency?.beatsRf === false && failed.tangency === null,
+    "plain words: the three analyses reach the band's three sentences", `${EX.tangency?.beatsRf} ${noBeat.tangency?.beatsRf} ${failed.tangency}`);
+  const labels = [EX, noBeat, failed].flatMap((a) => snapshotPlates(a).map((p) => p.label));
+  // Rendered text of the band, masthead and footer, without the tooltips' own text (their wording is the app's).
+  const shown = [
+    render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null })),
+    render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false })),
+    render(h(Footer)),
+  ].map((r) => {
+    r.container.querySelectorAll(".tip-text").forEach((e) => e.remove());
+    const t = text(r.container);
+    r.unmount();
+    return t;
+  });
+  const hits = [...said, ...labels, ...shown].filter((x) => bad.test(x)).map((x) => x.match(bad)[0] + ": " + x.slice(0, 80));
+  check(hits.length === 0, "plain words: no \"best\" or \"optimal\" in a band sentence, a plate label, the masthead or the footer", hits.join(" | "));
 }
 
 // ---- (e) ledger:failed-tangency ------------------------------------------------------------------
@@ -387,22 +494,22 @@ function rail(over = {}) {
   check(/each asset's weight is bounded to \[−1, 1\]/.test(shortHelp) && !/unconstrained/i.test(text(root)),
     "ledger:short-bounds-copy: the rail's shorting help states [−1, 1] per asset and never says unconstrained", shortHelp);
   n = calls.settings.length;
-  setValue(field(root, "amount"), "50");
-  check(calls.settings.length === n && /at least \$100/.test(text(root)), "rail: an amount under the app's $100 minimum is refused (724)");
-  setValue(field(root, "amount"), "25000");
-  check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ amount: 25000 }), "rail: a valid amount applies");
+  // The starting amount is edited on the growth charts themselves, not here.
+  check(field(root, "amount") == null && !/starting investment/i.test(text(root)), "rail: no starting-amount field; the growth charts carry it");
 
   // A rate set here, with the way back to live.
   check(text(root).includes(LIVE.date) && field(root, "rf").value === String(Number((EX.rf * 100).toFixed(4))), "rail: a set rate shows beside the live one and its date", field(root, "rf").value);
-  click(byLabel(root, "Use the live rate"));
-  check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ rf: null }), "rail: 'Use the live rate' goes back to live", JSON.stringify(calls.settings.at(-1)));
+  const back = byLabel(root, "Use the rate over the window");
+  check(!!back, "rail: a set rate offers 'Use the rate over the window'");
+  if (back) click(back);
+  check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ rf: null }), "rail: 'Use the rate over the window' goes back to the live rate", JSON.stringify(calls.settings.at(-1)));
   r.unmount();
 }
 {
   const { r, calls, root } = rail({ settings: { ...EX_SETTINGS, rf: null, end: null } });
   const t = text(root);
   check(field(root, "end").value === TODAY && byLabel(root, "End today instead") === undefined, "rail: an end of null shows today", field(root, "end").value);
-  check(t.includes(LIVE.date) && t.includes(LIVE.source) && field(root, "rf").value === "4.12" && !byLabel(root, "Use the live rate"),
+  check(t.includes(LIVE.date) && t.includes(LIVE.source) && field(root, "rf").value === "4.12" && !byLabel(root, "Use the rate over the window"),
     "rail: with no rate set, the live rate shows with its date and source", t.slice(0, 0) + field(root, "rf").value);
   setValue(field(root, "rf"), "5");
   check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ rf: 0.05 }), "rail: typing a rate overrides the live one", JSON.stringify(calls.settings.at(-1)));

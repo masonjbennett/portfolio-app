@@ -1,7 +1,7 @@
 // The masthead: the app's title (portfolio_app.py 1177), the byline (1177, in the resume's words, see
 // src/content/about.tsx), its title chip (1172-1187) and one line saying what day the prices run to,
 // whether the baked example is showing, and whether new prices are on their way.
-import { AUTHOR, CREDENTIAL, SITE_URL } from "../content/about.tsx";
+import { AUTHOR, CREDENTIAL, DEK, SITE_URL } from "../content/about.tsx";
 import { format } from "../format.ts";
 import type { Analysis, LoadState } from "../types.ts";
 import { monthYear } from "./when.ts";
@@ -27,8 +27,8 @@ export default function Masthead({ analysis, fetching }: MastheadProps) {
     <header className="masthead">
       <div>
         <h1 className="masthead-title">Portfolio Analytics</h1>
-        {/* The app's welcome-state dek (1097-1153). */}
-        <p className="masthead-dek">Mean-Variance Optimization &amp; Risk Analysis</p>
+        {/* The app's welcome-state dek (1097-1153) is replaced by one that says what the page does (DEK, src/content/about.tsx). */}
+        <p className="masthead-dek">{DEK}</p>
         <p className="masthead-byline">
           <a href={SITE_URL}>{AUTHOR}</a> · {CREDENTIAL}
         </p>

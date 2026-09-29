@@ -17,6 +17,15 @@ export const CREDENTIAL = "M.S. Finance · University of Arkansas";
 export const SITE_URL = "https://masonjbennett.com";
 export const SOURCE_URL = "https://github.com/masonjbennett/portfolio-app";
 
+// The masthead's dek: what the page does, in plain words. The app's dek (1097-1153) is the title its
+// assignment gave it, "Mean-Variance Optimization & Risk Analysis", which names a method, not a use.
+export const DEK =
+  "How the tickers you pick have moved, alone and together, and what equal-weight, minimum-variance and " +
+  "maximum-Sharpe mixes of them would have earned.";
+
+// Where the tool came from, in one line and no more: the course is not named and nothing is listed.
+export const ORIGIN = "Began as a graduate course project and was improved afterwards.";
+
 // The rolling windows, in trading days, and the one each chart opens on. Written out rather than imported
 // from the tabs, whose code loads on demand (test/t-split.mjs); test/t-about.mjs holds these to the Risk
 // tab's VOL_WINDOWS / DEFAULT_WINDOW and the Correlation tab's WINDOWS / DEFAULT_WINDOW.
@@ -53,7 +62,7 @@ export const METHODS: readonly Method[] = [
   {
     term: "Risk-free rate",
     text:
-      `The latest 3-month Treasury yield from FRED (series DGS3MO), or the rate typed into the settings; ` +
+      `The mean 3-month Treasury yield from FRED (series DGS3MO) over the days the prices cover, with the latest yield shown beside it in the settings; or the rate typed there; ` +
       `${pct(RF_FALLBACK)} when FRED cannot be reached.`,
   },
   {
@@ -122,4 +131,5 @@ export const METHODS: readonly Method[] = [
       "Each weight is held to the bounds, then divided by their total. With short positions allowed, a net exposure of " +
       `${pct(NET_FLOOR)} or less, or a weight that normalising pushes past ±100%, is refused with a message.`,
   },
+  { term: "Origin", text: ORIGIN },
 ];

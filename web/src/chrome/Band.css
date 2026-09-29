@@ -1,6 +1,50 @@
-/* The band: the finding in the headline face, then four plates in a row (two a row on a phone). */
+/* The band: the published result, the finding in the headline face, then four plates in a row (two a row on a
+   phone). */
 .band {
   margin: 0;
+}
+
+/* The published result: small print on a teal bar above the finding, quoted rather than headlined, so the
+   live sentence stays the band's headline and the two are never read as one claim. */
+.band-published {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-3);
+  border-left: var(--line-bar) solid var(--color-teal);
+  max-width: 60em;
+}
+
+.band-published-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-teal);
+}
+
+.band-published-quote {
+  margin: var(--space-1) 0 0;
+}
+
+.band-published-quote p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--color-ink);
+}
+
+.band-published-figures,
+.band-published-source {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink2);
+}
+
+.band-published-source a {
+  color: var(--color-ink);
 }
 
 .band-finding {

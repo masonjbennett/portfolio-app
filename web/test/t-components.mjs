@@ -181,6 +181,11 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   const sheet = css("Plate.css");
   check(/container-type:\s*inline-size/.test(block(sheet, ".plate")), "plate: the plate is the size container of its figure", block(sheet, ".plate"));
   check(/font-size:\s*clamp\(16px,\s*20cqi,\s*28px\)/.test(block(sheet, ".plate-value")), "plate: the figure scales with the plate's width, 16px to 28px", block(sheet, ".plate-value"));
+  // A label that wraps (the band's "Tangency Sharpe (in-sample)" does at desktop width) must not push its
+  // figure below the figures of the plates beside it: the plate is a column and the figure takes the slack.
+  check(/display:\s*flex/.test(block(sheet, ".plate")) && /flex-direction:\s*column/.test(block(sheet, ".plate")) &&
+    /margin-top:\s*auto/.test(block(sheet, ".plate-value")),
+    "plate: a label on two lines leaves the figure level with its neighbours'", block(sheet, ".plate") + block(sheet, ".plate-value"));
 }
 
 // The chosen pill is scrolled into view, by scrolling the row and never the page. jsdom has no

@@ -8,6 +8,8 @@
 //     out (rolling windows, the net-exposure floor) are held here to the code that uses them, and its
 //     solver is the port's: the app's expander names SLSQP (764-797), the port's names neither SLSQP nor scipy.
 // (c) The links: the source link is this repository's own origin, and both links are plain, same-tab links.
+// (d) The dek says what the page does, in place of the title the app's course assignment gave it, and the
+//     methodology says in one line where the tool came from, without naming the course or counting anything.
 import { readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
 import { render, text } from "./_dom.mjs";
@@ -104,6 +106,31 @@ const EMOJI = /\p{Extended_Pictographic}/u;
   check(site?.getAttribute("href") === "https://masonjbennett.com", "links: the footer links masonjbennett.com");
   check(links.length === 2 && links.every((a) => !a.hasAttribute("target")), "links: two plain links, each opening in the same tab");
   r.unmount();
+}
+
+// ---- (d) the dek and the origin line ---------------------------------------------------------------------
+{
+  const r = render(h(Masthead, { analysis: { status: "loading" }, fetching: true }));
+  const dek = text(r.container.querySelector(".masthead-dek") ?? {});
+  const appDek = (APP.split(/\r?\n/).find((l) => /^\s*Mean-Variance Optimization/.test(l)) ?? "").trim().replaceAll("&amp;", "&");
+  check(dek === A.DEK && appDek.length > 0 && dek !== appDek && !/Mean-Variance|Risk Analysis/.test(dek),
+    "dek: the masthead says what the page does, not the app's assignment title", `${dek} | app: ${appDek}`);
+  check(!/\d/.test(dek) && !/\b(best|optimal)\b/i.test(dek) && ["equal-weight", "minimum-variance", "maximum-Sharpe"].every((w) => dek.includes(w)),
+    "dek: no counts and no \"best\", and it names the three portfolios the page builds", dek);
+  r.unmount();
+
+  const f = render(h(Footer));
+  const panel = f.container.querySelector("details.footer-method");
+  const rows = [...(panel?.querySelectorAll(".footer-method-row") ?? [])].map((row) => text(row.querySelector("dd") ?? {}));
+  const origin = rows.filter((t) => /course/i.test(t));
+  check(origin.length === 1 && origin[0] === A.ORIGIN && /^Began as a graduate course project and was improved afterwards\.$/.test(A.ORIGIN),
+    "origin: the methodology says once that the tool began as a graduate course project and was improved afterwards", origin.join(" | "));
+  const m = render(h(Masthead, { analysis: { status: "loading" }, fetching: false }));
+  const page = text(f.container) + " " + text(m.container);
+  m.unmount();
+  check(!/\d/.test(A.ORIGIN) && !/Financial Data|Analytics II|FDA/i.test(page),
+    "origin: the line counts nothing and no course is named on the page", A.ORIGIN);
+  f.unmount();
 }
 
 done("t-about");
