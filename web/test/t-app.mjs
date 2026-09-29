@@ -5,7 +5,7 @@
 // than a tab. Three divergence-ledger entries close here: boundary (the page half), failed-tangency
 // (the band half) and start-date-floor (the page half). Each asserts the app's side, read out of
 // portfolio_app.py or reproduced with the engine, and the port's side, rendered.
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
 import { act, render, setMedia, text } from "./_dom.mjs";
 
@@ -311,13 +311,19 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     ["Five mega-caps", "AAPL MSFT GOOGL AMZN JPM", "0.864", "0.710", "0.659"],
     ["Seven sector ETFs", "XLK XLF XLV XLE XLI XLP XLY", "0.915", "0.450", "0.661"],
     ["Cross-asset", "VTI AGG GLD VNQ EFA", "0.704", "\u22120.247", "0.883"],
-  ]) && P.MEGA_CAP_IN_SAMPLE === "1.107" && P.GMV_BOND_SHARE === "95.3%" && P.PUBLISHED_WHEN === "Sep 2026" &&
+  ]) && P.MEGA_CAP_IN_SAMPLE === "1.107" && P.PUBLISHED_WHEN === "Sep 2026" &&
     P.PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method",
-    "published: the constants are the nine published Sharpe ratios, 1.107, 95.3%, the date and the method note's address", JSON.stringify(nine));
-  const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    "published: the constants are the nine published Sharpe ratios, 1.107, the date and the method note's address", JSON.stringify(nine));
   check(P.CARD_SENTENCE.includes(`${P.MEGA_CAP_IN_SAMPLE} in-sample Sharpe became ${P.PUBLISHED_SETS[0].tangency} out of sample`) &&
-    P.HOLDS === 6 && P.CARD_SENTENCE.includes(`over ${WORDS[P.HOLDS]} rolling one-year holding periods`),
+    P.CARD_SENTENCE.includes("over six rolling one-year holding periods"),
     "published: the site's sentence carries 1.107, 0.659 and the six one-year holds", P.CARD_SENTENCE);
+
+  const WEB = new URL("../", import.meta.url);
+  const srcFiles = (dir) => readdirSync(new URL(dir, WEB), { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? srcFiles(`${dir}${e.name}/`) : /\.tsx?$/.test(e.name) && e.name !== "published.ts" ? [readFileSync(new URL(dir + e.name, WEB), "utf8")] : []);
+  const readers = srcFiles("src/").join("\n");
+  const unread = Object.keys(P).filter((k) => !new RegExp(`\\b${k}\\b`).test(readers));
+  check(unread.length === 0, "published: every figure quoted in published.ts is read somewhere on the page, so none is a spare copy", unread.join(" "));
 
   // The strip in every state the band has: waiting, empty, failed, ready, and ready but not updated.
   const failure = { message: MESSAGES["too-few-downloaded"] };
@@ -378,19 +384,26 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(EX.tangency?.beatsRf === true && noBeat.tangency?.beatsRf === false && failed.tangency === null,
     "plain words: the three analyses reach the band's three sentences", `${EX.tangency?.beatsRf} ${noBeat.tangency?.beatsRf} ${failed.tangency}`);
   const labels = [EX, noBeat, failed].flatMap((a) => snapshotPlates(a).map((p) => p.label));
-  // Rendered text of the band, masthead and footer, without the tooltips' own text (their wording is the app's).
+  // Rendered text of the band, masthead and footer, the tooltips' own text included (the app's words that
+  // called the mix best are replaced, ledger:plain-tip-words), and every accessible name on them.
+  const names = [];
   const shown = [
     render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null })),
     render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false })),
     render(h(Footer)),
   ].map((r) => {
-    r.container.querySelectorAll(".tip-text").forEach((e) => e.remove());
+    r.container.querySelectorAll("[aria-label]").forEach((e) => names.push(e.getAttribute("aria-label")));
     const t = text(r.container);
     r.unmount();
     return t;
   });
   const hits = [...said, ...labels, ...shown].filter((x) => bad.test(x)).map((x) => x.match(bad)[0] + ": " + x.slice(0, 80));
   check(hits.length === 0, "plain words: no \"best\" or \"optimal\" in a band sentence, a plate label, the masthead or the footer", hits.join(" | "));
+  const loose = /\b(best|optimal)|optimally/i;
+  const named = names.filter((x) => loose.test(x));
+  const tipped = shown.filter((x) => /optimally/i.test(x));
+  check(names.some((x) => /^About /.test(x)) && named.length === 0 && tipped.length === 0,
+    "ledger:plain-tip-words the band's tips and accessible names call nothing best or optimal", [...named, ...tipped.map((x) => x.slice(0, 80))].join(" | "));
 }
 
 // ---- (e) ledger:failed-tangency ------------------------------------------------------------------

@@ -20,7 +20,7 @@ const read = (rel) => readFileSync(new URL(rel, web), "utf8");
 const app = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const committed = read("src/content/tooltips.json");
 const TIPS = JSON.parse(committed);
-const { tipText, SHORT_OVERRIDES, TIP_NAMES } = await import("../src/content/tooltips.ts");
+const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, TIP_NAMES } = await import("../src/content/tooltips.ts");
 const { LEVELS } = await import("../src/types.ts");
 const Tip = (await import("../src/components/Tip.tsx")).default;
 const LEVEL_IDS = LEVELS.map((l) => l.id);
@@ -66,11 +66,13 @@ check(same(Object.keys(TIP_NAMES), keys), "tooltips: every key has an accessible
 
 // ---- (c) the app's text with shorting off ----------------------------------------------------------
 let mismatches = [];
-for (const key of keys) for (const level of LEVEL_IDS) if (tipText(key, level) !== TIPS[key][level]) mismatches.push(`${key}/${level}`);
-check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off", mismatches.join(" "));
+for (const key of keys) for (const level of LEVEL_IDS) {
+  if (!WORD_OVERRIDES[key]?.[level] && tipText(key, level) !== TIPS[key][level]) mismatches.push(`${key}/${level}`);
+}
+check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off, bar the reviewed word overrides", mismatches.join(" "));
 mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
-  if (!SHORT_OVERRIDES[key]?.[level] && tipText(key, level, true) !== TIPS[key][level]) mismatches.push(`${key}/${level}`);
+  if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && tipText(key, level, true) !== TIPS[key][level]) mismatches.push(`${key}/${level}`);
 }
 check(mismatches.length === 0, "tooltips: with shorting on, every text not overridden is still the app's", mismatches.join(" "));
 check(tipText("no_such_key", "plain") === "" && tipText("no_such_key", "formula", true) === "",
@@ -103,6 +105,29 @@ for (const [key, byLevel] of Object.entries(SHORT_OVERRIDES)) {
 // The bounds the text states are the solver's (optimize.ts; the app's methodology note, 781-782).
 check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.includes("bounds become [−1,1]"),
   "ledger:short-bounds-copy: [-1, 1] is the bound both the solver and the app's methodology note use");
+
+// ---- (d2) ledger:plain-tip-words ------------------------------------------------------------------
+// The app calls the tangency mix best or optimal at the default level; the plates beside those tips say
+// in-sample. Every such text is replaced, only those are, each was read against the app's current words,
+// and what replaces it says neither word, at either setting of the shorting toggle.
+{
+  const WORDS = /\b(best|optimal)|optimally/i;
+  const said = [];
+  for (const key of keys) for (const level of LEVEL_IDS) if (WORDS.test(TIPS[key][level])) said.push(`${key}/${level}`);
+  const replaced = Object.entries(WORD_OVERRIDES).flatMap(([k, byLevel]) => Object.keys(byLevel).map((l) => `${k}/${l}`));
+  check(said.length >= 2 && same([...said].sort(), [...replaced].sort()),
+    "ledger:plain-tip-words every app text that calls a mix best or optimal is replaced, and only those", `said ${said.join(" ")} | replaced ${replaced.join(" ")}`);
+  for (const [key, byLevel] of Object.entries(WORD_OVERRIDES)) {
+    for (const [level, o] of Object.entries(byLevel)) {
+      const at = `${key}/${level}`;
+      check(o.was === TIPS[key][level], `ledger:plain-tip-words ${at} was reviewed against the app's current text`, TIPS[key][level]);
+      const off = tipText(key, level, false);
+      const on = tipText(key, level, true);
+      check(off === o.now && on === o.now && !WORDS.test(o.now) && /in-sample/.test(o.now),
+        `ledger:plain-tip-words ${at} shows the replacement, which says in-sample and neither best nor optimal`, `${off} | ${on}`);
+    }
+  }
+}
 
 // ---- (e) Tip ---------------------------------------------------------------------------------------
 {

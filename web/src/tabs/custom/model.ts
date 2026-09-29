@@ -241,7 +241,7 @@ export function headline(a: Analysis, v: CustomView): string {
   const base = `${lead} returns ${pct(p.mu)} a year at ${pct(p.sigma)} volatility`;
   if (!Number.isFinite(p.sharpe)) return `${base}; its Sharpe ratio is undefined because its volatility is zero.`;
   const sh = n3(p.sharpe);
-  if (!a.tangency) return `${base}, a Sharpe ratio of ${sh}; the tangency solve failed, so there is no best Sharpe ratio to set it against.`;
+  if (!a.tangency) return `${base}, a Sharpe ratio of ${sh}; the tangency solve failed, so there is no tangency Sharpe ratio to set it against.`;
   const t = n3(a.tangency.sharpe);
   const cmp = sh === t ? "level with" : p.sharpe < a.tangency.sharpe ? "below" : "above";
   return `${base}, a Sharpe ratio of ${sh}, ${cmp} the tangency portfolio's ${t}.`;
@@ -303,7 +303,10 @@ export function wealthTitle(d: WealthData, amount: number, hasCustom: boolean): 
   if (!best) return lead;
   if (format(c.end, "usd0") === format(best.end, "usd0")) return `${lead}, the same as ${best.label}`;
   if (c.end > best.end) return `${lead}, more than any other line here`;
-  return `${lead}; ${best.label} ended highest, at ${format(best.end, "usd0")}`;
+  // GMV and tangency weights were chosen with the whole window's prices, as the Optimization tab's
+  // title says too; a benchmark or equal weights chose nothing.
+  const hindsight = best.role === "gmv" || best.role === "tangency" ? " with hindsight weights" : "";
+  return `${lead}; ${best.label} ended highest, at ${format(best.end, "usd0")}${hindsight}`;
 }
 
 /** The Normalized Weights table (1734-1737), one row per ticker in the entered order. */

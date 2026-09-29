@@ -199,6 +199,7 @@ function close2(x, y) {
 }
 
 // ---- (c) the headline and the wealth title -------------------------------------------------------------
+const hindsightSeen = [];
 for (const set of ["cross", "megacap"]) {
   const o = oracle(set);
   for (const mode of ["long", "short"]) {
@@ -222,14 +223,22 @@ for (const set of ["cross", "megacap"]) {
     near(tag("wealth: the tangency end, within the app's SLSQP noise"), ends.find((e) => e.role === "tangency").end, T.wealth.tan.v.at(-1), 5e-3);
     check(T.wealth.ew.i.at(-1) === o.returns.rows - 1, tag("wealth: the dump's last sample is the last day"));
     const top = ends.filter((e) => e.role !== "custom").reduce((b, e) => (e.end > b.end ? e : b));
-    check(M.wealthTitle(wd, o.w0, true) === `${usd(o.w0)} in the custom mix ended at ${usd(T.wealth.ew.v.at(-1))} on ${o.clean.last}; ${top.label} ended highest, at ${usd(top.end)}`,
+    const hind = top.role === "gmv" || top.role === "tangency" ? " with hindsight weights" : "";
+    check(M.wealthTitle(wd, o.w0, true) === `${usd(o.w0)} in the custom mix ended at ${usd(T.wealth.ew.v.at(-1))} on ${o.clean.last}; ${top.label} ended highest, at ${usd(top.end)}${hind}`,
       tag("wealth title: where the custom mix ended, against the highest line"), M.wealthTitle(wd, o.w0, true));
+    // D1's words on this tab as on Optimization: a GMV or tangency line that ends highest had its weights
+    // picked from the same prices, and the title says so.
+    hindsightSeen.push(top.role);
+    check(M.wealthTitle(wd, o.w0, true).endsWith(" with hindsight weights") === (top.role === "gmv" || top.role === "tangency"),
+      tag("wealth title: 'with hindsight weights' exactly when GMV or tangency ended highest"), `${top.role}: ${M.wealthTitle(wd, o.w0, true)}`);
   }
 }
+check(hindsightSeen.some((r) => r === "gmv" || r === "tangency"),
+  "wealth title: the fixtures reach a hindsight line ending highest, so the check above is not vacuous", hindsightSeen.join(","));
 {
   const failed = fixtureAnalysis("cross", { allowShort: true, rf: 5 });
   check(failed.tangency === null, "setup: at a 500% rate the shorting tangency solve has no answer");
-  check(/, a Sharpe ratio of −?\d+\.\d{3}; the tangency solve failed, so there is no best Sharpe ratio to set it against\.$/.test(M.headline(failed, M.customView(failed, {}))),
+  check(/, a Sharpe ratio of −?\d+\.\d{3}; the tangency solve failed, so there is no tangency Sharpe ratio to set it against\.$/.test(M.headline(failed, M.customView(failed, {}))),
     "headline: a failed tangency is named, not compared", M.headline(failed, M.customView(failed, {})));
   const long = fixtureAnalysis("cross");
   const tan = M.customView(long, byTicker(long, long.tangency.w));

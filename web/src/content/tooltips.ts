@@ -6,6 +6,11 @@
 // tip() ignores the shorting toggle (586 reads only the level), so with shorting on its Advanced
 // texts still promise long-only weights (554 "wᵢ≥0", 559 "long-only constraints") while the solver
 // runs with [-1, 1] bounds (781). Here the text follows the toggle.
+//
+// A second, kept the same way: at the default level the app calls the tangency mix "the best possible"
+// score reached by mixing "optimally" (554) and "the best risk-adjusted portfolio mix" (558). The
+// plates those tips sit on say in-sample, and the tips should too: the mix scored highest on the very
+// prices its weights were picked from, which describes the past and promises nothing.
 import type { Level, TipKey } from "../types.ts";
 import TIPS from "./tooltips.json" with { type: "json" };
 
@@ -38,6 +43,29 @@ export const SHORT_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Lev
   },
 };
 
+export interface WordOverride {
+  // The app's text this override was reviewed against; t-tooltips fails when the app's changes.
+  was: string;
+  // What the port shows instead, whatever the shorting toggle says.
+  now: string;
+}
+
+// Every app text that calls a mix best or optimal, and its replacement.
+export const WORD_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Level, WordOverride>>>>> = {
+  best_sharpe: {
+    plain: {
+      was: "The best possible risk-vs-reward score achievable by mixing these stocks optimally.",
+      now: "The highest risk-vs-reward score any mix of these assets reached over this window, with the weights picked from the same prices it is scored on: an in-sample figure, not a forecast.",
+    },
+  },
+  tangency_return: {
+    plain: {
+      was: "The expected yearly return of the best risk-adjusted portfolio mix.",
+      now: "The average yearly return of the mix with the highest risk-vs-reward score over this window, its weights picked from the same prices: in-sample, not a forecast.",
+    },
+  },
+};
+
 // A short human name per key, for the info mark's accessible label ("About Sharpe ratio").
 export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
   return: "annual return",
@@ -45,7 +73,7 @@ export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
   sharpe: "Sharpe ratio",
   sortino: "Sortino ratio",
   max_dd: "maximum drawdown",
-  best_sharpe: "best Sharpe",
+  best_sharpe: "tangency Sharpe (in-sample)",
   tangency_return: "tangency return",
   bench_return: "benchmark return",
   bench_vol: "benchmark volatility",
@@ -56,7 +84,7 @@ export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
 // The tooltip text for a key at a level; "" when there is none (586: no text, no info mark).
 // allowShort defaults to the app's default, off (742-752).
 export function tipText(key: TipKey, level: Level, allowShort = false): string {
-  const text = ORACLE_TIPS[key]?.[level] ?? "";
+  const text = WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
   if (!allowShort) return text;
   return SHORT_OVERRIDES[key]?.[level]?.short ?? text;
 }

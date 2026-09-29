@@ -4,17 +4,15 @@
 // on screen; these are what the same three constructions earned on years they had not seen.
 //
 // The figures are STRINGS, written exactly as the site prints them ("0.710" keeps its zero, the negative uses
-// the minus sign U+2212), so a quote can be compared character for character. If the site's wording or
-// figures change, change them here and test/t-app.mjs goes red until the two copies agree again.
+// the minus sign U+2212), so a quote can be compared character for character. Nothing here reads the site
+// itself: when its card or method note changes, change this file and test/t-app.mjs's copy together, or
+// t-app goes red on the one left behind.
 
 /** Where the result is published: the site's method note, and the only place the strip links to. */
 export const PUBLISHED_URL = "https://masonjbennett.com/projects#portfolio-method";
 
 /** When it was published, as the strip dates it. */
 export const PUBLISHED_WHEN = "Sep 2026";
-
-/** The number of one-year holding periods in the test. */
-export const HOLDS = 6;
 
 /** The project card's sentence, word for word. */
 export const CARD_SENTENCE =
@@ -41,6 +39,3 @@ export const PUBLISHED_SETS: readonly PublishedSet[] = [
 
 /** The five mega-caps' maximum-Sharpe portfolio, scored on the years it was fitted to. */
 export const MEGA_CAP_IN_SAMPLE = "1.107";
-
-/** The cross-asset minimum-variance portfolio's weight in aggregate bonds going into 2022. */
-export const GMV_BOND_SHARE = "95.3%";
