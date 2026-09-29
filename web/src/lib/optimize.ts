@@ -132,12 +132,85 @@ function sharpeOf(w: Vec, m: Vec, S: Mat, rf: number): Tangency {
   return { w, ...p, sharpe, beatsRf: sharpe > 0 };
 }
 
-// Maximum Sharpe ratio (optimize_tangency, 936-944).
-//
-// Long-only: every face of the simplex, n <= 10 so at most 1,023 of them. On a face F the Sharpe
+// The face walk below costs 2^n - 1 small solves, so it doubles with every asset. tangency() uses it
+// only up to FACES_UP_TO assets (4,095 faces), and only when no asset beats the risk-free rate.
+export const FACES_UP_TO = 12;
+// The walk itself refuses more than FACES_CAP assets, whoever calls it. `1 << n` is 2^n only while
+// n <= 30: at 31 it is negative and at 32 it is 1 again, so an unguarded walk returns nothing there
+// and, past 32, a portfolio drawn from a handful of faces. 2^20 faces already take seconds.
+export const FACES_CAP = 20;
+
+// Long-only: every face of the simplex, at most 2^FACES_CAP - 1 of them. On a face F the Sharpe
 // ratio is stationary exactly at w proportional to S_F^-1 (m_F - rf/252); the best feasible one is
 // the global maximum. This is also right when no asset beats the risk-free rate, where it returns
 // the least-negative portfolio, as the app's SLSQP does; beatsRf says so.
+export function tangencyFaces(m: Vec, S: Mat, rf: number): Tangency | null {
+  const n = m.length;
+  if (n > FACES_CAP) return null;
+  const e = m.map((x) => x - rf / TRADING_DAYS);
+  let best: Tangency | null = null;
+  for (let mask = 1; mask < 1 << n; mask++) {
+    const F: number[] = [];
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) F.push(i);
+    const y = cholSolve(F.map((i) => F.map((j) => S[i][j])), F.map((i) => e[i]));
+    if (!y) continue;
+    const tot = y.reduce((a, b) => a + b, 0);
+    if (tot === 0) continue;
+    const wF = y.map((v) => v / tot);
+    if (!wF.every((v) => v > 0)) continue;
+    const w = new Array<number>(n).fill(0);
+    F.forEach((i, k) => (w[i] = wF[k]));
+    const cand = sharpeOf(w, m, S, rf);
+    if (!best || cand.sharpe > best.sharpe) best = cand;
+  }
+  return best;
+}
+
+// Long-only, when at least one asset earns more than the risk-free rate: the homogenised QP, the
+// long-only twin of the shorting branch in tangency(). Minimise y'Sy subject to e'y = 1 and y >= 0,
+// then w = y / 1'y. A long-only mix beats the risk-free rate exactly when one of its assets does, so
+// the problem is feasible exactly then; otherwise the result is null. One solve at any n.
+export function tangencyLongQP(m: Vec, S: Mat, rf: number): Tangency | null {
+  const n = m.length;
+  const e = m.map((x) => x - rf / TRADING_DAYS);
+  if (!e.some((x) => x > 0)) return null;
+  // The daily excess means are ~1e-4; divided by the largest, the row is O(1).
+  const c = Math.max(...e.map(Math.abs));
+  const y = qp(scaled(S), [{ a: e.map((x) => x / c), b: 1 }, ...boxCons(n, false)], 1);
+  if (!y) return null;
+  // y >= 0 holds to rounding at the active bounds; a weight of -1e-18 is that rounding, not a short.
+  const yp = y.map((v) => Math.max(v, 0));
+  const tot = yp.reduce((a, b) => a + b, 0);
+  if (!(tot > 0)) return null;
+  return sharpeOf(yp.map((v) => v / tot), m, S, rf);
+}
+
+// Long-only, when no asset earns more than the risk-free rate, the best mix is one asset alone: the
+// one with the highest Sharpe ratio of its own. Every excess mean is then negative (or zero), so any
+// mix z can be scaled to (-e)'z = 1, and maximising Sharpe becomes maximising z'Sz, a convex function,
+// over a simplex; the maximum of a convex function over a simplex sits at a vertex. Exact at any n, and
+// the same portfolio the face walk finds through its one-asset faces.
+export function bestLoneAsset(m: Vec, S: Mat, rf: number): Tangency | null {
+  const n = m.length;
+  let best: Tangency | null = null;
+  for (let i = 0; i < n; i++) {
+    const w = new Array<number>(n).fill(0);
+    w[i] = 1;
+    const cand = sharpeOf(w, m, S, rf);
+    if (Number.isFinite(cand.sharpe) && (!best || cand.sharpe > best.sharpe)) best = cand;
+  }
+  return best;
+}
+
+// Maximum Sharpe ratio (optimize_tangency, 936-944).
+//
+// Long-only, when at least one asset beats the risk-free rate: tangencyLongQP, one exact solve. It
+// replaced the face walk, which took about 0.2 s at 16 assets and 4 s at 20 (measured Sep 29 2026,
+// against well under 2 ms for the QP up to 50) and whose `1 << n` fails from 31 up.
+//
+// Long-only, when none does: the least-negative portfolio, as the app's SLSQP does; beatsRf says so.
+// Up to FACES_UP_TO assets the face walk finds it, as it always has; past that, bestLoneAsset, which
+// is exact and returns the same portfolio.
 //
 // Shorting: the homogenised QP. With y = w / (excess return), maximising Sharpe is minimising
 // y'Sy subject to e'y = 1 and -(1'y) <= y_i <= 1'y, then w = y / 1'y. It is infeasible exactly when
@@ -159,20 +232,6 @@ export function tangency(m: Vec, S: Mat, rf: number, allowShort: boolean): Tange
     if (!(tot > 0)) return null;
     return sharpeOf(y.map((v) => v / tot), m, S, rf);
   }
-  let best: Tangency | null = null;
-  for (let mask = 1; mask < 1 << n; mask++) {
-    const F: number[] = [];
-    for (let i = 0; i < n; i++) if (mask & (1 << i)) F.push(i);
-    const y = cholSolve(F.map((i) => F.map((j) => S[i][j])), F.map((i) => e[i]));
-    if (!y) continue;
-    const tot = y.reduce((a, b) => a + b, 0);
-    if (tot === 0) continue;
-    const wF = y.map((v) => v / tot);
-    if (!wF.every((v) => v > 0)) continue;
-    const w = new Array<number>(n).fill(0);
-    F.forEach((i, k) => (w[i] = wF[k]));
-    const cand = sharpeOf(w, m, S, rf);
-    if (!best || cand.sharpe > best.sharpe) best = cand;
-  }
-  return best;
+  if (e.some((x) => x > 0)) return tangencyLongQP(m, S, rf);
+  return n <= FACES_UP_TO ? tangencyFaces(m, S, rf) : bestLoneAsset(m, S, rf);
 }

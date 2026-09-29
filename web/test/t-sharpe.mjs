@@ -140,4 +140,98 @@ const offenders = files.flatMap((f) =>
 check(files.length > 20 && offenders.length === 0, "sharpe: no line in src/ that names a Sharpe ratio formats to two places", offenders.join(", "));
 console.log(`  read ${seen.prose} in sentences (${branches.size} distinct), ${seen.plates} on plates, ${seen.cells} in table cells`);
 
+// The Sharpe ratio behind those figures, at basket sizes past the page's ten. Long-only tangency once
+// walked every face of the simplex through `1 << n`, which returns nothing at 31 and 32 assets and a
+// mix drawn from a few faces past that. At each size below the solve must return a valid long-only
+// portfolio that is the maximum: the KKT conditions hold (the problem is convex once homogenised, so
+// they prove it), and no single asset, equal weights or seeded random mix does better.
+const { tangency, tangencyFaces, FACES_CAP } = await import("../src/lib/optimize.ts");
+const { mean, covMatrix, dot, matVec } = await import("../src/lib/num.ts");
+function seeded(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// Daily returns from three factors plus noise, the same numbers on every run.
+function panel(n, seed, T = 750) {
+  const rand = seeded(seed);
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
+  const beta = Array.from({ length: n }, () => [0, 1, 2].map(() => 0.6 + 0.4 * gauss()));
+  const drift = Array.from({ length: n }, () => (0.08 + 0.12 * gauss()) / 252);
+  const vol = Array.from({ length: n }, () => (0.1 + 0.25 * rand()) / Math.sqrt(252));
+  const cols = Array.from({ length: n }, () => new Array(T));
+  for (let t = 0; t < T; t++) {
+    const f = [0, 1, 2].map(() => 0.008 * gauss());
+    for (let i = 0; i < n; i++) cols[i][t] = drift[i] + dot(beta[i], f) + vol[i] * gauss();
+  }
+  return { m: cols.map(mean), S: covMatrix(cols) };
+}
+const sharpeAt = (w, m, S, rf) => (252 * dot(w, m) - rf) / Math.sqrt(252 * dot(w, matVec(S, w)));
+// What the tangency has to beat: every single asset, equal weights, and 400 seeded random mixes, half
+// of them on a random subset of the assets.
+function rivals(n, seed) {
+  const rand = seeded(seed);
+  const out = [new Array(n).fill(1 / n)];
+  for (let i = 0; i < n; i++) out.push(new Array(n).fill(0).map((_, k) => (k === i ? 1 : 0)));
+  for (let r = 0; r < 400; r++) {
+    const raw = new Array(n).fill(0).map(() => (r % 2 && rand() < 0.7 ? 0 : -Math.log(1 - rand())));
+    const tot = raw.reduce((a, b) => a + b, 0) || 1;
+    out.push(raw.map((x) => x / tot));
+  }
+  return out.filter((w) => w.some((x) => x > 0));
+}
+const RF = 0.04;
+for (const n of [12, 16, 31, 32, 50]) {
+  const { m, S } = panel(n, 1000 + n);
+  const t = tangency(m, S, RF, false);
+  const at = `sharpe: tangency at ${n} assets`;
+  check(!!t && t.w.length === n && t.w.every((x) => Number.isFinite(x) && x >= 0) && Math.abs(t.w.reduce((a, b) => a + b, 0) - 1) <= 1e-12,
+    `${at} returns a long-only portfolio, weights summing to 1`, t ? `min ${Math.min(...t.w)}, sum ${t.w.reduce((a, b) => a + b, 0)}` : "null");
+  if (!t) continue;
+  check(t.beatsRf && t.w.filter((x) => x > 0).length >= 2, `${at} holds a mix that beats the risk-free rate`,
+    `${t.w.filter((x) => x > 0).length} held`);
+  // KKT for long-only maximum Sharpe: the gradient vanishes on the assets held and is <= 0 off them.
+  const e = m.map((x) => x - RF / 252);
+  const Sw = matVec(S, t.w);
+  const v = dot(t.w, Sw);
+  const ex = dot(e, t.w);
+  const grad = e.map((x, i) => x / Math.sqrt(v) - (ex * Sw[i]) / v ** 1.5);
+  const scale = Math.max(...grad.map(Math.abs), ...e.map((x) => Math.abs(x) / Math.sqrt(v)));
+  check(t.w.every((w, i) => (w > 1e-12 ? Math.abs(grad[i]) <= 1e-9 * scale : grad[i] <= 1e-9 * scale)), `${at} satisfies KKT`);
+  const best = Math.max(...rivals(n, 2000 + n).map((w) => sharpeAt(w, m, S, RF)));
+  check(t.sharpe >= best - 1e-12, `${at} is no worse than any single asset, equal weights or 400 random mixes`, `${t.sharpe} vs ${best}`);
+  if (n <= 16) {
+    const f = tangencyFaces(m, S, RF);
+    check(!!f && t.sharpe >= f.sharpe - 1e-12, `${at} is no worse than the face walk`, `${t.sharpe} vs ${f && f.sharpe}`);
+  }
+}
+// When no asset beats the risk-free rate the best long-only mix is one asset alone, and above 12 assets
+// the page gets it without the face walk. 32 is where `1 << n` is 1 again.
+for (const n of [16, 32, 50]) {
+  const { m, S } = panel(n, 1000 + n);
+  const rf = 252 * Math.max(...m) + 0.05;
+  const t = tangency(m, S, rf, false);
+  const lone = m.map((_, i) => sharpeAt(m.map((__, k) => (k === i ? 1 : 0)), m, S, rf));
+  const top = lone.indexOf(Math.max(...lone));
+  check(!!t && !t.beatsRf && t.w[top] === 1 && t.w.filter((x) => x !== 0).length === 1,
+    `sharpe: at ${n} assets with no asset beating rf, the tangency is the best single asset, flagged`, t ? `sharpe ${t.sharpe}` : "null");
+  const best = Math.max(...rivals(n, 3000 + n).map((w) => sharpeAt(w, m, S, rf)));
+  check(!!t && t.sharpe >= best - 1e-12, `sharpe: at ${n} assets with no asset beating rf, no mix does better`, `${t && t.sharpe} vs ${best}`);
+  if (n === 16) {
+    const f = tangencyFaces(m, S, rf);
+    check(!!f && maxDiff(f.w, t.w) === 0, "sharpe: at 16 assets with no asset beating rf, the face walk agrees");
+  }
+}
+function maxDiff(a, b) {
+  return Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+}
+// The face walk refuses a basket past its cap instead of running `1 << n` into the ground.
+// 33: past 32, `1 << n` wraps round to 2, 4, ..., so an unguarded walk would answer, from asset 0 alone.
+check(tangencyFaces(...Object.values(panel(FACES_CAP + 13, 33)), RF) === null, `sharpe: the face walk refuses ${FACES_CAP + 13} assets`);
+
 done("t-sharpe");

@@ -9,22 +9,73 @@
 //   weights vs the shipping SLSQP (T2)               1.5e-2 GMV, 5e-3 tangency: the oracle's own noise
 //   weights vs the oracle re-run at ftol 1e-15       TIGHT, below
 //   frontier sigma at the oracle's kept targets (T3) 1e-8 relative
+//   long-only tangency vs the face walk (T4)         1e-6 in weights, below
 // This suite reproduces the app, divergences included. What the port does DIFFERENTLY, on purpose,
 // is asserted in t-ledger.mjs.
 import { check, near, nearAll, maxAbsDiff, done } from "./_assert.mjs";
 import { SETS, derive } from "./_fixtures.mjs";
-import { mean, covMatrix, corrMatrix, linspace } from "../src/lib/num.ts";
+import { mean, covMatrix, corrMatrix, linspace, dot } from "../src/lib/num.ts";
 import {
   annualizedStats, skew, excessKurtosis, maxDrawdown, drawdowns, wealth, capm,
   rollingStd, rollingCorr, probplot,
 } from "../src/lib/stats.ts";
-import { gmv, tangency, frontierAt } from "../src/lib/optimize.ts";
+import {
+  gmv, tangency, frontierAt, tangencyFaces, tangencyLongQP, bestLoneAsset, FACES_UP_TO,
+} from "../src/lib/optimize.ts";
 import { summaryRow, riskContribution, portfolioReturns, windows, windowMoments } from "../src/lib/portfolio.ts";
 
 const REL = 1e-12;
 const TIGHT = 1e-7; // weights vs the ftol-1e-15 re-run; measured worst 8.9e-8, see where it is used
 
 const at = (series, idx) => idx.map((i) => series[i]);
+
+// T4. Long-only tangency is one QP when an asset beats the risk-free rate, and the best single asset
+// when none does (the face walk up to FACES_UP_TO assets). The face walk solved every face of the
+// simplex exactly and was the shipping answer up to 10 assets, so it is the reference here: each new
+// path must return its portfolio. Measured Sep 29 2026: the worst gap on the fixtures and the seeded
+// 12- and 16-asset panels is a few ulps (about 1e-15), so 1e-6 is a wide margin, not a fit.
+const T4 = 1e-6;
+const t4 = { worst: 0, qp: 0, lone: 0 };
+function againstFaces(label, mm, SS, rf) {
+  const f = tangencyFaces(mm, SS, rf);
+  const beats = mm.some((x) => x - rf / 252 > 0);
+  const p = beats ? tangencyLongQP(mm, SS, rf) : bestLoneAsset(mm, SS, rf);
+  const how = beats ? "QP" : "best single asset";
+  check(!!f && !!p, `${label}: the face walk and the ${how} both solve`);
+  if (!f || !p) return;
+  t4[beats ? "qp" : "lone"] += 1;
+  const d = maxAbsDiff(p.w, f.w);
+  t4.worst = Math.max(t4.worst, d);
+  check(d <= T4 && p.beatsRf === f.beatsRf, `${label}: the ${how} = the face walk's weights`, d.toExponential(2));
+  check(p.sharpe >= f.sharpe - 1e-12 * Math.max(1, Math.abs(f.sharpe)), `${label}: the ${how}'s Sharpe is no worse`,
+    `${p.sharpe} vs ${f.sharpe}`);
+  // ...and tangency() hands out that path: the QP at any size, the face walk for the rest up to FACES_UP_TO.
+  const t = tangency(mm, SS, rf, false);
+  const via = beats || mm.length > FACES_UP_TO ? p : f;
+  check(!!t && maxAbsDiff(t.w, via.w) === 0, `${label}: tangency() takes the ${beats ? "QP" : mm.length > FACES_UP_TO ? "single-asset" : "face-walk"} path`);
+}
+
+// A seeded panel of daily returns, three factors plus noise: the same numbers on every run.
+function panel(n, seed, T = 750) {
+  let s = seed >>> 0;
+  const rand = () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
+  const beta = Array.from({ length: n }, () => [0, 1, 2].map(() => 0.6 + 0.4 * gauss()));
+  const drift = Array.from({ length: n }, () => (0.08 + 0.12 * gauss()) / 252);
+  const vol = Array.from({ length: n }, () => (0.1 + 0.25 * rand()) / Math.sqrt(252));
+  const cols = Array.from({ length: n }, () => new Array(T));
+  for (let t = 0; t < T; t++) {
+    const f = [0, 1, 2].map(() => 0.008 * gauss());
+    for (let i = 0; i < n; i++) cols[i][t] = drift[i] + dot(beta[i], f) + vol[i] * gauss();
+  }
+  return { m: cols.map(mean), S: covMatrix(cols) };
+}
 
 function isoOf(text) {
   const d = new Date(text + " 00:00:00");
@@ -208,6 +259,27 @@ for (const name of SETS) {
         `${t && t.sharpe} vs ${e.sharpe}`);
     }
   }
+
+  // T4 on the fixture: tab 4 and every tab-6 window, at the fixture's rate and at 30%.
+  const sets = [["tab 4", m, S], ...o.modes.long.windows.map((ow) => {
+    const w = windowMoments(cols, ow.lb);
+    return [ow.label, w.m, w.S];
+  })];
+  for (const [label, mm, SS] of sets) {
+    for (const rf of [o.rf, o.rfHigh.rf]) againstFaces(tag(`T4 ${label}, rf ${rf}`), mm, SS, rf);
+  }
 }
+
+// T4 past the page's ten assets: 12, the largest the face walk still serves, and 16, above it. Each at
+// a 4% rate, where the QP answers, and at a rate above every asset's mean, where none beats it.
+for (const [n, seed] of [[12, 1012], [16, 1016]]) {
+  const { m, S } = panel(n, seed);
+  const held = tangencyFaces(m, S, 0.04).w.filter((x) => x > 0).length;
+  check(held >= 2 && held < n, `T4 seeded ${n} assets: the tangency holds a mix, not one asset or all`, `${held} held`);
+  againstFaces(`T4 seeded ${n} assets, rf 4%`, m, S, 0.04);
+  againstFaces(`T4 seeded ${n} assets, no asset beats rf`, m, S, 252 * Math.max(...m) + 0.05);
+}
+check(t4.qp >= 40 && t4.lone >= 10, "T4 reaches both paths, the QP and the best single asset", JSON.stringify(t4));
+console.log(`  T4: ${t4.qp} QP and ${t4.lone} single-asset solves against the face walk, worst weight gap ${t4.worst.toExponential(2)}`);
 
 done("t-parity");

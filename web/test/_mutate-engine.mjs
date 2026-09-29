@@ -1,8 +1,10 @@
 // Mutation check for the engine: every mutation below reintroduces a plausible defect, and the suite
 // must FAIL on each one. A mutation the suite survives is an assertion that checks nothing.
 //
-//   node test/_mutate-engine.mjs
+//   node test/_mutate-engine.mjs                          every mutation
+//   node test/_mutate-engine.mjs src/lib/optimize.ts      only that file's mutations
 //
+// A file argument that no mutation names is an ERROR (exit 2), so a typo cannot pass as zero survivors.
 // It refuses to start if the suite is red unmutated, and a `find` that no longer matches is an ERROR
 // (that is how a refactor shows up), never a silent skip. Files are restored after every mutation.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -39,6 +41,13 @@ const M = [
   ["src/lib/optimize.ts", "cons.push({ a: new Array<number>(n).fill(1).map((v, k) => (k === i ? v - 1 : v)), b: 0 });", "", "short tangency loses its upper bound"],
   ["src/lib/optimize.ts", "if (Math.abs(t - top.mu) <= 1e-12 * Math.abs(top.mu)) {", "if (false) {", "no vertex fallback at the top of the frontier"],
   ["src/lib/optimize.ts", "for (const i of m.map((_, i) => i).sort((a, b) => m[b] - m[a])) {", "for (const i of m.map((_, i) => i).sort((a, b) => m[a] - m[b])) {", "maximum return spends on the worst means first"],
+  ["src/lib/optimize.ts", "if (n > FACES_CAP) return null;", "", "the face walk runs past its cap, into `1 << n` overflow"],
+  ["src/lib/optimize.ts", "if (e.some((x) => x > 0)) return tangencyLongQP(m, S, rf);", "if (e.every((x) => x > 0)) return tangencyLongQP(m, S, rf);", "long-only tangency skips the QP unless every asset beats rf"],
+  ["src/lib/optimize.ts", "return n <= FACES_UP_TO ? tangencyFaces(m, S, rf) : bestLoneAsset(m, S, rf);", "return tangencyFaces(m, S, rf);", "the face walk serves every size when nothing beats rf"],
+  ["src/lib/optimize.ts", "[{ a: e.map((x) => x / c), b: 1 }, ...boxCons(n, false)], 1);", "[{ a: e.map((x) => x / c), b: 1 }, ...boxCons(n, true)], 1);", "long-only tangency QP allows short positions"],
+  ["src/lib/optimize.ts", "if (!e.some((x) => x > 0)) return null;", "if (e.some((x) => x > 0)) return null;", "long-only tangency QP refuses exactly the problems it can solve"],
+  ["src/lib/optimize.ts", "return sharpeOf(yp.map((v) => v / tot), m, S, rf);", "return sharpeOf(yp, m, S, rf);", "long-only tangency QP weights not normalised to 1"],
+  ["src/lib/optimize.ts", "if (Number.isFinite(cand.sharpe) && (!best || cand.sharpe > best.sharpe)) best = cand;", "if (Number.isFinite(cand.sharpe) && (!best || cand.sharpe < best.sharpe)) best = cand;", "nothing beats rf: the worst single asset instead of the best"],
   // portfolio.ts
   ["src/lib/portfolio.ts", "return w.map((x, i) => (x * marginal[i]) / v);", "return w.map((x, i) => x * marginal[i]);", "risk contribution not normalised"],
   ["src/lib/portfolio.ts", "return { ...p, sortino: annualizedStats(r, rf).sortino, mdd: maxDrawdown(r, includeStart) };", "return { ...p, sortino: annualizedStats(r, 0).sortino, mdd: maxDrawdown(r, includeStart) };", "portfolio Sortino at rf 0"],
@@ -57,13 +66,19 @@ const M = [
   ["src/lib/clean.ts", "if (s) seen.add(s);", "seen.add(s);", "blank tickers kept"],
 ];
 
+const only = process.argv[2] ? process.argv[2].replace(/\\/g, "/").replace(/^\.\//, "") : null;
+const todo = only ? M.filter(([file]) => file === only) : M;
+if (!todo.length) {
+  console.log(`ERROR  no mutation names ${only}; files with mutations: ${[...new Set(M.map(([f]) => f))].join(", ")}`);
+  process.exit(2);
+}
 if (run() !== 0) {
   console.log("The suite is red UNMUTATED; fix that first.");
   process.exit(2);
 }
 let killed = 0;
 const survivors = [];
-for (const [file, find, replace, why] of M) {
+for (const [file, find, replace, why] of todo) {
   const path = root + file;
   const src = readFileSync(path, "utf8");
   const hits = src.split(find).length - 1;
@@ -80,5 +95,5 @@ for (const [file, find, replace, why] of M) {
   }
 }
 for (const s of survivors) console.log(`SURVIVED  ${s}`);
-console.log(`_mutate-engine: ${killed}/${M.length} mutations killed`);
+console.log(`_mutate-engine: ${killed}/${todo.length} mutations killed${only ? ` (${only} only)` : ""}`);
 process.exit(survivors.length ? 1 : 0);
