@@ -62,7 +62,7 @@ export const METHODS: readonly Method[] = [
   {
     term: "Risk-free rate",
     text:
-      `The mean 3-month Treasury yield from FRED (series DGS3MO) over the days the prices cover, with the latest yield shown beside it in the settings; or the rate typed there; ` +
+      `The mean 3-month Treasury yield from FRED (series DGS3MO) over the days the prices cover, with the latest yield shown beside it in the settings; or the rate typed there; the example shown before live prices arrive keeps the rate it was saved with; ` +
       `${pct(RF_FALLBACK)} when FRED cannot be reached.`,
   },
   {

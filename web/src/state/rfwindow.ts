@@ -39,7 +39,7 @@ export interface RfWindow {
 
 /**
  * What the numbers beside the rail are scored against, and why:
- * - "manual": the rate typed into the rail (or "Use today's rate", which types today's in);
+ * - "manual": a fixed rate set in the rail, typed or written in by "Use today's rate instead";
  * - "example": the baked example's own rate, kept until live prices replace it;
  * - "window": the mean yield over the window (the default);
  * - "today": the latest yield, when the window's series could not be had;

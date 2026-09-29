@@ -189,29 +189,79 @@ const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
 check(prefs.amount === 98765 && prefs.level === "formula" && !/98765/.test(localStorage.getItem(SETTINGS_KEY)),
   "storage: the amount and level are remembered in this browser, the amount only in the prefs", JSON.stringify(prefs));
 
-// ---- the window moves: the rate is asked for again from the new start --------------------------------------
+// ---- the window moves: the rate is asked for again from an earlier start, never a later one -----------------
 {
   const n = rfCalls().length;
   routes[RF_URL] = (u) => Promise.resolve(json(rfAnswer(new URL(u, "http://x").searchParams.get("start"))));
   await act(async () => {
-    wb.setSettings({ start: "2020-01-02" });
+    wb.setSettings({ start: "2018-06-01" });
     await sleep(0);
   });
   check(rfCalls().length === n, "window: a new start is not asked for at once (it waits like prices do)");
   await later();
-  check(rfCalls().length === n + 1 && rfCalls().at(-1).url === "/api/rf?start=2020-01-02",
-    "window: after the pause, one rate request from the new start", rfCalls().slice(n).map((c) => c.url).join(" "));
+  check(rfCalls().length === n + 1 && rfCalls().at(-1).url === "/api/rf?start=2018-06-01",
+    "window: after the pause, one rate request from the new, earlier start", rfCalls().slice(n).map((c) => c.url).join(" "));
   routes[RF_URL] = () => Promise.resolve(json({ error: "upstream", message: "FRED did not answer." }, 502));
   await act(async () => {
-    wb.setSettings({ start: "2019-06-03" });
+    wb.setSettings({ start: "2018-03-01" });
     await sleep(0);
   });
   await later();
-  check(wb.rf.status === "ready" && wb.rf.value.rate === 0.041,
+  check(rfCalls().length === n + 2 && wb.rf.status === "ready" && wb.rf.value.rate === 0.041,
     "window: a failed lookup for a new start keeps today's yield from the last good answer", JSON.stringify(wb.rf).slice(0, 200));
   routes[RF_URL] = (u) => Promise.resolve(json(rfAnswer(new URL(u, "http://x").searchParams.get("start"))));
+  const m = rfCalls().length;
+  await act(async () => {
+    wb.setSettings({ start: "2020-01-02" });
+    await sleep(0);
+  });
+  await later();
   await act(async () => {
     wb.setSettings({ start: EX.start });
+    await sleep(0);
+  });
+  await later();
+  check(rfCalls().length === m, "window: a later start asks for nothing, since the series held covers it",
+    rfCalls().slice(m).map((c) => c.url).join(" "));
+}
+
+// ---- the window moves later while its prices load: the numbers on screen stay as they are -------------------
+{
+  const kept = { rf: wb.settings.rf, allowShort: wb.settings.allowShort };
+  await act(async () => {
+    wb.setSettings({ rf: null, allowShort: false });
+    await sleep(0);
+  });
+  await later();
+  const before = ready();
+  check(before?.source === "live" && wb.rf.value.basis === "window" && Math.abs(before.rf - meanOver(before)) < 1e-15,
+    "setup: live prices on screen, scored at the rate over their window", `${before?.source} ${wb.rf.value?.basis}`);
+  const savedPx = routes["/api/prices"];
+  const px = deferred();
+  routes["/api/prices"] = () => px.p;
+  const n = rfCalls().length;
+  const k = changes().length;
+  await act(async () => {
+    wb.setSettings({ start: "2021-01-04" });
+    await sleep(0);
+  });
+  await later();
+  const mid = ready();
+  check(wb.fetching && rfCalls().length === n && wb.rf.value.basis === "window" && mid.rf === before.rf &&
+    mid.tangency.sharpe === before.tangency.sharpe && changes().length === k,
+    "window later: while its prices load, the prices on screen keep their own window's rate and the numbers do not change",
+    `fetching ${wb.fetching} calls ${rfCalls().slice(n).map((c) => c.url)} basis ${wb.rf.value.basis} rf ${mid.rf} vs ${before.rf}`);
+  await act(async () => {
+    px.resolve(json({ error: "upstream", message: "Yahoo did not answer." }, 502));
+    await sleep(0);
+  });
+  const after = ready();
+  check(!wb.fetching && wb.failure !== null && wb.rf.value.basis === "window" && after.rf === before.rf && changes().length === k,
+    "window later: if those prices never come, what is on screen stays at its window's rate, and the rail does not say the rate failed",
+    `basis ${wb.rf.value.basis} rf ${after.rf}`);
+  routes["/api/prices"] = savedPx;
+  await act(async () => {
+    wb.setSettings({ start: EX.start, ...kept });
     await sleep(0);
   });
   await later();
@@ -317,6 +367,41 @@ view.unmount();
   const b = ready();
   check(b?.source === "live" && Math.abs(b.rf - meanOver(b)) < 1e-15 && !wb.fetching && changes().length === 2,
     "cold load: when the rate lands the live prices show, at the rate over their window, in one change", changes().join(" | "));
+  v.unmount();
+}
+
+// ---- cold load, prices first, then a later start before the rate lands --------------------------------------------
+{
+  fresh();
+  const late = deferred();
+  const next = deferred();
+  let asked = 0;
+  routes = {
+    [EXAMPLE_URL]: () => Promise.resolve(json(EX)),
+    [RF_URL]: (u) => {
+      const s = new URL(u, "http://x").searchParams.get("start");
+      return s === EX.start ? late.p : Promise.resolve(json(rfAnswer(s)));
+    },
+    "/api/prices": () => (asked++ === 0 ? Promise.resolve(json(CROSS)) : next.p),
+  };
+  const v = render(h(Probe));
+  await settle();
+  await later();
+  await act(async () => {
+    wb.setSettings({ start: "2021-01-04" });
+    await sleep(0);
+  });
+  await later();
+  check(rfCalls().length === 1 && rfCalls()[0].url === rfSeriesUrl(EX.start) && !rfCalls()[0].signal.aborted,
+    "window later, rate still out: the request that covers the prices already held is left to finish, and none is sent for the later start",
+    rfCalls().map((c) => `${c.url} ${c.signal.aborted}`).join(" "));
+  await act(async () => {
+    late.resolve(json(rfAnswer(EX.start)));
+    await sleep(0);
+  });
+  const b = ready();
+  check(b?.source === "live" && Math.abs(b.rf - meanOver(b)) < 1e-15 && wb.rf.value.basis === "window" && changes().length === 2,
+    "window later, rate still out: when it lands the live prices show at their own window's rate, in one change", changes().join(" | "));
   v.unmount();
 }
 

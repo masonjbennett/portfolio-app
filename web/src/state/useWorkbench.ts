@@ -14,7 +14,7 @@
 // stays and `fetching` says so; a failed request keeps it too and `failure` names what failed.
 //
 // The rate: by default the mean 3-month Treasury yield over the days the prices cover
-// (src/state/rfwindow.ts), fetched again when the start date moves. The example keeps the rate it
+// (src/state/rfwindow.ts), fetched again when the start date moves earlier than the series held. The example keeps the rate it
 // was baked at until live prices replace it, and live prices wait for the rate over their own window
 // when it is on its way, so a cold load changes the numbers on screen once, not two or three times.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -81,7 +81,7 @@ export function rfSeriesUrl(start: string): string {
 // 2. the example keeps the rate it was baked at for as long as it is on screen, even once the live
 //    rate is in, so the example's numbers never change before live prices replace them;
 // 3. the mean yield over the prices' own first and last day, when the series held covers them;
-// 4. the latest yield, when it does not (its request failed, or asked from a later day);
+// 4. the latest yield, when it does not (its request failed, or the prices start before it);
 // 5. the app's fallback when FRED could not be reached at all (709-712).
 // The window mean is worked out whichever rule wins, so the rail can show it beside today's.
 export function chooseRf(
@@ -195,12 +195,27 @@ export function useWorkbench(): Workbench {
     return () => ctrl.abort();
   }, []);
 
-  // The rate: at once on the first load, then again whenever the start date moves (after the same
-  // pause as prices). A failed lookup keeps the last good answer, so today's yield is not lost to a
-  // window that could not be fetched; the page then scores against today's yield and says so.
-  const rfStart = settings.start;
+  // The rate: at once on the first load, then again whenever the start date moves earlier than the
+  // series held (after the same pause as prices). A failed lookup keeps the last good answer, so
+  // today's yield is not lost to a window that could not be fetched; the page then scores against
+  // today's yield and says so.
+  //
+  // The series is asked for from the earlier of the start date and the start the live prices on screen
+  // were fetched with. Those prices stay on screen while newer ones load, and for good if they never
+  // come, so a series from a later day, which could not score them, would put them at today's yield.
+  // For the same reason a later start asks for nothing: a series from an earlier day covers every
+  // later window, and the request already out, if one is, is left to finish.
+  const heldFrom = payload && !isExample(payload) && isIsoDay(payload.start) ? payload.start : null;
+  const rfStart = heldFrom !== null && isIsoDay(settings.start) && heldFrom < settings.start ? heldFrom : settings.start;
+  const rfHeld = useRef(rf);
+  rfHeld.current = rf;
   useEffect(() => {
     if (!isIsoDay(rfStart)) {
+      setRfPending(false);
+      return;
+    }
+    const held = rfHeld.current;
+    if (held.status === "ready" && held.value.start <= rfStart) {
       setRfPending(false);
       return;
     }

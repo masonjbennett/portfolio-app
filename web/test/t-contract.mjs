@@ -371,7 +371,26 @@ check(JSON.stringify(T.TAB_IDS?.map((id) => T.TAB_LABELS[id])) === JSON.stringif
     "rail: the rate over the window is in use, shown beside today's on one line, with the days it covers", text(rfGroup));
   act(() => today?.click());
   check(inOrder(patches.at(-1), { rf: 0.0455 }), "rail: 'Use today's rate instead' sets the rate to today's yield", JSON.stringify(patches.at(-1)));
+  const many = render(h(Rail, {
+    settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
+    rf: { status: "ready", value: { ...view, window: { ...view.window, days: 1935 } } }, fetching: false, failure: null,
+  }));
+  const manyText = text(many.container.querySelector('[name="rf"]')?.closest(".rail-group"));
+  check(/\(1,935 daily readings,/.test(manyText), "rail: the count of daily readings is grouped by thousands", manyText);
+  many.unmount();
   v.unmount();
+
+  // A fixed rate that no longer matches today's yield: set by the button on an earlier day, or typed.
+  // Either way the note says it is fixed, and never that someone typed it.
+  const fixed = render(h(Rail, {
+    settings: { ...D.DEFAULT_SETTINGS, rf: 0.0421 }, setSettings: () => {}, level: "plain", setLevel: () => {},
+    rf: { status: "ready", value: { ...view, basis: "manual", inUse: 0.0421 } }, fetching: false, failure: null,
+  }));
+  const note = text(fixed.container.querySelector('[name="rf"]')?.closest(".rail-group")?.querySelector(".rail-note"));
+  const back = [...fixed.container.querySelectorAll("button")].some((b) => text(b) === "Use the rate over the window");
+  check(/^Using a fixed 4\.21%: it stays until changed here and does not follow FRED\.$/.test(note) && !/typed/i.test(note) && back,
+    "rail: a fixed rate is called fixed, never typed, with the way back to the window's rate beside it", note);
+  fixed.unmount();
 }
 
 done("t-contract");

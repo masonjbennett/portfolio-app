@@ -125,10 +125,12 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
   if (settings.rf !== null) {
     rfNote = live && settings.rf === live.rate
       ? `Using today's 3-month Treasury rate (${live.date}) for the whole window.`
-      : `Using ${pctText(settings.rf)}%, typed here.` + (live && !rfBoth ? ` The live 3-month Treasury rate is ${pctText(live.rate)}% (${live.date}).` : "");
+      // A fixed rate: typed, or today's yield written in by the button below on an earlier day, so the
+      // note says what it does, not where it came from.
+      : `Using a fixed ${pctText(settings.rf)}%: it stays until changed here and does not follow FRED.` + (live && !rfBoth ? ` The live 3-month Treasury rate is ${pctText(live.rate)}% (${live.date}).` : "");
   } else if (view?.basis === "window" && view.window) {
     rfNote = `The mean 3-month Treasury yield from ${view.window.from} to ${view.window.to}, the rate that prevailed over these prices ` +
-      `(${view.window.days} daily readings, source ${view.source}; today's is from ${view.date}). Override it freely.`;
+      `(${view.window.days.toLocaleString("en-US")} daily readings, source ${view.source}; today's is from ${view.date}). Override it freely.`;
   } else if (view?.basis === "example") {
     rfNote = `The example on screen keeps the ${pctText(view.inUse)}% it was saved with. Live prices are scored at the rate over their own window.`;
   } else if (view?.basis === "today") {

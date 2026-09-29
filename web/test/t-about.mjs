@@ -73,6 +73,9 @@ const EMOJI = /\p{Extended_Pictographic}/u;
     ["30, 60, 90 or 120 trading days (60 to start)", "the rolling windows"],
     [`${pct(A.NET_FLOOR)} or less`, "the net-exposure floor"],
   ];
+  check(body.includes("the example shown before live prices arrive keeps the rate it was saved with") &&
+    /if \(payload && isExample\(payload\)\) return \{ choice: \{ rate: payload\.rf, source: "example" \}/.test(src("src/state/useWorkbench.ts")),
+    "method: the rate entry says the example keeps the rate it was saved with, as chooseRf does");
   const missing = wants.filter(([w]) => !body.includes(w)).map(([, why]) => why);
   check(missing.length === 0, "method: each number printed is the engine's own constant", missing.join("; "));
 
