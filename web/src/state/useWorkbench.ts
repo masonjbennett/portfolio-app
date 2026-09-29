@@ -12,11 +12,17 @@
 // index.html) is computed through the same analyze() and labelled "example" with its own price
 // date, and a live answer replaces it when one lands. While a request is out, the result on screen
 // stays and `fetching` says so; a failed request keeps it too and `failure` names what failed.
+//
+// The rate: by default the mean 3-month Treasury yield over the days the prices cover
+// (src/state/rfwindow.ts), fetched again when the start date moves. The example keeps the rate it
+// was baked at until live prices replace it, and live prices wait for the rate over their own window
+// when it is on its way, so a cold load changes the numbers on screen once, not two or three times.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { parseTickers, validateRequest } from "../lib/clean.ts";
 import { isExample } from "../data/payload.ts";
-import { analyze, isPricePayload, MESSAGES } from "./analyze.ts";
+import { analyze, isPricePayload, MESSAGES, priceSpan } from "./analyze.ts";
 import { DEFAULT_SETTINGS, DEFAULT_TAB, PRESETS, RF_FALLBACK } from "./defaults.ts";
+import { isIsoDay, readRfSeries, windowRate, type RfResolved, type RfSeries, type RfView } from "./rfwindow.ts";
 import { loadPrefs, loadSettings, savePrefs, saveSettings } from "./storage.ts";
 import { decodeShare, encodeShare } from "./url.ts";
 import type {
@@ -30,6 +36,8 @@ export const RF_URL = "/api/rf";
 // How long a price-affecting edit must sit still before it is fetched: long enough to type a
 // ticker, short enough to feel immediate.
 export const FETCH_DELAY_MS = 300;
+// How long the page waits for the rate before giving up on it. The endpoint gives FRED 10 s.
+export const RF_WAIT_MS = 12000;
 // The address bar is rewritten at most this often (browsers throttle history.replaceState).
 export const URL_DELAY_MS = 250;
 
@@ -63,21 +71,32 @@ export function pricesUrl(r: PriceRequest): string {
   return `${PRICES_URL}?${q}`;
 }
 
-// The rate an analysis uses, resolved before analyze() runs: a typed rate wins; then the live
-// one; the example, before the live rate is in, keeps the rate it was baked at; a live payload with
-// no live rate uses the app's fallback, as the app does when FRED cannot be reached (709-712).
-export function resolveRf(manual: number | null, rf: LoadState<RfRate>, payload: PricePayload | null): RfChoice {
-  if (manual !== null) return { rate: manual, source: "manual" };
-  if (rf.status === "ready") return { rate: rf.value.rate, source: "live" };
-  if (payload && isExample(payload)) return { rate: payload.rf, source: "example" };
-  return { rate: RF_FALLBACK, source: "fallback" };
+// The rate lookup for prices that start on `start`: the latest yield and every day since.
+export function rfSeriesUrl(start: string): string {
+  return `${RF_URL}?${new URLSearchParams({ start })}`;
 }
 
-function readRf(body: unknown): RfRate | null {
-  const b = body as Partial<RfRate> | null;
-  return b && typeof b.rate === "number" && Number.isFinite(b.rate) && typeof b.date === "string" && typeof b.source === "string"
-    ? { rate: b.rate, date: b.date, source: b.source }
-    : null;
+// The rate an analysis uses, resolved before analyze() runs:
+// 1. a typed rate wins;
+// 2. the example keeps the rate it was baked at for as long as it is on screen, even once the live
+//    rate is in, so the example's numbers never change before live prices replace them;
+// 3. the mean yield over the prices' own first and last day, when the series held covers them;
+// 4. the latest yield, when it does not (its request failed, or asked from a later day);
+// 5. the app's fallback when FRED could not be reached at all (709-712).
+// The window mean is worked out whichever rule wins, so the rail can show it beside today's.
+export function chooseRf(
+  manual: number | null,
+  rf: LoadState<RfSeries>,
+  payload: PricePayload | null,
+  span: { from: string; to: string } | null,
+): RfResolved {
+  const live = rf.status === "ready" ? rf.value : null;
+  const window = live && span ? windowRate(live, span.from, span.to) : null;
+  if (manual !== null) return { choice: { rate: manual, source: "manual" }, basis: "manual", window };
+  if (payload && isExample(payload)) return { choice: { rate: payload.rf, source: "example" }, basis: "example", window };
+  if (window) return { choice: { rate: window.rate, source: "live" }, basis: "window", window };
+  if (live) return { choice: { rate: live.rate, source: "live" }, basis: "today", window: null };
+  return { choice: { rate: RF_FALLBACK, source: "fallback" }, basis: "fallback", window: null };
 }
 
 // Our own endpoints answer a failure with an ApiError; its sentence names what failed.
@@ -153,34 +172,66 @@ export function useWorkbench(): Workbench {
   const [exampleFailed, setExampleFailed] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [failure, setFailure] = useState<AnalysisError | null>(null);
-  const [rf, setRf] = useState<LoadState<RfRate>>({ status: "loading" });
+  const [rf, setRf] = useState<LoadState<RfSeries>>({ status: "loading" });
+  // A rate request is out for the current start date.
+  const [rfPending, setRfPending] = useState(true);
+  const rfAnswered = useRef(false);
 
   const setSettings = useCallback((patch: Partial<Settings>) => {
     const next = patch.tickers ? { ...patch, tickers: parseTickers(patch.tickers.join(",")) } : patch;
     setSettingsState((s) => ({ ...s, ...next }));
   }, []);
 
-  // Once: the example and the live rate.
+  // Once: the example.
   useEffect(() => {
     const ctrl = new AbortController();
     void getJson(EXAMPLE_URL, ctrl.signal).then(({ ok, body }) => {
       if (ctrl.signal.aborted) return;
       const ex = ok && isPricePayload(body) ? body : null;
-      const a = ex && safeAnalyze(ex, DEFAULT_SETTINGS, resolveRf(null, { status: "loading" }, ex));
+      const a = ex && safeAnalyze(ex, DEFAULT_SETTINGS, chooseRf(null, { status: "loading" }, ex, null).choice);
       if (ex && a && a.ok) setPayload((prev) => prev ?? ex); // a live answer that landed first wins
       else setExampleFailed(true);
     });
-    void getJson(RF_URL, ctrl.signal).then(({ ok, body }) => {
-      if (ctrl.signal.aborted) return;
-      const r = ok ? readRf(body) : null;
-      setRf(r ? { status: "ready", value: r } : {
-        status: "error",
-        name: "risk-free rate",
-        message: apiMessage(body) ?? "The live 3-month Treasury rate could not be loaded.",
-      });
-    });
     return () => ctrl.abort();
   }, []);
+
+  // The rate: at once on the first load, then again whenever the start date moves (after the same
+  // pause as prices). A failed lookup keeps the last good answer, so today's yield is not lost to a
+  // window that could not be fetched; the page then scores against today's yield and says so.
+  const rfStart = settings.start;
+  useEffect(() => {
+    if (!isIsoDay(rfStart)) {
+      setRfPending(false);
+      return;
+    }
+    let stale = false;
+    const ctrl = new AbortController();
+    setRfPending(true);
+    const run = () => {
+      const give = setTimeout(() => ctrl.abort(), RF_WAIT_MS);
+      void getJson(rfSeriesUrl(rfStart), ctrl.signal).then(({ ok, body }) => {
+        clearTimeout(give);
+        if (stale) return;
+        rfAnswered.current = true;
+        setRfPending(false);
+        const r = ok ? readRfSeries(body, rfStart) : null;
+        setRf((prev) =>
+          r ? { status: "ready", value: r } : prev.status === "ready" ? prev : {
+            status: "error",
+            name: "risk-free rate",
+            message: apiMessage(body) ?? "The live 3-month Treasury rate could not be loaded.",
+          },
+        );
+      });
+    };
+    const timer = rfAnswered.current ? setTimeout(run, FETCH_DELAY_MS) : null;
+    if (timer === null) run();
+    return () => {
+      stale = true;
+      if (timer !== null) clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [rfStart]);
 
   // Prices: only when what they are changes.
   const priceKey = JSON.stringify(priceRequest(settings));
@@ -220,12 +271,25 @@ export function useWorkbench(): Workbench {
   }, [priceKey]);
 
   // Everything else recomputes in place, from the prices already held.
-  const rfChoice = resolveRf(settings.rf, rf, payload);
-  const computed = useMemo(
-    () => (payload ? safeAnalyze(payload, settings, rfChoice) : null),
+  const span = useMemo(() => (payload ? priceSpan(payload) : null), [payload]);
+  const pick = chooseRf(settings.rf, rf, payload, span);
+  // Live prices whose window rate is still on its way are held back while something else is on
+  // screen: shown now at another rate, they would change a second time when it lands. The wait ends
+  // when the lookup answers, fails or times out (RF_WAIT_MS); after a failure today's yield, or the
+  // fallback, is used.
+  const shown = useRef<{ computed: Analysis | AnalysisError; pick: RfResolved } | null>(null);
+  const hold =
+    settings.rf === null && payload !== null && !isExample(payload) && rfPending && pick.basis !== "window" && shown.current !== null;
+  const fresh = useMemo(
+    () => (payload && !hold ? safeAnalyze(payload, settings, pick.choice) : null),
     // analyze() reads only allowShort from the settings.
-    [payload, settings.allowShort, rfChoice.rate, rfChoice.source],
+    [payload, settings.allowShort, pick.choice.rate, pick.choice.source, hold],
   );
+  // What is on screen, kept for the next hold. Written during render, but only ever with what this
+  // same render returns, so rendering twice writes the same thing twice.
+  if (!hold) shown.current = fresh ? { computed: fresh, pick } : null;
+  const computed = hold ? (shown.current?.computed ?? null) : fresh;
+  const inUse = hold ? (shown.current?.pick ?? pick) : pick;
   const analysis = useMemo<LoadState<Analysis>>(() => {
     if (computed?.ok) return { status: "ready", value: computed };
     if (computed) return { status: "error", name: "analysis", message: computed.message };
@@ -256,5 +320,18 @@ export function useWorkbench(): Workbench {
     return () => clearTimeout(t);
   }, [search]);
 
-  return { settings, setSettings, level, setLevel, analysis, fetching, failure, rf, weights, setWeights, tab, setTab };
+  // The rail's view of the rate: the latest yield, plus the window mean and what the numbers on
+  // screen are scored against. RfView extends RfRate, so it travels in the same slot.
+  const win = inUse.window;
+  const rfView = useMemo<LoadState<RfRate>>(() => {
+    if (rf.status !== "ready") return rf;
+    const { rate, date, source } = rf.value;
+    const view: RfView = { rate, date, source, window: win, basis: inUse.basis, inUse: inUse.choice.rate };
+    return { status: "ready", value: view };
+    // The window by value, not by identity: it is rebuilt on every render.
+  }, [rf, win?.rate, win?.from, win?.to, win?.days, inUse.basis, inUse.choice.rate]);
+
+  return {
+    settings, setSettings, level, setLevel, analysis, fetching: fetching || hold, failure, rf: rfView, weights, setWeights, tab, setTab,
+  };
 }

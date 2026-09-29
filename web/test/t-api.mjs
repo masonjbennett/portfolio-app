@@ -10,6 +10,8 @@ import {
   CACHE_FAILED, CACHE_PAST, CACHE_RECENT, fetchPrices, joinSeries, parseChart, parsePricesQuery, pricesUrl,
 } from "../src/data/prices.ts";
 import { RF_CACHE_FAILED, RF_CACHE_OK, fetchRf, parseRfCsv } from "../src/data/fred.ts";
+import { fetchRfSeries, isIsoDay, parseRfSeries, readRfSeries, windowRate } from "../src/state/rfwindow.ts";
+import { readFileSync } from "node:fs";
 import { toFrame } from "../src/data/payload.ts";
 
 const DAY = 86400000;
@@ -305,6 +307,69 @@ function sameFrame(a, b) {
 
   const slow = await fetchRf(TODAY, { timeoutMs: 30, fetch: async (_u, init) => hang(init) });
   check(!slow.ok && slow.body.error === "upstream", "rf: a request past its timeout fails closed as upstream (618)");
+}
+
+// ---- (k) /api/rf?start=: the rate over a window --------------------------------------------------------
+{
+  // ledger:rf-window, the handler half. The app asks FRED for 120 days and keeps ONE number, the last
+  // row that parses (613-639); every window it scores is scored against that. The page half is in
+  // t-workbench.
+  const app = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8");
+  const body = /def fetch_rf_rate\(\):([\s\S]*?)\n(?=\S)/.exec(app)?.[1] ?? "";
+  check(/timedelta\(days=120\)/.test(body) && /latest = \(float\(raw\), day\)/.test(body) && /return latest\s*$/.test(body),
+    "ledger:rf-window: the app keeps only the latest 3-month yield, and scores every window against it", body.length);
+
+  const csv = "observation_date,DGS3MO\n2019-01-02,2.40\n2019-01-03,.\n2019-01-04,2.42\n2019-01-07,\nfootnote,9\n2019-01-08,2.44\n";
+  const pts = parseRfSeries(csv);
+  check(same(pts, [["2019-01-02", 2.4 / 100], ["2019-01-04", 2.42 / 100], ["2019-01-08", 2.44 / 100]]),
+    "rf window: every row the latest-yield parse would keep, in order, as decimals", JSON.stringify(pts));
+
+  stub(() => new Response(csv, { status: 200 }));
+  const res = await rfGET(new Request("http://localhost/api/rf?start=2019-01-02"));
+  const got = await res.json();
+  check(res.status === 200 && calls.length === 1 && calls[0].url === "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3MO&cosd=2019-01-02",
+    "ledger:rf-window: one FRED request, DGS3MO alone, from the window's start and with no end", calls[0]?.url);
+  check(same(got, { rate: 2.44 / 100, date: "2019-01-08", source: "FRED DGS3MO", start: "2019-01-02", series: pts }) &&
+    res.headers.get("Cache-Control") === RF_CACHE_OK,
+    "rf window: the answer is the latest yield, the start and the series, cached like the latest yield", JSON.stringify(got));
+  const w = windowRate(readRfSeries(got, "2019-01-02"), "2019-01-03", "2019-01-08");
+  check(w && w.days === 2 && Math.abs(w.rate - (2.42 / 100 + 2.44 / 100) / 2) < 1e-15 && w.from === "2019-01-03" && w.to === "2019-01-08",
+    "rf window: the mean of the readings from the first to the last price day, both included", JSON.stringify(w));
+  check(windowRate(readRfSeries(got, "2019-01-04"), "2019-01-02", "2019-01-08") === null,
+    "rf window: a series asked for from a later day than the window starts averages nothing, rather than part of it");
+  check(windowRate(readRfSeries(got, "2019-01-02"), "2020-01-01", "2020-06-01") === null, "rf window: no reading inside the window is no rate");
+  check(readRfSeries({ ...got, series: [["2019-01-04", 0.02], ["2019-01-02", 0.02]] }, "2019-01-02") === null &&
+    readRfSeries({ ...got, series: [["2019-01-02", "2.4"]] }, "2019-01-02") === null && readRfSeries({ ...got, series: null }, "2019-01-02") === null,
+    "rf window: a series out of order, with a value that is not a number, or missing, is no answer");
+
+  for (const [label, q] of [
+    ["an impossible day", "start=2019-02-30"],
+    ["a day not written yyyy-mm-dd", "start=2019-1-2"],
+    ["a day after today", `start=${plus(TODAY, 2)}`],
+    ["a second parameter", "start=2019-01-02&end=2020-01-02"],
+    ["start given twice", "start=2019-01-02&start=2019-01-03"],
+    ["another parameter alone", "from=2019-01-02"],
+  ]) {
+    stub(() => new Response(csv, { status: 200 }));
+    const r = await rfGET(new Request(`http://localhost/api/rf?${q}`));
+    check(r.status === 400 && calls.length === 0 && r.headers.get("Cache-Control") === "no-store",
+      `rf window: ${label} answers 400 with zero upstream calls`, `${q}: ${r.status} ${calls.length}`);
+  }
+  check(isIsoDay("2024-02-29") && !isIsoDay("2023-02-29") && !isIsoDay(20240229), "rf window: a start is a real calendar day");
+
+  for (const [label, answer, id] of [
+    ["FRED unreachable", () => { throw new TypeError("fetch failed"); }, "upstream"],
+    ["FRED answering 500", () => status(500), "upstream"],
+    ["nothing since the start", () => new Response("DATE,DGS3MO\n2019-01-02,.\n", { status: 200 }), "no-data"],
+  ]) {
+    stub(answer);
+    const r = await rfGET(new Request("http://localhost/api/rf?start=2019-01-02"));
+    const b = await r.json();
+    check(r.status === 502 && b.error === id && r.headers.get("Cache-Control") === RF_CACHE_FAILED, `rf window: ${label} fails closed as ${id}, cached one minute`,
+      `${r.status} ${JSON.stringify(b)}`);
+  }
+  const slow = await fetchRfSeries("2019-01-02", { timeoutMs: 30, fetch: async (_u, init) => hang(init) });
+  check(!slow.ok && slow.body.error === "upstream", "rf window: a request past its timeout fails closed as upstream");
 }
 
 done("t-api");

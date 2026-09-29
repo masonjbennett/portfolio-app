@@ -104,6 +104,38 @@
   color: var(--color-ink2);
 }
 
+/* A published set: a teal rule on its left edge and its caption in teal small caps. */
+.rail-preset-published {
+  border-left: 3px solid var(--color-teal);
+}
+
+.rail-preset-published .rail-preset-desc {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-teal);
+}
+
+.rail-more > summary {
+  font-size: 0.78rem;
+  color: var(--color-teal);
+  cursor: pointer;
+}
+
+.rail-more[open] > summary {
+  margin-bottom: var(--space-2);
+}
+
+/* The two rates, window and today, on one mono line. */
+.rail-rates {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
 .rail-dates {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

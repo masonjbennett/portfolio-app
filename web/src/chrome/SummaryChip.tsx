@@ -3,16 +3,18 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { format } from "../format.ts";
 import { RF_FALLBACK } from "../state/defaults.ts";
+import { isRfView } from "../state/rfwindow.ts";
 import type { LoadState, RfRate, Settings, SummaryChipProps } from "../types.ts";
 import "./SummaryChip.css";
 
 export const SHEET_ID = "settings-sheet";
 
-// The rate the page is using: the typed one, else the live one, else the placeholder the page
-// falls back to when the live lookup fails (711). null while the lookup is still out.
+// The rate the page is using: the typed one, else the one the workbench scored the numbers on screen
+// against (by default the mean over the window), else today's, else the placeholder the page falls
+// back to when the live lookup fails (711). null while the lookup is still out.
 function rateInUse(settings: Settings, rf: LoadState<RfRate>): number | null {
   if (settings.rf !== null) return settings.rf;
-  if (rf.status === "ready") return rf.value.rate;
+  if (rf.status === "ready") return isRfView(rf.value) ? rf.value.inUse : rf.value.rate;
   return rf.status === "loading" ? null : RF_FALLBACK;
 }
 

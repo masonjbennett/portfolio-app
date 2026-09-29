@@ -313,4 +313,65 @@ const tabs = grab(/st\.tabs\(\[([\s\S]*?)\]\)/, "the tab labels")[1]?.match(/"([
 check(JSON.stringify(T.TAB_IDS?.map((id) => T.TAB_LABELS[id])) === JSON.stringify(tabs) && D.DEFAULT_TAB === T.TAB_IDS?.[0],
   "types: TAB_LABELS are the app's six, trimmed, in order (1213-1220)", JSON.stringify(tabs));
 
+// ---- (h) the published sets come first in the rail; the app's own follow -----------------------------
+{
+  const { PUBLISHED_SETS } = await import("../src/content/published.ts");
+  const inOrder = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const names = (list) => (list ?? []).map((p) => p.name);
+  // ledger:published-presets, the app's side: its six presets hold neither the five mega-caps nor
+  // the seven sector ETFs the walk-forward tested; only Cross-asset is one of the published sets.
+  const setKey = (t) => [...t].map((x) => x.trim()).sort().join(",");
+  const appKeys = presets.map((p) => setKey(p.tickers.split(",")));
+  const pubKeys = (PUBLISHED_SETS ?? []).map((x) => setKey(x.tickers));
+  check(pubKeys.length === 3 && !appKeys.includes(pubKeys[0]) && !appKeys.includes(pubKeys[1]) && appKeys[0] === pubKeys[2],
+    "ledger:published-presets: the app offers no preset for the published mega-cap or sector set; its Cross-asset is the third", JSON.stringify(pubKeys));
+  // The port's side: the three published sets, in the published order, each marked, and the app's
+  // presets that are not already among them, in the app's order.
+  check(inOrder(D.PUBLISHED_PRESETS?.map((p) => [p.name, p.tickers, p.desc]), PUBLISHED_SETS?.map((x) => [x.name, x.tickers.join(", "), "Published"])) &&
+    inOrder(names(D.PUBLISHED_PRESETS), ["Five mega-caps", "Seven sector ETFs", "Cross-asset"]),
+    "ledger:published-presets: the rail's first presets are the published sets, marked Published", JSON.stringify(names(D.PUBLISHED_PRESETS)));
+  check(inOrder(names(D.MORE_PRESETS), ["Mag 7", "Sectors", "Dividend", "Growth", "Blue Chip"]) &&
+    inOrder(D.MORE_PRESETS, D.PRESETS.filter((p) => p.name !== "Cross-asset")),
+    "defaults: More baskets holds the app's other five presets, word for word and in its order", JSON.stringify(names(D.MORE_PRESETS)));
+  check(D.publishedPresetOf?.(["JPM", "AMZN", "GOOGL", "MSFT", "AAPL"])?.name === "Five mega-caps" && D.publishedPresetOf?.(["AAPL", "MSFT", "GOOGL"]) === null,
+    "defaults: publishedPresetOf names a published set in any order, and nothing else");
+
+  // The rail as rendered: the published row first, the app's under More baskets, no amount field.
+  const Rail = m("src/chrome/Rail.tsx").default;
+  const r = render(h(Rail, {
+    settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
+    rf: { status: "loading" }, fetching: false, failure: null,
+  }));
+  const buttons = [...r.container.querySelectorAll("button.rail-preset")];
+  const labels = buttons.map((b) => b.querySelector(".rail-preset-name")?.textContent);
+  const more = r.container.querySelector("details.rail-more");
+  check(inOrder(labels.slice(0, 3), names(D.PUBLISHED_PRESETS)) && buttons.slice(0, 3).every((b) => b.classList.contains("rail-preset-published") && text(b).endsWith("Published")) &&
+    buttons.slice(0, 3).every((b) => !more?.contains(b)),
+    "ledger:published-presets: the rail shows the three published sets first, outside More baskets, each marked", JSON.stringify(labels));
+  check(more && text(more.querySelector("summary")) === "More baskets" && inOrder(labels.slice(3), names(D.MORE_PRESETS)) &&
+    buttons.slice(3).every((b) => more.contains(b) && !b.classList.contains("rail-preset-published")) && !more.open,
+    "rail: the app's presets sit under a closed More baskets, unmarked", JSON.stringify(labels.slice(3)));
+  check(r.container.querySelector('[name="amount"]') === null && !/Starting investment|Initial Amount/.test(text(r.container)) &&
+    D.DEFAULT_SETTINGS?.amount === D.DEFAULT_AMOUNT,
+    "rail: no starting-amount field (it is edited on the growth chart); the settings still hold the $10,000 default");
+  r.unmount();
+
+  // The rate group with the workbench's view: both rates on one line, and today's one click away.
+  const patches = [];
+  const view = { rate: 0.0455, date: "2026-09-25", source: "FRED DGS3MO", basis: "window", inUse: 0.0312,
+    window: { rate: 0.0312, from: "2019-01-02", to: "2026-09-28", days: 1900 } };
+  const v = render(h(Rail, {
+    settings: D.DEFAULT_SETTINGS, setSettings: (x) => patches.push(x), level: "plain", setLevel: () => {},
+    rf: { status: "ready", value: view }, fetching: false, failure: null,
+  }));
+  const rfGroup = v.container.querySelector('[name="rf"]')?.closest(".rail-group");
+  const today = [...(rfGroup?.querySelectorAll("button") ?? [])].find((b) => text(b) === "Use today's rate instead");
+  check(text(rfGroup?.querySelector(".rail-rates")) === "rf over window 3.12% · today 4.55%" && v.container.querySelector('[name="rf"]').value === "3.12" &&
+    /from 2019-01-02 to 2026-09-28/.test(text(rfGroup)),
+    "rail: the rate over the window is in use, shown beside today's on one line, with the days it covers", text(rfGroup));
+  act(() => today?.click());
+  check(inOrder(patches.at(-1), { rf: 0.0455 }), "rail: 'Use today's rate instead' sets the rate to today's yield", JSON.stringify(patches.at(-1)));
+  v.unmount();
+}
+
 done("t-contract");

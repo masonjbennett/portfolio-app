@@ -1,7 +1,8 @@
 // The page hook (src/state/useWorkbench.ts), mounted in jsdom with fetch stubbed: the first screen
 // is the baked example, prices are fetched only when what they are changes, a stale answer never
 // lands, a failure keeps the last good result and names itself, and everything else recomputes in
-// place. Line numbers cite portfolio_app.py.
+// place. The rate is the mean 3-month Treasury yield over the prices' own window, today's beside it,
+// and a cold load changes the numbers on screen once. Line numbers cite portfolio_app.py.
 import { act, render } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
@@ -12,7 +13,7 @@ const W = await import("../src/state/useWorkbench.ts");
 const { tangency } = await import("../src/lib/optimize.ts");
 const { MESSAGES } = await import("../src/state/analyze.ts");
 const { PREFS_KEY, SETTINGS_KEY } = await import("../src/state/storage.ts");
-const { EXAMPLE_URL, FETCH_DELAY_MS, FIRST_SETTINGS, RF_URL, URL_DELAY_MS, todayISO } = W;
+const { EXAMPLE_URL, FETCH_DELAY_MS, FIRST_SETTINGS, RF_URL, URL_DELAY_MS, rfSeriesUrl, todayISO } = W;
 
 const bits = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -39,10 +40,16 @@ globalThis.fetch = (url, init = {}) => {
 const priceCalls = () => calls.filter((c) => c.url.startsWith("/api/prices"));
 
 let wb = null;
+// Every render's headline figure, so a test can count how many times the numbers on screen changed.
+let seen = [];
 function Probe() {
   wb = useWorkbenchSafe();
+  const v = wb.analysis.status === "ready" ? wb.analysis.value : null;
+  seen.push(v ? `${v.source} ${v.rf} ${v.tangency.sharpe}` : null);
   return null;
 }
+// The distinct figures in the order they appeared: each entry after the first is one change.
+const changes = () => seen.filter((x, i) => x !== null && x !== seen[i - 1]);
 function useWorkbenchSafe() {
   return W.useWorkbench();
 }
@@ -50,7 +57,26 @@ function fresh(search = "") {
   localStorage.clear();
   history.replaceState(null, "", `/${search}`);
   calls = [];
+  seen = [];
 }
+const rfCalls = () => calls.filter((c) => c.url.startsWith(RF_URL));
+
+// The rate endpoint's answer: today's yield and a made-up daily series (every weekday from 2018 on,
+// a rate that moves every day), so a mean over the wrong days is a different number.
+const SERIES = [];
+for (let t = Date.parse("2018-01-01T00:00:00Z"), i = 0; t <= Date.parse("2026-12-31T00:00:00Z"); t += 86400000) {
+  const d = new Date(t);
+  if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+  SERIES.push([d.toISOString().slice(0, 10), 0.005 + 0.04 * ((i++ % 89) / 89)]);
+}
+const rfAnswer = (start) => ({ rate: 0.041, date: "2026-09-25", source: "FRED DGS3MO", start, series: SERIES.filter(([d]) => d >= start) });
+// The mean over the analysis' own first and last price day, worked out here without the page's code.
+const meanOver = (a) => {
+  const from = a.prices.dates[0];
+  const to = a.prices.dates.at(-1);
+  const xs = SERIES.filter(([d]) => d >= from && d <= to).map(([, r]) => r);
+  return xs.reduce((x, y) => x + y, 0) / xs.length;
+};
 const ready = () => (wb.analysis.status === "ready" ? wb.analysis.value : null);
 
 const EX = examplePayload();
@@ -76,8 +102,9 @@ check(bits(FIRST_SETTINGS.tickers, EX.tickers) && FIRST_SETTINGS.start === EX.st
   "first settings: the rail opens on the example's own tickers, start and benchmark", `${FIRST_SETTINGS.tickers} / ${EX.tickers}`);
 check(bits(wb.settings.tickers, EX.tickers) && wb.settings.rf === null && wb.settings.end === null && wb.settings.amount === 10000,
   "first settings: with no link and nothing stored, the hook uses them (live rate, today, $10,000)");
-check(calls.filter((c) => c.url === EXAMPLE_URL).length === 1 && calls.filter((c) => c.url === RF_URL).length === 1,
-  "mount: the example and the live rate are each fetched once");
+check(calls.filter((c) => c.url === EXAMPLE_URL).length === 1 && rfCalls().length === 1 && rfCalls()[0].url === rfSeriesUrl(EX.start) &&
+  rfCalls()[0].url === `/api/rf?start=${EX.start}`,
+  "mount: the example is fetched once, and the rate once, at once, for the window's start", rfCalls().map((c) => c.url).join(" "));
 check(wb.fetching === true && wb.failure === null, "mount: a live request for the same settings is under way while the example shows");
 await later();
 check(priceCalls().length === 1, "mount: one /api/prices request, after the delay", `${priceCalls().length}`);
@@ -89,13 +116,16 @@ check(priceCalls()[0].url === canonical({ tickers: EX.tickers, benchmark: "^GSPC
   "request: the endpoint's canonical url, key order included (one request, one cache entry)", priceCalls()[0].url);
 check(ready()?.source === "example" && wb.fetching, "in flight: the example stays on screen and fetching says so");
 
+const exampleFirst = a;
 await act(async () => {
-  rfD.resolve(json({ rate: 0.041, date: "2026-09-25", source: "FRED DGS3MO" }));
+  rfD.resolve(json(rfAnswer(EX.start)));
   await sleep(0);
 });
 a = ready();
-check(wb.rf.status === "ready" && a.rf === 0.041 && a.rfSource === "live" && a.source === "example",
-  "live rate: it replaces the example's rate at once, labelled live");
+check(wb.rf.status === "ready" && a === exampleFirst && a.rf === EX.rf && a.rfSource === "example" && a.source === "example" &&
+  wb.rf.value.basis === "example" && wb.rf.value.inUse === EX.rf && wb.rf.value.rate === 0.041,
+  "live rate: the example keeps the rate it was baked at, and its numbers do not move, until live prices replace it",
+  `${a.rf} ${a.rfSource} ${wb.rf.value?.basis}`);
 await act(async () => {
   pxD.resolve(json(CROSS));
   await sleep(0);
@@ -103,6 +133,16 @@ await act(async () => {
 a = ready();
 check(a && a.source === "live" && a.pulledAt === CROSS.pulledAt && !wb.fetching && wb.failure === null,
   "live prices: a good answer replaces the example (source live), fetching off, no failure");
+// ledger:rf-window, the page half. The app scores every window at the latest yield alone (the
+// handler half, in t-api, reads fetch_rf_rate); the port scores at the mean over the window.
+const want = meanOver(a);
+check(a.rfSource === "live" && Math.abs(a.rf - want) < 1e-15 && a.rf !== 0.041 && wb.rf.value.basis === "window" &&
+  wb.rf.value.inUse === a.rf && wb.rf.value.rate === 0.041 && wb.rf.value.window.from === a.prices.dates[0] &&
+  wb.rf.value.window.to === a.prices.dates.at(-1),
+  "ledger:rf-window: live prices are scored at the mean 3-month yield over their own first to last price day, with today's yield beside it",
+  `${a.rf} vs ${want}; ${JSON.stringify(wb.rf.value.window)}`);
+check(changes().length === 2 && changes()[0].startsWith("example") && changes()[1].startsWith("live"),
+  "cold load: the numbers on screen change once, from the example to live prices", changes().join(" | "));
 
 // ---- ledger:rf-live ----------------------------------------------------------------------------------------
 // The app: the rate is frozen into session state only inside `if run_button:` (1087) and the
@@ -148,6 +188,34 @@ check(!/98765|amount/.test(location.search) && location.search.includes("w=VTI:0
 const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
 check(prefs.amount === 98765 && prefs.level === "formula" && !/98765/.test(localStorage.getItem(SETTINGS_KEY)),
   "storage: the amount and level are remembered in this browser, the amount only in the prefs", JSON.stringify(prefs));
+
+// ---- the window moves: the rate is asked for again from the new start --------------------------------------
+{
+  const n = rfCalls().length;
+  routes[RF_URL] = (u) => Promise.resolve(json(rfAnswer(new URL(u, "http://x").searchParams.get("start"))));
+  await act(async () => {
+    wb.setSettings({ start: "2020-01-02" });
+    await sleep(0);
+  });
+  check(rfCalls().length === n, "window: a new start is not asked for at once (it waits like prices do)");
+  await later();
+  check(rfCalls().length === n + 1 && rfCalls().at(-1).url === "/api/rf?start=2020-01-02",
+    "window: after the pause, one rate request from the new start", rfCalls().slice(n).map((c) => c.url).join(" "));
+  routes[RF_URL] = () => Promise.resolve(json({ error: "upstream", message: "FRED did not answer." }, 502));
+  await act(async () => {
+    wb.setSettings({ start: "2019-06-03" });
+    await sleep(0);
+  });
+  await later();
+  check(wb.rf.status === "ready" && wb.rf.value.rate === 0.041,
+    "window: a failed lookup for a new start keeps today's yield from the last good answer", JSON.stringify(wb.rf).slice(0, 200));
+  routes[RF_URL] = (u) => Promise.resolve(json(rfAnswer(new URL(u, "http://x").searchParams.get("start"))));
+  await act(async () => {
+    wb.setSettings({ start: EX.start });
+    await sleep(0);
+  });
+  await later();
+}
 
 // ---- debounce and staleness ----------------------------------------------------------------------------------
 const pending = {};
@@ -225,6 +293,32 @@ await act(async () => {
 await later();
 check(wb.failure === null && bits(ready()?.tickers, CROSS.tickers), "recovery: the next good answer clears the failure");
 view.unmount();
+
+// ---- cold load, prices first: live prices wait for their window's rate -------------------------------------------
+{
+  fresh();
+  const late = deferred();
+  routes = {
+    [EXAMPLE_URL]: () => Promise.resolve(json(EX)),
+    [RF_URL]: () => late.p,
+    "/api/prices": () => Promise.resolve(json(CROSS)),
+  };
+  const v = render(h(Probe));
+  await settle();
+  await later();
+  const r = ready();
+  check(r?.source === "example" && r.rf === EX.rf && wb.fetching === true,
+    "cold load: live prices that land before the rate wait, with the example still on screen and fetching on",
+    `${r?.source} ${r?.rf} fetching ${wb.fetching}`);
+  await act(async () => {
+    late.resolve(json(rfAnswer(EX.start)));
+    await sleep(0);
+  });
+  const b = ready();
+  check(b?.source === "live" && Math.abs(b.rf - meanOver(b)) < 1e-15 && !wb.fetching && changes().length === 2,
+    "cold load: when the rate lands the live prices show, at the rate over their window, in one change", changes().join(" | "));
+  v.unmount();
+}
 
 // ---- where settings come from: the link, then this browser, then FIRST_SETTINGS -------------------------------
 fresh("?tickers=XLK,XLF,XLV&tab=correlation&w=XLK:0.5&amount=777");

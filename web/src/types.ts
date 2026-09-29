@@ -159,7 +159,8 @@ export type RfPayload = RfRate | ApiError;
 
 // ---- the analysis ----------------------------------------------------------------------------------
 
-/** Where the rate an analysis used came from. */
+/** Where the rate an analysis used came from. "live" is FRED's, either the mean over the price window (the
+ *  default) or the latest yield; which one travels in RfView.basis (src/state/rfwindow.ts). */
 export type RfSource = "manual" | "live" | "example" | "fallback";
 
 /** The rate handed to analyze(): resolved before the call, so analyze never fetches. */
@@ -269,7 +270,8 @@ export interface Workbench {
   fetching: boolean;
   /** The last attempt that failed, shown beside the analysis still on screen; null when the last one worked. */
   failure: AnalysisError | null;
-  /** The live risk-free rate lookup. */
+  /** The live risk-free rate lookup. Its ready value is an RfView (src/state/rfwindow.ts): the latest yield,
+   *  the mean over the price window, and which of them is in use. */
   rf: LoadState<RfRate>;
   /** Raw custom weights by ticker. */
   weights: CustomWeights;
@@ -443,7 +445,7 @@ export interface TipProps {
 
 /** A stat plate: a label over one large number (the Snapshot's st.metric, 1203-1208). */
 export interface PlateProps {
-  /** The label, e.g. "Best Sharpe (Tangency)". */
+  /** The label, e.g. "Tangency Sharpe (in-sample)". */
   label: string;
   /** The number; null prints as a dash and says it is unavailable, never a stand-in figure. */
   value: number | null;

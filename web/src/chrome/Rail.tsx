@@ -3,12 +3,19 @@
 // fetch prices on every keystroke (tickers, dates) keep a draft and commit only a request the
 // app's own checks (1009-1021, validateRequest) accept; a rejected one stays in the field with the
 // app's message under it and nothing is fetched.
+//
+// Two departures from the sidebar's order and content. The presets open on the three published sets,
+// marked, with the app's own under "More baskets". The starting amount is not here: it is edited on
+// the growth chart, the one place it changes anything (the workbench still holds it, and it still
+// never enters a shared link).
 import { useEffect, useId, useState } from "react";
 import SegControl from "../components/SegControl.tsx";
 import { SYMBOL } from "../data/prices.ts";
+import { format } from "../format.ts";
 import { parseTickers, validateRequest } from "../lib/clean.ts";
 import { MESSAGES } from "../state/analyze.ts";
-import { AMOUNT_STEP, BENCHMARKS, MIN_AMOUNT, PRESETS, RF_FALLBACK, RF_STEP } from "../state/defaults.ts";
+import { BENCHMARKS, MORE_PRESETS, PUBLISHED_PRESETS, RF_FALLBACK, RF_STEP, type Preset } from "../state/defaults.ts";
+import { isRfView } from "../state/rfwindow.ts";
 import { LEVELS, type Level, type RailProps, type Settings } from "../types.ts";
 import { todayISO } from "./when.ts";
 import "./Rail.css";
@@ -91,9 +98,13 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
   }
 
   // ---- risk-free rate (706-721) ----
+  // `live` is the latest yield. With the workbench's view (src/state/rfwindow.ts) it also carries the
+  // mean yield over the window and the rate the numbers on screen use; a bare RfRate is read as
+  // today's yield in use, the app's own rule.
   const live = rf.status === "ready" ? rf.value : null;
+  const view = live && isRfView(live) ? live : null;
   const unreachable = rf.status === "error" || rf.status === "empty";
-  const inUse = settings.rf ?? live?.rate ?? (unreachable ? RF_FALLBACK : null);
+  const inUse = settings.rf ?? view?.inUse ?? live?.rate ?? (unreachable ? RF_FALLBACK : null);
   const [rfDraft, setRfDraft] = useState(inUse === null ? "" : pctText(inUse));
   useEffect(() => {
     // Keep what the visitor typed ("4.10") while it means the rate in use; replace it otherwise.
@@ -108,9 +119,20 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
     if (v.trim() !== "" && Number.isFinite(n)) setSettings({ rf: n / 100 });
   }
 
+  // Both rates side by side, whichever one is in use: "rf over window x% · today y%".
+  const rfBoth = view?.window ? `rf over window ${format(view.window.rate, "pct2")} · today ${format(view.rate, "pct2")}` : null;
   let rfNote: string;
   if (settings.rf !== null) {
-    rfNote = `Using ${pctText(settings.rf)}%, not the live rate.` + (live ? ` The live 3-month Treasury rate is ${pctText(live.rate)}% (${live.date}).` : "");
+    rfNote = live && settings.rf === live.rate
+      ? `Using today's 3-month Treasury rate (${live.date}) for the whole window.`
+      : `Using ${pctText(settings.rf)}%, typed here.` + (live && !rfBoth ? ` The live 3-month Treasury rate is ${pctText(live.rate)}% (${live.date}).` : "");
+  } else if (view?.basis === "window" && view.window) {
+    rfNote = `The mean 3-month Treasury yield from ${view.window.from} to ${view.window.to}, the rate that prevailed over these prices ` +
+      `(${view.window.days} daily readings, source ${view.source}; today's is from ${view.date}). Override it freely.`;
+  } else if (view?.basis === "example") {
+    rfNote = `The example on screen keeps the ${pctText(view.inUse)}% it was saved with. Live prices are scored at the rate over their own window.`;
+  } else if (view?.basis === "today") {
+    rfNote = `Using today's 3-month Treasury rate (${view.date}): the rate over this window could not be loaded. Override it freely.`;
   } else if (live) {
     rfNote = `Live: 3-month Treasury, ${live.date} · source ${live.source}. Override it freely.`;
   } else if (unreachable) {
@@ -119,23 +141,16 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
     rfNote = "Looking up the live 3-month Treasury rate.";
   }
 
-  // ---- starting amount (723-725) ----
-  const [amountDraft, setAmountDraft] = useState(String(settings.amount));
-  const [amountError, setAmountError] = useState<string | null>(null);
-  useEffect(() => {
-    setAmountDraft((d) => (Number(d) === settings.amount ? d : String(settings.amount)));
-  }, [settings.amount]);
-
-  function changeAmount(v: string) {
-    setAmountDraft(v);
-    const n = Number(v);
-    if (v.trim() === "" || !Number.isFinite(n) || n < MIN_AMOUNT) {
-      setAmountError(`The starting amount must be at least $${MIN_AMOUNT.toLocaleString("en-US")}.`);
-      return;
-    }
-    setAmountError(null);
-    if (n !== settings.amount) setSettings({ amount: n });
+  function applyPreset(p: Preset) {
+    setTickerDraft(p.tickers);
+    commitTickers(p.tickers);
   }
+  const presetButton = (p: Preset, published: boolean) => (
+    <button key={p.name} type="button" className={published ? "rail-preset rail-preset-published" : "rail-preset"} onClick={() => applyPreset(p)}>
+      <span className="rail-preset-name">{p.name}</span>
+      <span className="rail-preset-desc">{p.desc}</span>
+    </button>
+  );
 
   // ---- benchmark (727-744): a symbol from a share link that is not in the list still shows ----
   const benchmarks = BENCHMARKS.some((b) => b.symbol === settings.benchmark)
@@ -164,23 +179,16 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
         <h2 className="rail-heading" id={`${id}-tickers-h`}>
           Tickers
         </h2>
-        <p className="rail-note">Quick presets:</p>
-        <div className="rail-presets">
-          {PRESETS.map((p) => (
-            <button
-              key={p.name}
-              type="button"
-              className="rail-preset"
-              onClick={() => {
-                setTickerDraft(p.tickers);
-                commitTickers(p.tickers);
-              }}
-            >
-              <span className="rail-preset-name">{p.name}</span>
-              <span className="rail-preset-desc">{p.desc}</span>
-            </button>
-          ))}
-        </div>
+        <p className="rail-note">The published sets:</p>
+        <div className="rail-presets">{PUBLISHED_PRESETS.map((p) => presetButton(p, true))}</div>
+        <p className="rail-note">
+          The three baskets whose walk-forward result is published. Here they are recomputed in-sample on the prices loaded, so
+          their figures are not the published ones.
+        </p>
+        <details className="rail-more">
+          <summary>More baskets</summary>
+          <div className="rail-presets">{MORE_PRESETS.map((p) => presetButton(p, false))}</div>
+        </details>
         <div className="rail-field">
           <label htmlFor={`${id}-tickers`}>Enter 3–10 tickers (comma-separated)</label>
           <input
@@ -268,35 +276,17 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
             value={rfDraft}
             onChange={(e) => changeRf(e.target.value)}
           />
+          {rfBoth ? <p className="rail-rates">{rfBoth}</p> : null}
           <p className="rail-note">{rfNote}</p>
           {settings.rf !== null ? (
             <button type="button" className="rail-link" onClick={() => setSettings({ rf: null })}>
-              Use the live rate
+              Use the rate over the window
+            </button>
+          ) : live && (view?.basis === "window" || view?.basis === "example") ? (
+            <button type="button" className="rail-link" onClick={() => setSettings({ rf: live.rate })}>
+              Use today's rate instead
             </button>
           ) : null}
-        </div>
-      </section>
-
-      <section className="rail-group" aria-labelledby={`${id}-amount-h`}>
-        <h2 className="rail-heading" id={`${id}-amount-h`}>
-          Starting investment
-        </h2>
-        <div className="rail-field">
-          <label htmlFor={`${id}-amount`}>Initial Amount ($)</label>
-          <input
-            id={`${id}-amount`}
-            name="amount"
-            type="number"
-            inputMode="numeric"
-            min={MIN_AMOUNT}
-            step={AMOUNT_STEP}
-            value={amountDraft}
-            aria-invalid={amountError !== null}
-            onChange={(e) => changeAmount(e.target.value)}
-          />
-          <p className={amountError ? "rail-error" : "rail-note"} role={amountError ? "alert" : undefined}>
-            {amountError ?? "Starting dollar amount for the cumulative wealth charts. Kept in this browser, never in a shared link."}
-          </p>
         </div>
       </section>
 

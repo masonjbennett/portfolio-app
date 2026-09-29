@@ -6,6 +6,7 @@
 // tickers, dates and rate), and while it is on screen the rail must show the example's inputs,
 // not these, or the rail and the numbers beside it would disagree.
 import { parseTickers } from "../lib/clean.ts";
+import { PUBLISHED_SETS } from "../content/published.ts";
 import type { Level, Settings, TabId } from "../types.ts";
 
 export interface Preset {
@@ -24,6 +25,26 @@ export const PRESETS: readonly Preset[] = [
   { name: "Growth", tickers: "NVDA, AMD, SHOP, TTD, MDB, NOW, PANW", desc: "High-growth tech" },
   { name: "Blue Chip", tickers: "AAPL, MSFT, JPM, JNJ, V, UNH, PG", desc: "Stable large caps" },
 ];
+
+// The three sets whose walk-forward result is published (src/content/published.ts), offered first
+// and marked, so any of them is one click from being recomputed here. They are NOT the app's list:
+// test/t-contract.mjs holds PRESETS to portfolio_app.py and these to the published constants, and
+// the Cross-asset set is in both. What the page shows for them is in-sample, fitted to the prices it
+// loads, never the published out-of-sample figures.
+export const PUBLISHED_PRESETS: readonly Preset[] = PUBLISHED_SETS.map((s) => ({
+  name: s.name,
+  tickers: s.tickers.join(", "),
+  desc: "Published",
+}));
+
+// The app's presets the published row does not already offer, shown under "More baskets".
+export const MORE_PRESETS: readonly Preset[] = PRESETS.filter((p) => !PUBLISHED_PRESETS.some((q) => q.tickers === p.tickers));
+
+// The published set these tickers are, in any order, or null.
+export function publishedPresetOf(tickers: readonly string[]): Preset | null {
+  const key = [...tickers].sort().join(",");
+  return PUBLISHED_PRESETS.find((p) => parseTickers(p.tickers).sort().join(",") === key) ?? null;
+}
 
 export interface Benchmark {
   label: string; // the select option, verbatim (728-735)

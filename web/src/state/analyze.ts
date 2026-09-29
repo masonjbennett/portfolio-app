@@ -59,6 +59,19 @@ export function isPricePayload(p: unknown): p is PricePayload {
     q.rows.every((r) => Array.isArray(r) && r.length === k + 1 && isStr(r[0]) && r.slice(1).every(isClose));
 }
 
+// The first and last price days analyze() will use: the same cleaning, stopped before the engine,
+// so the rate over the window can be taken across exactly the days the numbers cover. Null when the
+// payload would be refused anyway.
+export function priceSpan(payload: PricePayload): { from: string; to: string } | null {
+  if (!isPricePayload(payload) || validateRequest(payload.tickers, payload.start, payload.end)) return null;
+  const cleaned = cleanPrices(toFrame(payload), payload.missing, payload.tickers, payload.benchmark, {
+    keepBenchmarkTicker: true,
+  });
+  if (!cleaned.ok) return null;
+  const d = cleaned.frame.dates;
+  return d.length ? { from: d[0], to: d[d.length - 1] } : null;
+}
+
 export function analyze(payload: PricePayload, settings: Settings, rf: RfChoice): Analysis | AnalysisError {
   if (!isPricePayload(payload)) return fail("fetch-failed");
   const bad = validateRequest(payload.tickers, payload.start, payload.end);

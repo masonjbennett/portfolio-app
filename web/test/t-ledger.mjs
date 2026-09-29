@@ -172,6 +172,8 @@ const FOUND = {
   "beta rounded to 3 dp before it is coloured -> colour on the raw beta": {
     "beta-rounding": ["t-tab-risk"],
   },
+  "one risk-free rate, the latest, for every window -> the mean 3-month yield over the window, the latest beside it": { "rf-window": ["t-api", "t-workbench"] },
+  "presets are the app's baskets only -> the three published sets first, marked, the app's under More baskets": { "published-presets": ["t-contract"] },
 };
 const PENDING = [];
 
