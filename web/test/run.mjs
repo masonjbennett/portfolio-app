@@ -1,6 +1,8 @@
 // Runs every test/t-*.mjs, each in its own process. Suites are DISCOVERED, never listed: a suite
 // nobody runs looks exactly like a suite that passes. Every suite starts with test/_tsx.mjs
 // registered (--import), so a suite can import .tsx components and anything that imports CSS.
+// One suite on its own needs the same loader, or a suite that imports .tsx dies before its first check:
+//   node --import ./test/_tsx.mjs test/t-<name>.mjs
 import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

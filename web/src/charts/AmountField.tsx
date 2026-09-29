@@ -3,8 +3,8 @@
 // them all. The amount stays out of the share link, as it always has: the setting it writes is the one
 // the workbench keeps in this browser only.
 //
-// The draft is what the reader typed; the setting changes only when the draft is a whole amount at or
-// above the floor, so a half-typed "1" never redraws every chart at $1. Below the floor the field says
+// The draft is what the reader typed; the setting changes only when the draft is a number at or above
+// the floor, so a half-typed "1" never redraws every chart at $1. Below the floor the field says
 // why, and the charts keep the last good amount.
 import { useEffect, useId, useState } from "react";
 import { AMOUNT_STEP, MIN_AMOUNT } from "../state/defaults.ts";

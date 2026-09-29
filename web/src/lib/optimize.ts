@@ -205,8 +205,8 @@ export function bestLoneAsset(m: Vec, S: Mat, rf: number): Tangency | null {
 // Maximum Sharpe ratio (optimize_tangency, 936-944).
 //
 // Long-only, when at least one asset beats the risk-free rate: tangencyLongQP, one exact solve. It
-// replaced the face walk, which took about 0.2 s at 16 assets and 4 s at 20 (measured Sep 29 2026,
-// against well under 2 ms for the QP up to 50) and whose `1 << n` fails from 31 up.
+// replaced the face walk, which visits up to 2^n - 1 faces, so its time doubles with every asset
+// added, and whose `1 << n` fails from 31 up.
 //
 // Long-only, when none does: the least-negative portfolio, as the app's SLSQP does; beatsRf says so.
 // Up to FACES_UP_TO assets the face walk finds it, as it always has; past that, bestLoneAsset, which

@@ -106,7 +106,7 @@
 
 /* A published set: a teal rule on its left edge and its caption in teal small caps. */
 .rail-preset-published {
-  border-left: 3px solid var(--color-teal);
+  border-left: var(--line-bar) solid var(--color-teal);
 }
 
 .rail-preset-published .rail-preset-desc {
