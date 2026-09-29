@@ -451,7 +451,6 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
 // ---- (e) in-sample: what the tab says about weights chosen with the prices they are scored on ------------
 {
   const { FITTED } = await import("../src/tabs/caption.ts");
-  const { withSubs } = await import("../src/components/Table.tsx");
   const { PUBLISHED_URL } = await import("../src/content/published.ts");
   const a = fixtureAnalysis("cross");
   const calls = [];
@@ -488,9 +487,8 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     /in-sample/.test(text(notes[0])) && /what happened next/.test(text(notes[0])),
     "fitted-heads: one note says reviews like this print in-sample figures and links the walk-forward on the method card", notes[0] ? text(notes[0]) : "none");
   const wt = M.weightTable(a).value;
-  const flat = withSubs(wt.columns, wt.rows, Object.fromEntries(M.fittedHeads(wt).map((x) => [x, FITTED])));
-  check(csvText(flat.columns, flat.rows).split("\n")[0] === "Asset,GMV (weights chosen on this window),Tangency (weights chosen on this window),Equal-Weight",
-    "fitted-heads: the weights CSV header carries it too", csvText(flat.columns, flat.rows).split("\n")[0]);
+  check(csvText(wt.columns, wt.rows).split("\n")[0] === "Asset,GMV,Tangency,Equal-Weight",
+    "fitted-heads: the weights CSV keeps the app's plain header; the note is the page's", csvText(wt.columns, wt.rows).split("\n")[0]);
   check(JSON.stringify(M.fittedHeads(M.summaryTable({ ...a, gmv: null }, M.customWeights(a, {})).value)) === JSON.stringify(["Tangency"]),
     "fitted-heads: a failed GMV row chose nothing and carries nothing");
 

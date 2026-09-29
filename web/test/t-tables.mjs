@@ -215,7 +215,6 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
 // ---- spans and head sub-lines ---------------------------------------------------------------------
 
 {
-  const { withSubs } = await import("../src/components/Table.tsx");
   const subs = { GMV: "weights chosen on this window", Sharpe: "in-sample" };
   const t = render(h(Table, { title: "Portfolio comparison", columns: COLS, rows: ROWS, filename: "c", span: "Daily returns, 2019-01-03 to 2026-09-25", subs }));
   const cap = t.container.querySelector("caption");
@@ -226,10 +225,25 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   const row = [...t.container.querySelectorAll("tbody th")].map(subOf);
   check(JSON.stringify(col) === JSON.stringify([null, null, "in-sample", null]) && JSON.stringify(row) === JSON.stringify(["weights chosen on this window", null, null]),
     "subs: a head whose text is a key carries its sub-line, a column head or a row head, and no other head does", `${col} / ${row}`);
-  const flat = withSubs(COLS, ROWS, subs);
-  check(csvText(flat.columns, flat.rows).split("\n").slice(0, 2).join("|") === "Portfolio,Ann. Return,Sharpe (in-sample),As of|GMV (weights chosen on this window),0.1234,0.87654,2026-09-25" &&
-    same(withSubs(COLS, ROWS, undefined), { columns: COLS, rows: ROWS }) && ROWS[0].name === "GMV",
-    "subs: the downloads carry each sub-line in brackets after its head, and the rows passed in are not changed");
+  // The CSV the button saves: the plain heads, as the app's own downloads write them.
+  const saved = { create: URL.createObjectURL, revoke: URL.revokeObjectURL, click: window.HTMLAnchorElement.prototype.click };
+  let blob = null;
+  URL.createObjectURL = (b) => {
+    blob = b;
+    return "blob:test";
+  };
+  URL.revokeObjectURL = () => {};
+  window.HTMLAnchorElement.prototype.click = () => {};
+  try {
+    act(() => t.container.querySelector(".tbl-dl button").click());
+    const csv = blob ? await blob.text() : "";
+    check(csv === csvText(COLS, ROWS) && csv.split("\n")[0] === "Portfolio,Ann. Return,Sharpe,As of" && !/weights chosen|in-sample/.test(csv) && ROWS[0].name === "GMV",
+      "subs: the downloads keep the plain heads, and the rows passed in are not changed", csv.split("\n").slice(0, 2).join("|"));
+  } finally {
+    URL.createObjectURL = saved.create;
+    URL.revokeObjectURL = saved.revoke;
+    window.HTMLAnchorElement.prototype.click = saved.click;
+  }
   const bare = render(h(Table, { title: "Typed", columns: COLS, rows: ROWS, filename: "t", span: null }));
   check(!bare.container.querySelector(".tbl-span") && text(bare.container.querySelector("caption")) === "Typed", "spans: a table given no span claims no dates");
   t.unmount();

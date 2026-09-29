@@ -17,12 +17,12 @@
 // comes from no dates at all, passes null and says so at its call site.
 //
 // A head (a column's label, or a row's label) can carry a sub-line under it, keyed by the head's own
-// text in `subs`. The downloads carry the same words, in brackets after the head, so a CSV of GMV
-// weights still says how they were chosen.
+// text in `subs`. The sub-line is the page's alone: the downloads keep the plain heads the app's own
+// downloads use ("GMV", "Tangency"), so a sheet built on one keeps working.
 import { useState } from "react";
 import { downloadCsv, downloadXlsx } from "../download.ts";
 import { format, isText } from "../format.ts";
-import type { Column, TableProps, TableRow } from "../types.ts";
+import type { Column, TableProps } from "../types.ts";
 import "./Table.css";
 
 export interface Props extends TableProps {
@@ -30,20 +30,6 @@ export interface Props extends TableProps {
   span: string | null;
   /** A sub-line under any head whose text is a key: a column label, or a label-column cell. */
   subs?: Readonly<Record<string, string>>;
-}
-
-/** The columns and rows the downloads write: each head with its sub-line in brackets after it. */
-export function withSubs(columns: Column[], rows: TableRow[], subs?: Readonly<Record<string, string>>): { columns: Column[]; rows: TableRow[] } {
-  if (!subs || !Object.keys(subs).length) return { columns, rows };
-  const join = (t: string) => (Object.hasOwn(subs, t) ? `${t} (${subs[t]})` : t);
-  const label = labelKey(columns);
-  return {
-    columns: columns.map((c) => ({ ...c, label: join(c.label) })),
-    rows: rows.map((r) => {
-      const v = label === undefined ? undefined : r[label];
-      return typeof v === "string" && label !== undefined ? { ...r, [label]: join(v) } : r;
-    }),
-  };
 }
 
 function Sub({ subs, head }: { subs?: Readonly<Record<string, string>>; head: string }) {
@@ -59,13 +45,12 @@ export default function Table({ title, columns, rows, filename, span, subs }: Pr
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const label = labelKey(columns);
-  const out = withSubs(columns, rows, subs);
 
   async function excel() {
     setBusy(true);
     setFailed(false);
     try {
-      await downloadXlsx(filename, title, out.columns, out.rows);
+      await downloadXlsx(filename, title, columns, rows);
     } catch (err) {
       console.error(`[table] ${title}: the Excel file could not be built`, err);
       setFailed(true);
@@ -114,7 +99,7 @@ export default function Table({ title, columns, rows, filename, span, subs }: Pr
         </table>
       </div>
       <div className="tbl-dl">
-        <button type="button" onClick={() => downloadCsv(filename, out.columns, out.rows)} aria-label={`Download CSV of ${title}`}>
+        <button type="button" onClick={() => downloadCsv(filename, columns, rows)} aria-label={`Download CSV of ${title}`}>
           Download CSV
         </button>
         <button type="button" onClick={excel} disabled={busy} aria-busy={busy} aria-label={`Download Excel of ${title}`}>
