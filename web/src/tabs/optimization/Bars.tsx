@@ -3,6 +3,7 @@
 // it (barLayout in ./model.ts), in the series' own colour (ink2 for bronze, which is too light to read
 // as text: src/charts/contrast.ts). The app draws both as plotly grouped bars with a legend. Hover
 // names the one bar under the pointer (closest point, src/charts/theme.ts).
+import { memo } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { niceTicks } from "../../charts/Frontier.tsx";
 import { labelFill } from "../../charts/contrast.ts";
@@ -36,7 +37,7 @@ interface LabelBox {
 type Box = { x?: unknown; y?: unknown; width?: unknown; height?: unknown };
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
 
-export default function Bars({ data, height }: { data: BarsData; height: number }) {
+function Bars({ data, height }: { data: BarsData; height: number }) {
   const { groups, series } = data;
   const plotPx = height - MARGIN.top - MARGIN.bottom - X_AXIS_PX;
   const { host, lo, hi } = barLayout(groups, labelPx(series), plotPx);
@@ -104,3 +105,6 @@ export default function Bars({ data, height }: { data: BarsData; height: number 
     </ResponsiveContainer>
   );
 }
+
+// Drawn again only when its data or height changes, not whenever the card around it renders.
+export default memo(Bars);

@@ -9,6 +9,7 @@
 //
 // Each card sits in its own Boundary, so one that fails leaves the others standing. Every figure is
 // computed inside the card that shows it (Boundary: a throw in the parent's own render is not caught).
+import { memo } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
 import Slug from "../components/Slug.tsx";
@@ -31,7 +32,7 @@ import {
 } from "./correlation/model.ts";
 import "./correlation/correlation.css";
 
-export default function Correlation({ analysis, level, settings }: TabProps) {
+export default function Correlation({ analysis, level }: TabProps) {
   return (
     <section className="corr-tab" aria-labelledby="corr-headline">
       <Boundary name="Correlation headline" resetKey={analysis}>
@@ -46,13 +47,13 @@ export default function Correlation({ analysis, level, settings }: TabProps) {
       </Boundary>
       <Slug id="daily-covariance">Daily covariance matrix</Slug>
       <Boundary name="Daily covariance matrix" resetKey={analysis}>
-        <CovCard analysis={analysis} level={level} allowShort={settings.allowShort} />
+        <CovCard analysis={analysis} level={level} allowShort={analysis.allowShort} />
       </Boundary>
     </section>
   );
 }
 
-function Headline({ analysis }: { analysis: Analysis }) {
+const Headline = memo(function Headline({ analysis }: { analysis: Analysis }) {
   return (
     <header className="corr-head">
       <p className="corr-kicker">How the assets move together</p>
@@ -61,9 +62,9 @@ function Headline({ analysis }: { analysis: Analysis }) {
       </h2>
     </header>
   );
-}
+});
 
-function HeatCard({ analysis }: { analysis: Analysis }) {
+const HeatCard = memo(function HeatCard({ analysis }: { analysis: Analysis }) {
   const v = corrView(analysis);
   return (
     <>
@@ -79,9 +80,9 @@ function HeatCard({ analysis }: { analysis: Analysis }) {
       />
     </>
   );
-}
+});
 
-function CovCard({ analysis, level, allowShort }: { analysis: Analysis; level: Level; allowShort: boolean }) {
+const CovCard = memo(function CovCard({ analysis, level, allowShort }: { analysis: Analysis; level: Level; allowShort: boolean }) {
   const { tickers, S } = analysis;
   return (
     <>
@@ -100,4 +101,4 @@ function CovCard({ analysis, level, allowShort }: { analysis: Analysis; level: L
       />
     </>
   );
-}
+});

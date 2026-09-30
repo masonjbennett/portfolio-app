@@ -10,7 +10,7 @@
 // Each section sits inside its own Boundary, so a section that fails leaves one line naming it and the
 // rest of the tab keeps rendering. In the app a failed solve calls st.stop() (1481-1483, 1492-1494),
 // which ends the script run: this tab, and tabs 5 and 6 after it, stop there.
-import { useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import Frontier, { frontierData } from "../charts/Frontier.tsx";
 import Wealth, { wealthData } from "../charts/Wealth.tsx";
 import { usePhone } from "../chrome/usePhone.ts";
@@ -102,12 +102,12 @@ const spanOf = (a: Analysis) => tableSpan(a.dates[0], a.asOf);
 
 const shortNote = `Shorting is on: each weight is bounded to [${MINUS}100%, 100%], and the weights sum to 100%.`;
 
-function Headline({ a }: { a: Analysis }) {
+const Headline = memo(function Headline({ a }: { a: Analysis }) {
   return <h2 className="tab-finding opt-headline">{headline(a)}</h2>;
-}
+});
 
 // The efficient frontier (1592-1656), the tab's hero chart.
-function FrontierSection({ a, custom }: { a: Analysis; custom: Vec | null }) {
+const FrontierSection = memo(function FrontierSection({ a, custom }: { a: Analysis; custom: Vec | null }) {
   const state = useMemo(() => ({ status: "ready" as const, value: frontierData(a, custom) }), [a, custom]);
   return (
     <section className="opt-section" aria-labelledby="opt-frontier">
@@ -119,11 +119,11 @@ function FrontierSection({ a, custom }: { a: Analysis; custom: Vec | null }) {
       </p>
     </section>
   );
-}
+});
 
 // The three portfolios' figures (1504-1530): a row of five plates each, so a figure lines up with the
 // same figure of the other two.
-function Tiles({ a, level }: SectionProps) {
+const Tiles = memo(function Tiles({ a, level }: SectionProps) {
   const list = useMemo(() => tiles(a), [a]);
   return (
     <section className="opt-section" aria-labelledby="opt-tiles">
@@ -162,11 +162,11 @@ function Tiles({ a, level }: SectionProps) {
       <FittedNote className="opt-note" />
     </section>
   );
-}
+});
 
 // The weights (1534-1551): the bars, then the same numbers as a table with both downloads, then the dot
 // strips of the redrawn tangency weights.
-function Weights({ a, height, strips }: { a: Analysis; height: number; strips: ReactNode }) {
+const Weights = memo(function Weights({ a, height, strips }: { a: Analysis; height: number; strips: ReactNode }) {
   const bars = useMemo(() => weightBars(a), [a]);
   const table = useMemo(() => weightTable(a), [a]);
   return (
@@ -186,10 +186,10 @@ function Weights({ a, height, strips }: { a: Analysis; height: number; strips: R
       {strips}
     </section>
   );
-}
+});
 
 // The scorecard: every portfolio across, the benchmark last, below the weights.
-function ScorecardSection({ a, c, redraws, level }: { a: Analysis; c: Custom; redraws: RedrawState; level: Level }) {
+const ScorecardSection = memo(function ScorecardSection({ a, c, redraws, level }: { a: Analysis; c: Custom; redraws: RedrawState; level: Level }) {
   const model = useMemo(() => scorecard(a, c, redraws), [a, c, redraws]);
   return (
     <section className="opt-section" aria-labelledby="opt-scorecard">
@@ -197,17 +197,20 @@ function ScorecardSection({ a, c, redraws, level }: { a: Analysis; c: Custom; re
       <Scorecard model={model} redraws={redraws} level={level} allowShort={a.allowShort} filename="scorecard" />
     </section>
   );
-}
+});
 
 // Risk contribution (1555-1572), widened: each asset's share of the money, of the return and of the
 // risk, for the portfolio the pill picks, then every portfolio's shares side by side in the table.
 const SHARE_OPTIONS = SHARE_PORTS.map((id) => ({ value: id, label: SHARE_LABEL[id] }));
 
-function RiskContribution({ a, c, height }: { a: Analysis; c: Custom; height: number }) {
+const RiskContribution = memo(function RiskContribution({ a, c, height }: { a: Analysis; c: Custom; height: number }) {
   const [pick, setPick] = useState<SharePort>("tangency");
   // A pick whose portfolio is missing (a failed solve, a refused mix) shows the first one that is there.
   const shown = shareWeights(a, c, pick) ? pick : (SHARE_PORTS.find((id) => shareWeights(a, c, id)) ?? pick);
-  const bars = useMemo(() => shareBars(a, c, shown), [a, c, shown]);
+  // The custom weights reach the bars only while Custom is the portfolio shown, so an edited mix leaves
+  // another portfolio's bars as they were, undrawn.
+  const barsCustom = shown === "custom" ? c : null;
+  const bars = useMemo(() => shareBars(a, barsCustom, shown), [a, barsCustom, shown]);
   const table = useMemo(() => prcTable(a, c), [a, c]);
   const note = useMemo(() => shareNote(a, c), [a, c]);
   return (
@@ -238,10 +241,10 @@ function RiskContribution({ a, c, height }: { a: Analysis; c: Custom; height: nu
       ) : null}
     </section>
   );
-}
+});
 
 // The growth of the starting amount (1660-1674): the shared Wealth chart.
-function Growth({ a, custom, amount, onAmount }: { a: Analysis; custom: Vec | null; amount: number; onAmount: (n: number) => void }) {
+const Growth = memo(function Growth({ a, custom, amount, onAmount }: { a: Analysis; custom: Vec | null; amount: number; onAmount: (n: number) => void }) {
   const state = useMemo(() => ({ status: "ready" as const, value: wealthData(a, custom) }), [a, custom]);
   return (
     <section className="opt-section" aria-labelledby="opt-wealth">
@@ -249,10 +252,10 @@ function Growth({ a, custom, amount, onAmount }: { a: Analysis; custom: Vec | nu
       <Wealth title={wealthTitle(a, custom, amount)} state={state} amount={amount} onAmount={onAmount} />
     </section>
   );
-}
+});
 
 // The summary comparison (1678-1703).
-function Summary({ a, c }: { a: Analysis; c: Custom }) {
+const Summary = memo(function Summary({ a, c }: { a: Analysis; c: Custom }) {
   const table = useMemo(() => summaryTable(a, c), [a, c]);
   const note = customNote(a, c);
   return (
@@ -266,7 +269,7 @@ function Summary({ a, c }: { a: Analysis; c: Custom }) {
       </p>
     </section>
   );
-}
+});
 
 export default function Optimization({ analysis: a, settings, level, weights, requestSettings }: TabProps) {
   const phone = usePhone();
@@ -280,6 +283,17 @@ export default function Optimization({ analysis: a, settings, level, weights, re
   const seed = seedOf(k);
   const redraws = useRedraws(a, seed);
   const scoreKey = useMemo(() => [c, redraws], [c, redraws]);
+  // Held steady, so a card whose own inputs did not change is skipped when the tab renders again (each
+  // card is memo'd): an explanation level reaches the tooltips, an amount the growth chart.
+  const onAmount = useCallback((n: number) => requestSettings({ amount: n }), [requestSettings]);
+  const strips = useMemo(
+    () => (
+      <Boundary name="Redraw dot strips" resetKey={redraws}>
+        <DotStrips a={a} redraws={redraws} set={k} seed={seed} onRedraw={() => setDraws({ a, k: k + 1 })} />
+      </Boundary>
+    ),
+    [a, redraws, k, seed],
+  );
   return (
     <div className="opt" data-tab="optimization">
       <Boundary name="The headline" resetKey={a}>
@@ -292,15 +306,7 @@ export default function Optimization({ analysis: a, settings, level, weights, re
         <Tiles a={a} level={level} />
       </Boundary>
       <Boundary name="Portfolio weights" resetKey={a}>
-        <Weights
-          a={a}
-          height={barHeight}
-          strips={
-            <Boundary name="Redraw dot strips" resetKey={redraws}>
-              <DotStrips a={a} redraws={redraws} set={k} seed={seed} onRedraw={() => setDraws({ a, k: k + 1 })} />
-            </Boundary>
-          }
-        />
+        <Weights a={a} height={barHeight} strips={strips} />
       </Boundary>
       <Boundary name="Scorecard" resetKey={scoreKey}>
         <ScorecardSection a={a} c={c} redraws={redraws} level={level} />
@@ -309,7 +315,7 @@ export default function Optimization({ analysis: a, settings, level, weights, re
         <RiskContribution a={a} c={c} height={barHeight} />
       </Boundary>
       <Boundary name="Cumulative wealth" resetKey={c}>
-        <Growth a={a} custom={custom} amount={settings.amount} onAmount={(n) => requestSettings({ amount: n })} />
+        <Growth a={a} custom={custom} amount={settings.amount} onAmount={onAmount} />
       </Boundary>
       <Boundary name="Summary comparison" resetKey={c}>
         <Summary a={a} c={c} />

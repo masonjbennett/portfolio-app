@@ -9,22 +9,41 @@
 // needs the masthead, the rail and the band, none of which chart anything. Once a tab has drawn,
 // the other five are fetched while the page is idle, so a later switch finds its tab in memory and
 // a deploy mid-visit cannot strand a tab whose chunk the new deployment no longer serves.
-import { lazy, Suspense, useCallback, useEffect, useState, useTransition, type ComponentType } from "react";
-import Band from "./chrome/Band.tsx";
-import CommandPalette from "./chrome/CommandPalette.tsx";
-import Footer from "./chrome/Footer.tsx";
-import Masthead from "./chrome/Masthead.tsx";
-import Rail from "./chrome/Rail.tsx";
+import { lazy, memo, Suspense, useCallback, useEffect, useState, useTransition, type ComponentType } from "react";
+import BandView from "./chrome/Band.tsx";
+import CommandPaletteView from "./chrome/CommandPalette.tsx";
+import FooterView from "./chrome/Footer.tsx";
+import MastheadView from "./chrome/Masthead.tsx";
+import RailView from "./chrome/Rail.tsx";
 import SummaryChip, { Sheet } from "./chrome/SummaryChip.tsx";
 import { usePhone } from "./chrome/usePhone.ts";
 import Boundary from "./components/Boundary.tsx";
 import { ChartNote } from "./components/ChartFrame.tsx";
 import SegControl, { tabId, tabPanelId } from "./components/SegControl.tsx";
 import { useWorkbench } from "./state/useWorkbench.ts";
-import { TAB_IDS, TAB_LABELS, type TabId, type TabProps, type Workbench } from "./types.ts";
+import { TAB_IDS, TAB_LABELS, type Analysis, type TabId, type TabProps, type Workbench } from "./types.ts";
 import "./App.css";
 
 type TabModule = { default: ComponentType<TabProps> };
+
+// The chrome renders again only when its own props change: an edited amount or custom weight leaves
+// the masthead, the rail and the band alone, and a new explanation level reaches only what shows it.
+const Band = memo(BandView);
+const CommandPalette = memo(CommandPaletteView);
+const Footer = memo(FooterView);
+const Masthead = memo(MastheadView);
+const Rail = memo(RailView);
+
+// Whether the figures on screen were built with other settings than the rail now shows. The shorting
+// switch and a typed rate reach the analysis a render after the rail (src/state/useWorkbench.ts), so
+// for that moment the two disagree: the switch against the analysis' shorting, a typed rate against
+// its rate, and a cleared field against an analysis still scored at the rate that was typed.
+export function settlingOf(wb: Workbench, a: Analysis | null): boolean {
+  if (!a) return false;
+  if (a.allowShort !== wb.settings.allowShort) return true;
+  const typed = wb.settings.rf;
+  return typed !== null ? a.rf !== typed : a.rfSource === "manual";
+}
 
 // Where each tab's code lives. A dynamic import is the only reference App makes to a tab: a static
 // one would pull that tab, and Recharts with it, back into the first chunk (test/t-split.mjs).
@@ -98,7 +117,15 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   );
   // The analysis object is the identity a card's boundary resets on: new prices, a new rate or
   // the shorting switch make a new one, and a card that failed on the old one tries again.
+  //
+  // Only the active tab is mounted, so an edit never renders a tab the reader cannot see. Each card
+  // inside renders again only when its own inputs change (memo on the cards and on the charts'
+  // drawing components): an explanation level reaches the tooltips, an amount the growth charts.
   const ready = wb.analysis.status === "ready" ? wb.analysis.value : null;
+  // The rail has changed and the analysis behind the band and the tab has not caught up yet: both keep
+  // the previous figures, marked the same way as a tab switch (aria-busy and the dim), so no figure
+  // from the old settings sits unmarked beside the new ones.
+  const settling = settlingOf(wb, ready);
   const Tab = tabs[wb.tab];
   const drawn = ready !== null;
   useEffect(() => (drawn && tabs === TABS ? whenIdle(prefetchTabs) : undefined), [drawn, tabs]);
@@ -123,7 +150,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
         )}
         <main className="app-main">
           <Boundary name="Snapshot" resetKey={ready}>
-            <Band analysis={wb.analysis} level={wb.level} fetching={wb.fetching} failure={wb.failure} />
+            <Band analysis={wb.analysis} level={wb.level} fetching={wb.fetching} failure={wb.failure} settling={settling} />
           </Boundary>
           {ready ? (
             <>
@@ -139,7 +166,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
                     role="tabpanel"
                     id={tabPanelId(TAB_PREFIX, wb.tab)}
                     aria-labelledby={tabId(TAB_PREFIX, wb.tab)}
-                    aria-busy={switching || undefined}
+                    aria-busy={switching || settling || undefined}
                   >
                     <Tab
                       analysis={ready}

@@ -105,3 +105,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* The figures below the published result while a shorting or rate change is being worked in: the
+   previous settings' numbers, readable, plainly waiting (the tab below dims the same way). */
+.band--settling .band-finding,
+.band--settling .band-plates,
+.band--settling .band-whatif-fold {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}

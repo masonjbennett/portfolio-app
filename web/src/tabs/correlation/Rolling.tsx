@@ -4,7 +4,7 @@
 //
 // The app's two selectboxes open on the first and second assets and its slider on 60 (1444-1448); the
 // same choices open here. Two identical assets give the app's st.info (1458) in the chart's place.
-import { useId, useState } from "react";
+import { memo, useId, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import ChartFrame from "../../components/ChartFrame.tsx";
 import SegControl from "../../components/SegControl.tsx";
@@ -23,7 +23,7 @@ const LINE = tokens.color.navy;
 const WINDOW_OPTIONS = WINDOWS.map((w) => ({ value: String(w) as `${RollWindow}`, label: `${w} days` }));
 const TICKS = [-1, -0.5, 0, 0.5, 1];
 
-export default function Rolling({ analysis }: { analysis: Analysis }) {
+function Rolling({ analysis }: { analysis: Analysis }) {
   const { tickers } = analysis;
   const [pickA, pickB] = defaultPair(tickers);
   const [selA, setA] = useState(pickA);
@@ -114,3 +114,6 @@ function RollChart({ v }: { v: RollView }) {
     </LineChart>
   );
 }
+
+// Drawn again only when the analysis changes, not when the tab renders for an explanation level.
+export default memo(Rolling);

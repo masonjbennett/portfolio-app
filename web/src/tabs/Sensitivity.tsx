@@ -7,7 +7,7 @@
 // at 1904-1905 do not say so), a failed solve prints a dash and is named instead of vanishing, every
 // table downloads as CSV and Excel (the app offers CSV for the two weight tables only, 1930-1932),
 // and the too-short message states the one-year rule the code applies.
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
 import SegControl from "../components/SegControl.tsx";
@@ -176,11 +176,11 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
   );
 }
 
-function Finding({ fits, tickers }: { fits: WindowFit[]; tickers: string[] }) {
+const Finding = memo(function Finding({ fits, tickers }: { fits: WindowFit[]; tickers: string[] }) {
   return <h2 className="tab-finding sens-finding">{headline(fits, tickers)}</h2>;
-}
+});
 
-function WeightChart({ fits, port, setPort, tickers }: { fits: WindowFit[]; port: Port; setPort: (p: Port) => void; tickers: string[] }) {
+const WeightChart = memo(function WeightChart({ fits, port, setPort, tickers }: { fits: WindowFit[]; port: Port; setPort: (p: Port) => void; tickers: string[] }) {
   const groups = weightGroups(fits, port, tickers);
   const n = fits.length;
   // One hue per portfolio, the windows from light (shortest) to full (longest).
@@ -208,9 +208,9 @@ function WeightChart({ fits, port, setPort, tickers }: { fits: WindowFit[]; port
       </ChartFrame>
     </div>
   );
-}
+});
 
-function Metrics({ fits, rf, level, allowShort }: { fits: WindowFit[]; rf: number; level: TabProps["level"]; allowShort: boolean }) {
+const Metrics = memo(function Metrics({ fits, rf, level, allowShort }: { fits: WindowFit[]; rf: number; level: TabProps["level"]; allowShort: boolean }) {
   const below = belowRf(fits);
   return (
     <>
@@ -260,9 +260,9 @@ function Metrics({ fits, rf, level, allowShort }: { fits: WindowFit[]; rf: numbe
       ) : null}
     </>
   );
-}
+});
 
-function CustomSection({ fits, tickers, weights, rf, allowShort }: {
+const CustomSection = memo(function CustomSection({ fits, tickers, weights, rf, allowShort }: {
   fits: WindowFit[];
   tickers: string[];
   weights: TabProps["weights"];
@@ -316,4 +316,4 @@ function CustomSection({ fits, tickers, weights, rf, allowShort }: {
       </ChartFrame>
     </div>
   );
-}
+});

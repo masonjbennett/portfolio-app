@@ -17,7 +17,7 @@
 // (src/state/rfwindow.ts), fetched again when the start date moves earlier than the series held. The example keeps the rate it
 // was baked at until live prices replace it, and live prices wait for the rate over their own window
 // when it is on its way, so a cold load changes the numbers on screen once, not two or three times.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { parseTickers, validateRequest } from "../lib/clean.ts";
 import { isExample } from "../data/payload.ts";
 import { analyze, isPricePayload, MESSAGES, priceSpan } from "./analyze.ts";
@@ -309,16 +309,28 @@ export function useWorkbench(): Workbench {
     return () => clearTimeout(t);
   }, [wantHold, payload]);
   const hold = wantHold && !(spentFor === payload && pick.basis === "today");
+  // The two rail inputs that rebuild the analysis, the shorting switch and a typed rate, reach it one
+  // render behind the rail. The render that flips the switch (or shows the typed rate) is cheap and
+  // paints at once; the rebuilt analysis, and every card drawn from it, follows in a render React may
+  // interrupt and restart if the reader moves again. Until it lands, the analysis on screen disagrees
+  // with the rail, and the page marks its figures as waiting (src/App.tsx). Only the reader's own
+  // inputs wait: new prices and a rate that lands from FRED still reach the analysis together, in one
+  // render, so a cold load changes the numbers on screen once.
+  const shortFor = useDeferredValue(settings.allowShort);
+  const manualFor = useDeferredValue(settings.rf);
+  const behind = shortFor !== settings.allowShort || manualFor !== settings.rf;
+  const pickFor = behind ? chooseRf(manualFor, rf, payload, span) : pick;
   const fresh = useMemo(
-    () => (payload && !hold ? safeAnalyze(payload, settings, pick.choice) : null),
+    () => (payload && !hold ? safeAnalyze(payload, { ...settings, allowShort: shortFor }, pickFor.choice) : null),
     // analyze() reads only allowShort from the settings.
-    [payload, settings.allowShort, pick.choice.rate, pick.choice.source, hold],
+    [payload, shortFor, pickFor.choice.rate, pickFor.choice.source, hold],
   );
   // What is on screen, kept for the next hold. Written during render, but only ever with what this
   // same render returns, so rendering twice writes the same thing twice.
-  if (!hold) shown.current = fresh ? { computed: fresh, pick } : null;
+  if (!hold) shown.current = fresh ? { computed: fresh, pick: pickFor } : null;
   const computed = hold ? (shown.current?.computed ?? null) : fresh;
-  const inUse = hold ? (shown.current?.pick ?? pick) : pick;
+  // The rail's "scored against" names the rate of the figures on screen, so it follows them, not the field.
+  const inUse = hold ? (shown.current?.pick ?? pick) : pickFor;
   const analysis = useMemo<LoadState<Analysis>>(() => {
     if (computed?.ok) return { status: "ready", value: computed };
     if (computed) return { status: "error", name: "analysis", message: computed.message };

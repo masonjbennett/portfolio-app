@@ -6,7 +6,7 @@
 // Each section sits inside its own Boundary, so a section that fails leaves one line naming it and the
 // rest of the tab keeps rendering. The app has one script run for the whole page, and a throw anywhere
 // in it ends everything after.
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
 import Plate from "../components/Plate.tsx";
@@ -47,13 +47,13 @@ interface SectionProps {
   allowShort: boolean;
 }
 
-function Headline({ a }: { a: Analysis }) {
+const Headline = memo(function Headline({ a }: { a: Analysis }) {
   return <h2 className="tab-finding risk-headline">{headline(a)}</h2>;
-}
+});
 
 // The drawdown of one asset (1333-1348). The app opens on the first ticker (selectbox, 1334); this
 // opens on the asset the headline names, so the chart under the sentence shows what it says.
-function Drawdowns({ a, level, allowShort }: SectionProps) {
+const Drawdowns = memo(function Drawdowns({ a, level, allowShort }: SectionProps) {
   const [pick, setPick] = useState<string | null>(null);
   const all = tickerDrawdowns(a);
   const shown = (pick !== null ? all.find((d) => d.name === pick) : undefined) ?? worstDrawdown(all) ?? all[0];
@@ -91,10 +91,10 @@ function Drawdowns({ a, level, allowShort }: SectionProps) {
       </p>
     </section>
   );
-}
+});
 
 // Rolling annualised volatility (1321-1328), over the app's four windows.
-function Volatility({ a, level, allowShort }: SectionProps) {
+const Volatility = memo(function Volatility({ a, level, allowShort }: SectionProps) {
   const [w, setW] = useState<VolWindow>(DEFAULT_WINDOW);
   const state = useMemo(() => volChart(a, w), [a, w]);
   const options = VOL_WINDOWS.map((x) => ({ value: String(x), label: `${x} days` }));
@@ -123,10 +123,10 @@ function Volatility({ a, level, allowShort }: SectionProps) {
       </ChartFrame>
     </section>
   );
-}
+});
 
 // Sharpe and Sortino for each asset and the benchmark (1353-1367).
-function Metrics({ a, level, allowShort }: SectionProps) {
+const Metrics = memo(function Metrics({ a, level, allowShort }: SectionProps) {
   const rows = useMemo(() => riskRows(a), [a]);
   return (
     <section className="risk-section" aria-labelledby="risk-metrics">
@@ -143,10 +143,10 @@ function Metrics({ a, level, allowShort }: SectionProps) {
       </p>
     </section>
   );
-}
+});
 
 // CAPM beta and alpha (1372-1416): the betas as bars, then the table.
-function Capm({ a, level, allowShort }: SectionProps) {
+const Capm = memo(function Capm({ a, level, allowShort }: SectionProps) {
   const list = useMemo(() => capmRows(a), [a]);
   const state = useMemo(() => betaChart(list), [list]);
   const rows = useMemo(() => capmTableRows(list), [list]);
@@ -174,10 +174,11 @@ function Capm({ a, level, allowShort }: SectionProps) {
       <Table title="CAPM beta and alpha" columns={CAPM_COLUMNS} rows={rows} filename="capm_beta_alpha" span={tableSpan(a.dates[0], a.asOf)} />
     </section>
   );
-}
+});
 
-export default function Risk({ analysis: a, settings, level }: TabProps) {
-  const p = { a, level, allowShort: settings.allowShort };
+export default function Risk({ analysis: a, level }: TabProps) {
+  // The shorting the analysis was built with (the rail's switch can be a render ahead of it).
+  const p = { a, level, allowShort: a.allowShort };
   return (
     <div className="risk" data-tab="risk">
       <Boundary name="The headline" resetKey={a}>

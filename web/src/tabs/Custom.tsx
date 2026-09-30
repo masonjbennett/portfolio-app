@@ -12,10 +12,13 @@
 // Each section sits inside its own Boundary, keyed on the weights, so a section that throws leaves one
 // line naming it, the rest keeps rendering, and a change of weights tries it again.
 //
+// Each section renders again only when its own inputs change (memo, with the amount's handler held
+// steady): an amount reaches the wealth chart alone, an explanation level the figures and scorecard.
+//
 // The scorecard is the Optimization tab's own component, the Custom column set in bold: the typed mix
 // beside every other portfolio and the benchmark, on every figure. Its redraw row is solved after the
 // tab has painted, on the first draw set's seed, the same one the Optimization tab opens on.
-import { useId, useMemo, useState } from "react";
+import { memo, useCallback, useId, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import Plate from "../components/Plate.tsx";
 import Scorecard from "../components/Scorecard.tsx";
@@ -55,9 +58,9 @@ import { scorecard, type RedrawState } from "./optimization/scorecard.ts";
 
 const TABLE_TITLE = "Normalized Weights";
 
-function Headline({ a, v }: { a: Analysis; v: CustomView }) {
+const Headline = memo(function Headline({ a, v }: { a: Analysis; v: CustomView }) {
   return <h2 className="tab-finding cust-headline">{headline(a, v)}</h2>;
-}
+});
 
 // One asset's weight: a slider for dragging on the app's 0.01 grid (1720) and a field for typing any
 // decimal. Both store the value held to the current bounds; the field keeps what is being typed until
@@ -104,7 +107,7 @@ function WeightRow({ ticker, value, allowShort, onSet }: { ticker: string; value
   );
 }
 
-function Builder({ a, v, weights, setWeights }: { a: Analysis; v: CustomView; weights: CustomWeights; setWeights: (w: CustomWeights) => void }) {
+const Builder = memo(function Builder({ a, v, weights, setWeights }: { a: Analysis; v: CustomView; weights: CustomWeights; setWeights: (w: CustomWeights) => void }) {
   const { lo } = bounds(a.allowShort);
   const clamp = clampLine(v, a.allowShort);
   return (
@@ -140,9 +143,9 @@ function Builder({ a, v, weights, setWeights }: { a: Analysis; v: CustomView; we
       ) : null}
     </section>
   );
-}
+});
 
-function Metrics({ a, v, level }: { a: Analysis; v: CustomView; level: Level }) {
+const Metrics = memo(function Metrics({ a, v, level }: { a: Analysis; v: CustomView; level: Level }) {
   const w = customWeights(v);
   const p = useMemo(() => (w ? customMetrics(a, w) : null), [a, w]);
   // The Sharpe plate carries its standard error, as the Optimization tiles and the scorecard do.
@@ -166,9 +169,9 @@ function Metrics({ a, v, level }: { a: Analysis; v: CustomView; level: Level }) 
       <p className="cust-note">{p ? platesNote(a) : "No figures: the weights above were refused."}</p>
     </section>
   );
-}
+});
 
-function FrontierCard({ a, v }: { a: Analysis; v: CustomView }) {
+const FrontierCard = memo(function FrontierCard({ a, v }: { a: Analysis; v: CustomView }) {
   const w = customWeights(v);
   const points = useMemo(() => customFrontier(a), [a]);
   const state = useMemo<LoadState<FrontierData>>(() => ({ status: "ready", value: frontierData(a, w, points) }), [a, w, points]);
@@ -179,9 +182,9 @@ function FrontierCard({ a, v }: { a: Analysis; v: CustomView }) {
       <Frontier title={title} state={state} allowShort={a.allowShort} rf={a.rf} />
     </section>
   );
-}
+});
 
-function WealthCard({ a, v, amount, onAmount }: { a: Analysis; v: CustomView; amount: number; onAmount: (n: number) => void }) {
+const WealthCard = memo(function WealthCard({ a, v, amount, onAmount }: { a: Analysis; v: CustomView; amount: number; onAmount: (n: number) => void }) {
   const w = customWeights(v);
   const data = useMemo(() => wealthData(a, w), [a, w]);
   const state = useMemo<LoadState<WealthData>>(() => ({ status: "ready", value: data }), [data]);
@@ -192,10 +195,10 @@ function WealthCard({ a, v, amount, onAmount }: { a: Analysis; v: CustomView; am
       <Wealth title={title} state={state} amount={amount} onAmount={onAmount} />
     </section>
   );
-}
+});
 
 // The scorecard for the typed mix, beside the other portfolios and the benchmark.
-function ScorecardCard({ a, v, redraws, level }: { a: Analysis; v: CustomView; redraws: RedrawState; level: Level }) {
+const ScorecardCard = memo(function ScorecardCard({ a, v, redraws, level }: { a: Analysis; v: CustomView; redraws: RedrawState; level: Level }) {
   const model = useMemo(() => scorecard(a, v.custom, redraws), [a, v, redraws]);
   return (
     <section className="cust-section" aria-labelledby="cust-scorecard">
@@ -203,11 +206,11 @@ function ScorecardCard({ a, v, redraws, level }: { a: Analysis; v: CustomView; r
       <Scorecard model={model} redraws={redraws} level={level} allowShort={a.allowShort} filename="custom_scorecard" focus="custom" />
     </section>
   );
-}
+});
 
 // Entered is the weight as typed; a weight outside the bounds counts at the nearest bound, so when one
 // was held there the note says so rather than claim every row is its entry over the total.
-function WeightsTable({ v }: { v: CustomView }) {
+const WeightsTable = memo(function WeightsTable({ v }: { v: CustomView }) {
   const state = weightTable(v);
   const clamped = v.clamps.length > 0;
   return (
@@ -230,10 +233,11 @@ function WeightsTable({ v }: { v: CustomView }) {
       )}
     </section>
   );
-}
+});
 
 export default function Custom({ analysis: a, settings, level, weights, setWeights, requestSettings }: TabProps) {
   const v = useMemo(() => customView(a, weights), [a, weights]);
+  const onAmount = useCallback((n: number) => requestSettings({ amount: n }), [requestSettings]);
   const redraws = useRedraws(a, seedOf(0));
   const scoreKey = useMemo(() => [v, redraws], [v, redraws]);
   return (
@@ -252,7 +256,7 @@ export default function Custom({ analysis: a, settings, level, weights, setWeigh
         <FrontierCard a={a} v={v} />
       </Boundary>
       <Boundary name="Cumulative wealth" resetKey={v}>
-        <WealthCard a={a} v={v} amount={settings.amount} onAmount={(n) => requestSettings({ amount: n })} />
+        <WealthCard a={a} v={v} amount={settings.amount} onAmount={onAmount} />
       </Boundary>
       <Boundary name="Scorecard" resetKey={scoreKey}>
         <ScorecardCard a={a} v={v} redraws={redraws} level={level} />

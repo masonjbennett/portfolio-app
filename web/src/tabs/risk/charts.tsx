@@ -4,6 +4,7 @@
 //
 // Points are labelled in the chart rather than in a legend: the drawdown's low, each volatility line
 // at its end, each beta on its bar, and the market line at 1. Colours come from the tokens only.
+import { memo } from "react";
 import {
   Area,
   AreaChart,
@@ -37,13 +38,15 @@ const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 const AXIS_PX = 30;
 const TOP_PX = 12;
 
+// Each plot below is memo'd: it draws again when its data changes, not when the card around it renders
+// for an explanation level.
 export const DRAWDOWN_HEIGHT = 320;
 export const VOL_HEIGHT = 360;
 export const BETA_HEIGHT = 320;
 
 // The drawdown of one asset, filled down to zero (fill="tozeroy", 1340-1343) in the market-down red,
 // with its low marked and labelled. The first point is the first close: the amount invested.
-export function DrawdownPlot({ data, name }: { data: DrawdownData; name: string }) {
+export const DrawdownPlot = memo(function DrawdownPlot({ data, name }: { data: DrawdownData; name: string }) {
   const low = data.low;
   return (
     <ResponsiveContainer width="100%" height={DRAWDOWN_HEIGHT}>
@@ -82,11 +85,11 @@ export function DrawdownPlot({ data, name }: { data: DrawdownData; name: string 
       </AreaChart>
     </ResponsiveContainer>
   );
-}
+});
 
 // One line per asset (px.line of the rolling frame, 1325), each named at its end, and the highest
 // point any of them reached marked with its value.
-export function VolPlot({ data }: { data: VolData }) {
+export const VolPlot = memo(function VolPlot({ data }: { data: VolData }) {
   const plotPx = VOL_HEIGHT - AXIS_PX - TOP_PX;
   const ends = endLabels(data.last, data.yMax, plotPx);
   const end = data.rows[data.rows.length - 1]?.date;
@@ -127,7 +130,7 @@ export function VolPlot({ data }: { data: VolData }) {
       </LineChart>
     </ResponsiveContainer>
   );
-}
+});
 
 // The CAPM betas as bars (1396-1410), each labelled with its value. Above the market line at 1 in
 // claret, at or below it in navy: the app's danger red and secondary blue, moved onto the brand
@@ -135,7 +138,7 @@ export function VolPlot({ data }: { data: VolData }) {
 export const BETA_ABOVE = c.claret;
 export const BETA_BELOW = c.navy;
 
-export function BetaPlot({ data }: { data: BetaData }) {
+export const BetaPlot = memo(function BetaPlot({ data }: { data: BetaData }) {
   return (
     <ResponsiveContainer width="100%" height={BETA_HEIGHT}>
       <BarChart data={data.bars} margin={{ top: 20, right: 16, bottom: 0, left: 0 }}>
@@ -165,4 +168,4 @@ export function BetaPlot({ data }: { data: BetaData }) {
       </BarChart>
     </ResponsiveContainer>
   );
-}
+});

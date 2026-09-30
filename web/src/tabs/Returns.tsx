@@ -6,7 +6,7 @@
 // own numbers. Each card computes its own figures inside its own Boundary, so a card that fails is
 // replaced by one line naming it and the rest of the tab still renders. The starting amount is read
 // live from the settings, as the app reads it on every rerun (1258).
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
 import SegControl from "../components/SegControl.tsx";
@@ -29,7 +29,7 @@ import "./returns/Returns.css";
 const GROWTH_H = 420;
 const DIST_H = 360;
 
-function Lead({ a, amount }: { a: Analysis; amount: number }) {
+const Lead = memo(function Lead({ a, amount }: { a: Analysis; amount: number }) {
   const g = useMemo(() => growth(a, amount), [a, amount]);
   return (
     <header className="ret-lead">
@@ -38,12 +38,12 @@ function Lead({ a, amount }: { a: Analysis; amount: number }) {
       <p className="ret-dek">{dek(a)}</p>
     </header>
   );
-}
+});
 
 // C1 and the table of where each line ended. The app's multiselect (1259) is a row of toggles here,
 // each carrying its line's colour, which on a phone is also the chart's key. The starting amount is
 // edited in the chart's own head, where it acts.
-function GrowthCard({ a, amount, onAmount }: { a: Analysis; amount: number; onAmount: (n: number) => void }) {
+const GrowthCard = memo(function GrowthCard({ a, amount, onAmount }: { a: Analysis; amount: number; onAmount: (n: number) => void }) {
   const g = useMemo(() => growth(a, amount), [a, amount]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [ref, width] = useWidth<HTMLDivElement>();
@@ -85,10 +85,10 @@ function GrowthCard({ a, amount, onAmount }: { a: Analysis; amount: number; onAm
       />
     </>
   );
-}
+});
 
 // T1 (1229-1253). The two annualised columns carry the app's tooltips at the chosen level.
-function SummaryCard({ a, level, allowShort }: { a: Analysis; level: Level; allowShort: boolean }) {
+const SummaryCard = memo(function SummaryCard({ a, level, allowShort }: { a: Analysis; level: Level; allowShort: boolean }) {
   const rows = useMemo(() => summaryRows(a), [a]);
   return (
     <>
@@ -109,7 +109,7 @@ function SummaryCard({ a, level, allowShort }: { a: Analysis; level: Level; allo
       <Table title="Summary Statistics" columns={SUMMARY_COLUMNS} rows={rows} filename={SUMMARY_FILE} span={tableSpan(a.dates[0], a.asOf)} headed />
     </>
   );
-}
+});
 
 type View = "hist" | "qq";
 const VIEWS = [
@@ -118,7 +118,7 @@ const VIEWS = [
 ] as const;
 
 // C2 / C3 (1271-1312): one ticker at a time; the app does not offer the benchmark here (1275).
-function DistributionCard({ a }: { a: Analysis }) {
+const DistributionCard = memo(function DistributionCard({ a }: { a: Analysis }) {
   const [pick, setPick] = useState(a.tickers[0]);
   const [view, setView] = useState<View>("hist");
   const [ref, width] = useWidth<HTMLDivElement>();
@@ -168,20 +168,23 @@ function DistributionCard({ a }: { a: Analysis }) {
       </div>
     </>
   );
-}
+});
 
 export default function Returns({ analysis, settings, level, requestSettings }: TabProps) {
   const amount = settings.amount;
+  // Held steady so the memo'd cards skip a render their inputs do not call for. The tooltips read the
+  // shorting the analysis was built with, which the rail's switch can be a render ahead of.
+  const onAmount = useCallback((n: number) => requestSettings({ amount: n }), [requestSettings]);
   return (
     <div className="ret">
       <Boundary name="Returns headline" resetKey={analysis}>
         <Lead a={analysis} amount={amount} />
       </Boundary>
       <Boundary name="Cumulative growth" resetKey={analysis}>
-        <GrowthCard a={analysis} amount={amount} onAmount={(n) => requestSettings({ amount: n })} />
+        <GrowthCard a={analysis} amount={amount} onAmount={onAmount} />
       </Boundary>
       <Boundary name="Summary Statistics" resetKey={analysis}>
-        <SummaryCard a={analysis} level={level} allowShort={settings.allowShort} />
+        <SummaryCard a={analysis} level={level} allowShort={analysis.allowShort} />
       </Boundary>
       <Boundary name="Return Distribution" resetKey={analysis}>
         <DistributionCard a={analysis} />

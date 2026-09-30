@@ -17,7 +17,7 @@
 // - The capital allocation line runs as the app's does, from (0, rf) to 1.15 times the frontier's
 //   highest volatility (1607-1609), but the plot is scaled to the points and the line is clipped at
 //   its edge; the app's autorange stretched the whole plot to hold the line's far end.
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   CartesianGrid,
   ReferenceLine,
@@ -649,13 +649,44 @@ interface LabelItem {
   along?: { sigma: number; mu: number }[];
 }
 
-// Runs inside the chart, where the axes' scales are known, so names are placed in pixels.
+// Runs inside the chart, where the axes' scales are known, so names are placed in pixels. The chart
+// renders it again whenever its own store moves, often with a new scale object that maps every value
+// to the same pixel: the placement, the costly part, is worked out again only when the names or the
+// geometry change. Both axes are linear, so two values each pin a scale down; with the plot area and
+// the y domain they make the geometry's key.
 function FrontierLabels({ items, cal, line }: { items: LabelItem[]; cal: CalSegment | null; line: readonly Datum[] }) {
   const xs = useXAxisScale();
   const ys = useYAxisScale();
   const yDomain = useYAxisDomain();
   const plot = usePlotArea();
-  if (!xs || !ys || !plot) return null;
+  const geometry =
+    xs && ys && plot
+      ? [xs(0), xs(1), ys(0), ys(1), plot.x, plot.y, plot.width, plot.height, ...(Array.isArray(yDomain) ? yDomain : [])].join(",")
+      : null;
+  const placed = useMemo(
+    () => (xs && ys && plot ? placeAll(items, cal, line, xs, ys, yDomain, plot) : null),
+    // The scales, domain and area by what they map (`geometry`), not by identity.
+    [items, cal, line, geometry],
+  );
+  if (!placed) return null;
+  return (
+    <g className="frontier-labels">
+      {placed.map((l) => (
+        <LabelText key={l.key} l={l} />
+      ))}
+    </g>
+  );
+}
+
+function placeAll(
+  items: LabelItem[],
+  cal: CalSegment | null,
+  line: readonly Datum[],
+  xs: NonNullable<ReturnType<typeof useXAxisScale>>,
+  ys: NonNullable<ReturnType<typeof useYAxisScale>>,
+  yDomain: ReturnType<typeof useYAxisDomain>,
+  plot: NonNullable<ReturnType<typeof usePlotArea>>,
+): PlacedLabel[] {
   const all = [...items];
   if (cal) {
     // Name the line where it leaves the plot: its far end, or the top edge if it is clipped there.
@@ -683,13 +714,7 @@ function FrontierLabels({ items, cal, line }: { items: LabelItem[]; cal: CalSegm
   const calEnd = all.find((it) => it.key === "cal");
   if (cal && calEnd) drawn.push([px(cal.x0, cal.y0), px(calEnd.sigma, calEnd.mu)]);
   const lines = drawn.map((ln) => ln.filter((q) => finite(q.x) && finite(q.y))).filter((ln) => ln.length > 1);
-  return (
-    <g className="frontier-labels">
-      {placeLabels(at, plot, markers, lines).map((l) => (
-        <LabelText key={l.key} l={l} />
-      ))}
-    </g>
-  );
+  return placeLabels(at, plot, markers, lines);
 }
 
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 4 };
@@ -701,8 +726,9 @@ const FALLBACK_WIDTH = 720;
 // for those; the benchmark (an ink cross) and the CAL (a dashed ink2 line) share the neutral family, not the shape.
 const ASSET = tokens.color.ink2;
 
-function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
-  const [ref, width] = useBoxWidth(FALLBACK_WIDTH);
+// Everything the drawing needs that follows from the plot alone: the axes' ticks and the names to place.
+// Built once per plot, so a render of the chart for any other reason hands the label layer the same list.
+function layout(plot: Plot) {
   const { line, assets, marks, bench, cal } = plot;
 
   // Scaled to the points and the line's start at rf; the line is clipped where it leaves the plot.
@@ -729,7 +755,17 @@ function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
       along: line.slice(Math.floor(line.length / 2)).reverse().map((d) => ({ sigma: d.sigma, mu: d.mu })),
     },
   ];
-  const axisTitle = { fill: chartTheme.axis.fill, fontFamily: tokens.font.sans, fontSize: 12 };
+  return { xTicks, yTicks, labels };
+}
+
+const axisTitle = { fill: chartTheme.axis.fill, fontFamily: tokens.font.sans, fontSize: 12 };
+
+// Drawn again only when the plot, the height or its own measured width changes (memo): an edit that
+// leaves the frontier's inputs alone, an explanation level or an amount, does not redraw it.
+const FrontierPlot = memo(function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
+  const [ref, width] = useBoxWidth(FALLBACK_WIDTH);
+  const { line, assets, marks, bench, cal } = plot;
+  const { xTicks, yTicks, labels } = useMemo(() => layout(plot), [plot]);
 
   return (
     <div ref={ref} className="frontier-chart" style={{ width: "100%", height }}>
@@ -809,7 +845,7 @@ function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
       </ScatterChart>
     </div>
   );
-}
+});
 
 export default function Frontier({ title, state, allowShort, rf, height }: FrontierProps) {
   const phone = usePhone();

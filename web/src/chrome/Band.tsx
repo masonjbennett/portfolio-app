@@ -17,6 +17,9 @@
 // The tangency Sharpe plate carries plus or minus one standard error of that Sharpe (the engine's
 // sharpeSE, on the tangency portfolio's own daily returns). It treats the weights as fixed, and they were
 // picked on the same prices, so the true uncertainty is wider still; the plate's tooltip says so.
+//
+// While a shorting or rate change is still being worked into the analysis, `settling` marks the figures
+// as the previous settings' (aria-busy, dimmed), as the tab below them is.
 import Plate from "../components/Plate.tsx";
 import { CARD_SENTENCE, MEGA_CAP_IN_SAMPLE, PUBLISHED_SETS, PUBLISHED_URL, PUBLISHED_WHEN } from "../content/published.ts";
 import { format } from "../format.ts";
@@ -147,7 +150,7 @@ function WhatIfFold({ a }: { a: Analysis }) {
   );
 }
 
-export default function Band({ analysis, level, fetching, failure }: BandProps) {
+export default function Band({ analysis, level, fetching, failure, settling = false }: BandProps & { settling?: boolean }) {
   if (analysis.status !== "ready") {
     // Nothing computed to show: say what happened instead, named, never a blank.
     if (failure) {
@@ -177,7 +180,7 @@ export default function Band({ analysis, level, fetching, failure }: BandProps) 
   }
   const a = analysis.value;
   return (
-    <section className="band" aria-label="Snapshot" aria-busy={fetching}>
+    <section className={settling ? "band band--settling" : "band"} aria-label="Snapshot" aria-busy={fetching || settling}>
       <PublishedResult />
       {failure ? (
         <p className="band-alert" role="alert">
