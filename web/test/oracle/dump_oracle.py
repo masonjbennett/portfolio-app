@@ -157,6 +157,95 @@ def custom_vectors(n):
     return {"default": [1.0 / n] * n, "uneven": long_uneven, "negTotal": neg, "tinyTotal": tiny}
 
 
+# -- the scorecard's figures, restated in numpy / pandas ----------------------
+# The app has none of these, so there is no shipping function to slice: each is written here from
+# its textbook definition, as differently from the TypeScript as the arithmetic allows (vectorised
+# runs, groupby, np.percentile, np.corrcoef), and t-metrics.mjs holds the port to it.
+def longest_spell(cum, when):
+    """Longest run below the running peak, from the peak's close to the first close back at or above
+    it, or to the last day. Longest on trading days, then calendar days, then the earlier run."""
+    cum = np.asarray(cum, dtype=float)
+    under = cum < np.maximum.accumulate(cum)
+    edges = np.diff(np.concatenate([[0], under.astype(int), [0]]))
+    best = {"trading": 0, "calendar": 0, "peak": None, "end": None, "recovered": True}
+    for s, e in zip(np.where(edges == 1)[0], np.where(edges == -1)[0]):
+        pk, rec = int(s) - 1, bool(e < len(cum))
+        stop = int(e) if rec else len(cum) - 1
+        trading, cal = stop - pk, int((when[stop] - when[pk]).days)
+        if (trading, cal) > (best["trading"], best["calendar"]):
+            best = {"trading": trading, "calendar": cal, "peak": when[pk].strftime("%Y-%m-%d"),
+                    "end": when[stop].strftime("%Y-%m-%d"), "recovered": rec}
+    return best
+
+
+def worst_fall(cum):
+    peak = cum.cummax()
+    return float(((cum - peak) / peak).min())
+
+
+def monthly(r):
+    """Calendar months: trading days compounded, the first and last month flagged partial."""
+    per = r.index.to_period("M")
+    mo = (1 + r).groupby(per).prod() - 1
+    days = r.groupby(per).size()
+    last = len(mo) - 1
+    return mo, [[str(p), f(v), int(days[p]), i in (0, last)] for i, (p, v) in enumerate(mo.items())]
+
+
+def scorecard(r, b, start, rf):
+    """Every scorecard figure for the daily series r against the benchmark b (both on the return
+    dates). start is the first price's date: the drawdown 'with start' counts from 1 on that day."""
+    T = len(r)
+    rf_d = rf / 252
+    mu, sig, sh, so = ship["annualized_stats"](r, rf)
+    cum = (1 + r).cumprod()
+    growth = float(cum.iloc[-1])
+    annual = growth ** (252 / T) - 1
+    cum_s = pd.concat([pd.Series([1.0], index=pd.DatetimeIndex([start])), cum])
+    dd, dd_s = worst_fall(cum), worst_fall(cum_s)
+    mo, _ = monthly(r)
+    bm, _ = monthly(b)
+    full, bfull = mo.iloc[1:-1], bm.iloc[1:-1]
+    up, dn = bfull > 0, bfull < 0
+    a = r - b
+    te = a.std(ddof=1) * np.sqrt(252)
+    q = np.percentile(r.values, 5)
+    sd = r.std(ddof=1)
+    sr = (r.mean() - rf_d) / sd
+    g1, g2 = r.skew(), r.kurt()
+    slope, intercept, _, _, _ = stats.linregress(b - rf_d, r - rf_d)
+    corr = np.corrcoef(r.values, b.values)[0, 1]
+    return {
+        "annual": f(annual), "cumulative": f(growth - 1), "mu": f(mu), "sigma": f(sig),
+        "sharpe": f(sh), "sortino": f(so),
+        "downside": f(np.sqrt(np.mean(np.minimum(r - rf_d, 0) ** 2)) * np.sqrt(252)),
+        "best": f(full.max()) if len(full) else None, "worst": f(full.min()) if len(full) else None,
+        "positive": f((full > 0).mean()) if len(full) else None, "months": int(len(full)),
+        "mdd": f(dd), "mddStart": f(dd_s),
+        "longest": longest_spell(cum.values, list(cum.index)),
+        "longestStart": longest_spell(cum_s.values, list(cum_s.index)),
+        "calmar": f(annual / abs(dd)) if dd < 0 else None,
+        "calmarStart": f(annual / abs(dd_s)) if dd_s < 0 else None,
+        "beta": f(slope), "alphaAnn": f(intercept * 252), "corr": f(corr), "r2": f(corr ** 2),
+        "te": f(te), "ir": f(a.mean() * 252 / te) if te > 0 else None,
+        "up": f(full[up].mean() / bfull[up].mean()) if up.any() else None,
+        "down": f(full[dn].mean() / bfull[dn].mean()) if dn.any() else None,
+        "upMonths": int(up.sum()), "downMonths": int(dn.sum()),
+        "var": f(-q), "es": f(-r[r <= q].mean()),
+        "sharpeSE": f(np.sqrt((1 + sr ** 2 / 2 - g1 * sr + g2 / 4 * sr ** 2) / T) * np.sqrt(252)),
+    }
+
+
+def load_of(R, h=0.02):
+    """How much a mean-variance fit estimates, against the days it has."""
+    days, n = len(R), R.shape[1]
+    years = days / 252
+    sig = R.std(ddof=1) * np.sqrt(252)
+    return {"n": n, "days": days, "years": f(years), "means": n, "covariances": n * (n + 1) // 2,
+            "daysPerAsset": f(days / n), "h": h,
+            "se": vec(sig / np.sqrt(years)), "yearsNeeded": vec((sig / h) ** 2)}
+
+
 # -- per set ------------------------------------------------------------------
 def dump(name):
     fx = json.loads((FIX / f"prices-{name}.json").read_text("utf-8"))
@@ -294,6 +383,31 @@ def dump(name):
     # The benchmark row.
     out["bench"] = {"mu": f(mu_b), "sigma": f(sig_b), "sharpe": f(sh_b), "sortino": f(so_b),
                     "mdd": f(ship["max_drawdown"](b)), "wealth": sampled(((1 + b).cumprod() * W0).values)}
+
+    # The scorecard: every column, the benchmark, and the solved portfolios of both short settings.
+    start = prices.index[0]
+    series = {c: returns[c] for c in tickers + [bench]}
+    for mode in ("long", "short"):
+        sol = out["modes"][mode]["shipping"]
+        ws = {"gmv": sol["gmv"]["x"], "tan": sol["tan"]["x"]}
+        if mode == "long":
+            ws = {"ew": [1.0 / n] * n, **ws}
+        for k, w in ws.items():
+            series[f"{mode}.{k}"] = R @ np.array(w)
+    months = {k: monthly(series[k])[1] for k in [bench] + [k for k in series if "." in k]}
+    share = {}
+    for mode in ("long", "short"):
+        sol = out["modes"][mode]["shipping"]
+        ws = {"ew": [1.0 / n] * n, "gmv": sol["gmv"]["x"], "tan": sol["tan"]["x"],
+              "uneven": out["modes"][mode]["custom"]["uneven"]["w"]}
+        share[mode] = {}
+        for k, w in ws.items():
+            parts = np.array(w) * m.values
+            share[mode][k] = {"w": vec(w), "share": vec(parts / parts.sum()), "total": f(parts.sum())}
+    out["metrics"] = {"start": start.strftime("%Y-%m-%d"),
+                      "series": {k: scorecard(s, b, start, RF) for k, s in series.items()},
+                      "months": months, "share": share,
+                      "load": {"full": load_of(R), "1y": load_of(R.iloc[-252:])}}
     return out
 
 

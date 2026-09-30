@@ -1,6 +1,7 @@
 // Return statistics: tabs 1-3 of the Streamlit app (Returns & Statistics, Risk Analysis,
 // Correlation). Line numbers cite portfolio_app.py.
 import { mean, std, sum, variance, type Vec } from "./num.ts";
+import { captureRatios, monthlyReturns, monthStats } from "./monthly.ts";
 
 export const TRADING_DAYS = 252;
 
@@ -17,12 +18,18 @@ export interface AnnualStats {
 export function annualizedStats(r: Vec, rf: number): AnnualStats {
   const mu = mean(r) * TRADING_DAYS;
   const sigma = std(r) * Math.sqrt(TRADING_DAYS);
-  const rfDaily = rf / TRADING_DAYS;
   const sharpe = sigma > 0 ? (mu - rf) / sigma : NaN;
-  const sq = r.map((x) => Math.min(x - rfDaily, 0) ** 2);
-  const downside = Math.sqrt(mean(sq)) * Math.sqrt(TRADING_DAYS);
+  const downside = downsideDeviation(r, rf);
   const sortino = downside > 0 ? (mu - rf) / downside : NaN;
   return { mu, sigma, sharpe, sortino };
+}
+
+// The annualised downside deviation Sortino divides by (the definition above), decimal a year.
+export function downsideDeviation(r: Vec, rf: number): number {
+  const rfDaily = rf / TRADING_DAYS;
+  const sq = r.map((x) => Math.min(x - rfDaily, 0) ** 2);
+  const downside = Math.sqrt(mean(sq)) * Math.sqrt(TRADING_DAYS);
+  return downside;
 }
 
 // Wealth index. The app's (1 + r).cumprod() starts at 1 + r1, so its first plotted point is the
@@ -215,4 +222,308 @@ export function probplot(x: Vec): QQ {
   const osm = med.map(normPpf);
   const fit = linregress(osm, osr);
   return { osm, osr, slope: fit.slope, intercept: fit.intercept };
+}
+
+// ---- The scorecard's arithmetic ------------------------------------------------------------------
+// Pure functions of a daily simple-return series (and, where one is taken, the benchmark's over the
+// same dates), on the conventions above: 252 trading days a year, sample (ddof=1) moments, rf a
+// decimal annual rate. Every result is a decimal unless its comment says otherwise.
+
+function growth(r: Vec): number {
+  const path = wealth(r);
+  return path[path.length - 1];
+}
+
+// Growth of 1 over the whole series, less the 1: the cumulative return.
+export function cumulativeReturn(r: Vec): number {
+  return growth(r) - 1;
+}
+
+// The COMPOUND annual rate over the series' trading days, (growth)^(252 / T) - 1. It is not the
+// arithmetic mean times 252 that annualizedStats().mu reports (and Sharpe uses); the two differ by
+// roughly half the variance, which is why both exist. NaN on an empty series.
+export function annualReturn(r: Vec): number {
+  const T = r.length;
+  if (T < 1) return NaN;
+  return growth(r) ** (TRADING_DAYS / T) - 1;
+}
+
+export interface DrawdownSpell {
+  /** Trading days from the peak's close to the first close back at or above it (or to the last day). */
+  trading: number;
+  /** The same span in calendar days. */
+  calendar: number;
+  /** ISO dates of the peak and of the recovery (or of the last day); null when the path never fell. */
+  peak: string | null;
+  end: string | null;
+  /** False when the spell was still open on the last day. */
+  recovered: boolean;
+}
+
+const DAY_MS = 86_400_000;
+const calendarDays = (from: string, to: string): number => Math.round((Date.parse(to) - Date.parse(from)) / DAY_MS);
+
+// The longest drawdown: from a peak to the first day the path is back at or above it, or to the last
+// day when it never got back. The longest is picked on trading days, a tie going to the longer
+// calendar span and then to the earlier spell. `start` is the date the amount was invested (the
+// first price, the day before the first return): given, the path starts at 1 on that date, as the
+// port's drawdowns do by default; null starts it at the first day's close, as the app's did.
+export function longestDrawdown(r: Vec, dates: readonly string[], start: string | null = null): DrawdownSpell {
+  if (r.length !== dates.length) throw new Error(`longestDrawdown: ${r.length} returns but ${dates.length} dates`);
+  const path = wealth(r, 1, start !== null);
+  const when = start !== null ? [start, ...dates] : dates;
+  let best: DrawdownSpell = { trading: 0, calendar: 0, peak: null, end: null, recovered: true };
+  const consider = (pk: number, stop: number, recovered: boolean) => {
+    const trading = stop - pk;
+    const calendar = calendarDays(when[pk], when[stop]);
+    if (trading > best.trading || (trading === best.trading && calendar > best.calendar)) {
+      best = { trading, calendar, peak: when[pk], end: when[stop], recovered };
+    }
+  };
+  let pk = 0; // index of the running peak
+  for (let j = 1; j < path.length; j++) {
+    if (path[j] >= path[pk]) {
+      if (j - pk > 1) consider(pk, j, true);
+      pk = j;
+    }
+  }
+  if (pk < path.length - 1) consider(pk, path.length - 1, false);
+  return best;
+}
+
+// Calmar: the compound annual return over the size of the worst drawdown. NaN when the path never fell.
+export function calmar(r: Vec, includeStart = true): number {
+  const dd = maxDrawdown(r, includeStart);
+  return dd < 0 ? annualReturn(r) / Math.abs(dd) : NaN;
+}
+
+function sameLength(a: Vec, b: Vec, what: string): void {
+  if (a.length !== b.length) throw new Error(`${what}: series of ${a.length} and ${b.length} days`);
+}
+
+// Pearson correlation of two daily series. NaN when either is flat or there are fewer than two days.
+export function correlation(a: Vec, b: Vec): number {
+  sameLength(a, b, "correlation");
+  if (a.length < 2) return NaN;
+  const ma = mean(a);
+  const mb = mean(b);
+  const sab = sum(a.map((v, k) => (v - ma) * (b[k] - mb)));
+  const saa = sum(a.map((v) => (v - ma) ** 2));
+  const sbb = sum(b.map((v) => (v - mb) ** 2));
+  const den = Math.sqrt(saa * sbb);
+  return den === 0 ? NaN : Math.min(1, Math.max(-1, sab / den));
+}
+
+function activeReturns(r: Vec, b: Vec): Vec {
+  sameLength(r, b, "active returns");
+  return r.map((x, i) => x - b[i]);
+}
+
+// Tracking error: the sample standard deviation of the DAILY active returns (portfolio less
+// benchmark), times the square root of 252.
+export function trackingError(r: Vec, b: Vec): number {
+  return std(activeReturns(r, b)) * Math.sqrt(TRADING_DAYS);
+}
+
+// Information ratio: the annualised mean active return (daily mean times 252) over the tracking
+// error. NaN when the tracking error is zero, e.g. the benchmark scored against itself.
+export function informationRatio(r: Vec, b: Vec): number {
+  const te = trackingError(r, b);
+  return te > 0 ? (mean(activeReturns(r, b)) * TRADING_DAYS) / te : NaN;
+}
+
+export interface TailLoss {
+  /** One-day historical value at risk, a POSITIVE loss (0.02 = a 2% fall). */
+  var: number;
+  /** Expected shortfall: the mean of the days at or below the VaR return, also a positive loss. */
+  es: number;
+}
+
+// Historical one-day VaR and expected shortfall. `tail` is the tail probability, 0.05 for 95%. The
+// quantile is numpy's default "linear" percentile, reproduced step for step (virtual index (n-1)p,
+// and its two-sided interpolation) so the set of days "at or below" it is the same set numpy finds.
+export function historicalTail(r: Vec, tail = 0.05): TailLoss {
+  const n = r.length;
+  if (n < 1) return { var: NaN, es: NaN };
+  const s = [...r].sort((x, y) => x - y);
+  const v = (n - 1) * tail;
+  let q: number;
+  if (v >= n - 1) q = s[n - 1];
+  else {
+    const lo = Math.floor(v);
+    const g = v - lo;
+    const d = s[lo + 1] - s[lo];
+    q = g >= 0.5 ? s[lo + 1] - d * (1 - g) : s[lo] + d * g;
+  }
+  const worst = r.filter((x) => x <= q);
+  return { var: -q, es: -mean(worst) };
+}
+
+// Standard error of the ANNUALISED Sharpe ratio: Lo (2002) under iid returns with Mertens' (2002)
+// allowance for skew and fat tails, on the DAILY Sharpe SR = (mean - rf/252) / sd,
+//   SE_daily = sqrt((1 + SR^2/2 - skew*SR + (excess kurtosis/4)*SR^2) / T),
+// then times sqrt(252). The moments are the sample estimators this file already ships: sd with
+// ddof=1, skew() the adjusted G1 and excessKurtosis() the bias-corrected G2, so the error sits on the
+// same figures the Returns tab prints beside it; over hundreds of days the population versions move
+// it far less than its own uncertainty. NaN below four days (the kurtosis needs them) or on a flat
+// series, and NaN rather than a clipped zero if the bracket ever goes negative.
+export function sharpeSE(r: Vec, rf: number): number {
+  const T = r.length;
+  if (T < 2) return NaN;
+  const sd = std(r);
+  if (!(sd > 0)) return NaN;
+  const sr = (mean(r) - rf / TRADING_DAYS) / sd;
+  const g1 = skew(r);
+  const g2 = excessKurtosis(r);
+  const bracket = 1 + (sr * sr) / 2 - g1 * sr + (g2 / 4) * sr * sr;
+  return Math.sqrt(bracket / T) * Math.sqrt(TRADING_DAYS);
+}
+
+export interface ReturnShare {
+  /** w_i mu_i / sum_j w_j mu_j per asset, never clipped: below 0 or above 1 when a mean or a weight is negative. */
+  share: Vec;
+  /** True when the portfolio's expected return is within SHARE_EPS of zero; every share is then NaN. */
+  degenerate: boolean;
+}
+
+export const SHARE_EPS = 1e-12;
+
+// Return share, the counterpart of riskContribution: each asset's part of the portfolio's expected
+// return. `mu` may be daily or annual means (the shares do not depend on the scale), but SHARE_EPS
+// is an absolute test on the denominator in that same unit.
+export function returnShare(w: Vec, mu: Vec): ReturnShare {
+  sameLength(w, mu, "returnShare");
+  const parts = w.map((x, i) => x * mu[i]);
+  const total = sum(parts);
+  const degenerate = !(Math.abs(total) > SHARE_EPS);
+  return { share: parts.map((p) => (degenerate ? NaN : p / total)), degenerate };
+}
+
+// How much the optimizer has to estimate, against how much data it has.
+export const TN_WARN = 25; // days per asset below which the window is thin
+export const TN_REFUSE = 10; // days per asset below which the one-year window is not offered
+
+export interface AssetLoad {
+  /** Standard error of the asset's annualised mean return: annual volatility / sqrt(years), decimal. */
+  se: number;
+  /** Years of daily data needed to pin that mean to plus or minus h: (annual volatility / h)^2. */
+  yearsNeeded: number;
+}
+
+export interface EstimationLoad {
+  n: number;
+  days: number;
+  /** days / 252. */
+  years: number;
+  /** One expected return per asset. */
+  means: number;
+  /** Variances and covariances, N(N+1)/2. */
+  covariances: number;
+  /** days / N. */
+  daysPerAsset: number;
+  /** The h the years are counted for, decimal (0.02 = 2 points a year). */
+  h: number;
+  assets: AssetLoad[];
+}
+
+export function estimationLoad(cols: Vec[], h = 0.02): EstimationLoad {
+  const n = cols.length;
+  const days = n ? cols[0].length : 0;
+  const years = days / TRADING_DAYS;
+  const assets = cols.map((c) => {
+    const sigma = std(c) * Math.sqrt(TRADING_DAYS);
+    return { se: sigma / Math.sqrt(years), yearsNeeded: (sigma / h) ** 2 };
+  });
+  return {
+    n, days, years, means: n, covariances: (n * (n + 1)) / 2, daysPerAsset: days / n, h, assets,
+  };
+}
+
+export type LoadVerdict = "ok" | "warn" | "refuse";
+
+// Which threshold a window of `days` trading days over `n` assets crosses. The caller asks it of the
+// SHORTEST window on offer: "warn" below TN_WARN days per asset, "refuse" (do not offer the one-year
+// window) below TN_REFUSE.
+export function loadVerdict(days: number, n: number): LoadVerdict {
+  const tn = days / n;
+  if (tn < TN_REFUSE) return "refuse";
+  if (tn < TN_WARN) return "warn";
+  return "ok";
+}
+
+export interface ScoreRow {
+  // Return
+  annualReturn: number; // compound, decimal a year
+  cumulative: number; // decimal
+  mu: number; // arithmetic mean x 252, decimal a year (what the plates print)
+  bestMonth: number; // decimal, complete months only
+  worstMonth: number;
+  positiveMonths: number; // share of complete months above zero, 0..1
+  completeMonths: number; // count
+  // Risk
+  volatility: number; // decimal a year
+  downside: number; // decimal a year
+  maxDrawdown: number; // decimal, negative (as maxDrawdown returns it)
+  longest: DrawdownSpell;
+  // Risk-adjusted
+  sharpe: number;
+  sharpeSE: number; // annualised, same units as the Sharpe
+  sortino: number;
+  calmar: number;
+  // Against the benchmark
+  beta: number;
+  alphaAnn: number; // decimal a year, CAPM on excess returns
+  correlation: number;
+  r2: number;
+  trackingError: number; // decimal a year
+  informationRatio: number;
+  upCapture: number; // ratio, 1 = 100%
+  downCapture: number;
+  upMonths: number;
+  downMonths: number;
+  // Tail
+  var95: number; // one-day, positive loss, decimal
+  es95: number;
+}
+
+// Every scorecard figure for one column. `r` is the column's daily returns, `b` the benchmark's on
+// the same `dates`; `start` as in longestDrawdown (it also decides whether the drawdown and Calmar
+// count from the amount invested).
+export function scorecardRow(r: Vec, b: Vec, dates: readonly string[], start: string | null, rf: number): ScoreRow {
+  const s = annualizedStats(r, rf);
+  const m = monthStats(monthlyReturns(r, dates));
+  const cap = captureRatios(r, b, dates);
+  const fit = capm(r, b, rf);
+  const corr = correlation(r, b);
+  const t = historicalTail(r, 0.05);
+  const withStart = start !== null;
+  return {
+    annualReturn: annualReturn(r),
+    cumulative: cumulativeReturn(r),
+    mu: s.mu,
+    bestMonth: m.best,
+    worstMonth: m.worst,
+    positiveMonths: m.positive,
+    completeMonths: m.months,
+    volatility: s.sigma,
+    downside: downsideDeviation(r, rf),
+    maxDrawdown: maxDrawdown(r, withStart),
+    longest: longestDrawdown(r, dates, start),
+    sharpe: s.sharpe,
+    sharpeSE: sharpeSE(r, rf),
+    sortino: s.sortino,
+    calmar: calmar(r, withStart),
+    beta: fit.beta,
+    alphaAnn: fit.alphaAnn,
+    correlation: corr,
+    r2: corr ** 2,
+    trackingError: trackingError(r, b),
+    informationRatio: informationRatio(r, b),
+    upCapture: cap.up,
+    downCapture: cap.down,
+    upMonths: cap.upMonths,
+    downMonths: cap.downMonths,
+    var95: t.var,
+    es95: t.es,
+  };
 }

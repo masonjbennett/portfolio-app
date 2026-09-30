@@ -7,12 +7,24 @@
 // A file argument that no mutation names is an ERROR (exit 2), so a typo cannot pass as zero survivors.
 // It refuses to start if the suite is red unmutated, and a `find` that no longer matches is an ERROR
 // (that is how a refactor shows up), never a silent skip. Files are restored after every mutation.
-import { readFileSync, writeFileSync } from "node:fs";
+//
+// An entry is [file, find, replace, why] or [file, find, replace, why, suite]. With no fifth field the
+// mutant is judged by the WHOLE run (test/run.mjs), as every entry written before the field existed
+// still is. A fifth field names the one suite that must catch it (e.g. "t-metrics"): only that suite
+// runs for that mutant, which keeps a mutant of a new function from costing a full run each. A named
+// suite that does not exist is an ERROR before anything is mutated: a spawn that fails to start
+// exits non-zero, and would otherwise count every mutant as killed.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const run = () => spawnSync(process.execPath, [root + "test/run.mjs"], { encoding: "utf8" }).status;
+const loader = new URL("./_tsx.mjs", import.meta.url).href;
+const suitePath = (suite) => `${root}test/${suite}.mjs`;
+const run = (suite) =>
+  suite
+    ? spawnSync(process.execPath, ["--import", loader, suitePath(suite)], { encoding: "utf8" }).status
+    : spawnSync(process.execPath, [root + "test/run.mjs"], { encoding: "utf8" }).status;
 
 const M = [
   // num.ts
@@ -64,7 +76,43 @@ const M = [
   ["src/lib/clean.ts", "if (days(start, end) <= 0) return \"reversed\";", "", "reversed range gets the two-year message"],
   ["src/lib/clean.ts", "export const MIN_ROWS = 252;", "export const MIN_ROWS = 250;", "overlap minimum moved"],
   ["src/lib/clean.ts", "if (s) seen.add(s);", "seen.add(s);", "blank tickers kept"],
+  // monthly.ts (the scorecard's calendar months), judged by t-metrics alone
+  ["src/lib/monthly.ts", "const key = dates[i].slice(0, 7);", "const key = dates[i].slice(0, 4);", "months keyed by year: the wrong month boundary", "t-metrics"],
+  ["src/lib/monthly.ts", "out[out.length - 1].partial = true;", "", "the last month, cut off by the window's end, scored as complete", "t-metrics"],
+  ["src/lib/monthly.ts", "const done = months.filter((m) => !m.partial);", "const done = months;", "partial months scored in best, worst and % positive", "t-metrics"],
+  ["src/lib/monthly.ts", "if (bm[i].partial) continue;", "", "capture counts the partial months", "t-metrics"],
+  ["src/lib/monthly.ts", "up: bUp.length ? mean(pUp) / mean(bUp) : NaN,", "up: bUp.length ? mean(bUp) / mean(pUp) : NaN,", "up capture inverted: benchmark over portfolio", "t-metrics"],
+  // stats.ts, the scorecard's figures, judged by t-metrics alone
+  ["src/lib/stats.ts", "return growth(r) ** (TRADING_DAYS / T) - 1;", "return growth(r) ** (1 / T) - 1;", "compound return per day, not per year", "t-metrics"],
+  ["src/lib/stats.ts", "const trading = stop - pk;", "const trading = stop - pk - 1;", "longest drawdown counted from the first day under water, not from the peak", "t-metrics"],
+  ["src/lib/stats.ts", "const calendar = calendarDays(when[pk], when[stop]);", "const calendar = stop - pk;", "calendar span counted in trading days", "t-metrics"],
+  ["src/lib/stats.ts", "if (pk < path.length - 1) consider(pk, path.length - 1, false);", "", "a drawdown still open on the last day is never counted", "t-metrics"],
+  ["src/lib/stats.ts", "const when = start !== null ? [start, ...dates] : dates;", "const when = dates;", "spell dates a day off when the path starts at the amount invested", "t-metrics"],
+  ["src/lib/stats.ts", "return dd < 0 ? annualReturn(r) / Math.abs(dd) : NaN;", "return dd < 0 ? annualizedStats(r, 0).mu / Math.abs(dd) : NaN;", "Calmar on the arithmetic mean, not the compound rate", "t-metrics"],
+  ["src/lib/stats.ts", "const den = Math.sqrt(saa * sbb);", "const den = Math.sqrt(saa * saa);", "correlation normalised by one series' variance twice", "t-metrics"],
+  ["src/lib/stats.ts", "r2: corr ** 2,", "r2: corr,", "R-squared left unsquared", "t-metrics"],
+  ["src/lib/stats.ts", "return std(activeReturns(r, b)) * Math.sqrt(TRADING_DAYS);", "return std(activeReturns(r, b), 0) * Math.sqrt(TRADING_DAYS);", "tracking error on the population, not the sample, deviation", "t-metrics"],
+  ["src/lib/stats.ts", "return te > 0 ? (mean(activeReturns(r, b)) * TRADING_DAYS) / te : NaN;", "return te > 0 ? mean(activeReturns(r, b)) / te : NaN;", "information ratio on a daily mean over an annual tracking error", "t-metrics"],
+  ["src/lib/stats.ts", "const v = (n - 1) * tail;", "const v = n * tail;", "percentile index n*p, not numpy's (n-1)*p", "t-metrics"],
+  ["src/lib/stats.ts", "return { var: -q, es: -mean(worst) };", "return { var: -q, es: mean(worst) };", "expected shortfall signed as a return, not a loss", "t-metrics"],
+  ["src/lib/stats.ts", "const sd = std(r);", "const sd = std(r, 0);", "Sharpe SE on the population, not the sample, deviation", "t-metrics"],
+  ["src/lib/stats.ts", "const bracket = 1 + (sr * sr) / 2 - g1 * sr + (g2 / 4) * sr * sr;", "const bracket = 1 + (sr * sr) / 2 + g1 * sr + (g2 / 4) * sr * sr;", "the Mertens skew term's sign flipped", "t-metrics"],
+  ["src/lib/stats.ts", "const bracket = 1 + (sr * sr) / 2 - g1 * sr + (g2 / 4) * sr * sr;", "const bracket = 1 + (sr * sr) / 2 - g1 * sr + ((g2 + 3) / 4) * sr * sr;", "raw kurtosis where the formula takes excess", "t-metrics"],
+  ["src/lib/stats.ts", "return Math.sqrt(bracket / T) * Math.sqrt(TRADING_DAYS);", "return Math.sqrt(bracket / T);", "Sharpe SE left daily, not annualised", "t-metrics"],
+  ["src/lib/stats.ts", "return { share: parts.map((p) => (degenerate ? NaN : p / total)), degenerate };", "return { share: parts.map((p) => (degenerate ? NaN : Math.min(1, Math.max(0, p / total)))), degenerate };", "return share clipped to 0..100%", "t-metrics"],
+  ["src/lib/stats.ts", "const degenerate = !(Math.abs(total) > SHARE_EPS);", "const degenerate = !(total > SHARE_EPS);", "a negative expected return flagged as no return", "t-metrics"],
+  ["src/lib/stats.ts", "covariances: (n * (n + 1)) / 2", "covariances: (n * (n - 1)) / 2", "covariances counted without the variances", "t-metrics"],
+  ["src/lib/stats.ts", "return { se: sigma / Math.sqrt(years), yearsNeeded: (sigma / h) ** 2 };", "return { se: sigma / Math.sqrt(days), yearsNeeded: (sigma / h) ** 2 };", "SE of a mean over root days, not root years", "t-metrics"],
+  ["src/lib/stats.ts", "return { se: sigma / Math.sqrt(years), yearsNeeded: (sigma / h) ** 2 };", "return { se: sigma / Math.sqrt(years), yearsNeeded: sigma / h };", "years needed not squared", "t-metrics"],
+  ["src/lib/stats.ts", "if (tn < TN_WARN) return \"warn\";", "if (tn <= TN_WARN) return \"warn\";", "warns at exactly 25 days per asset", "t-metrics"],
+  ["src/lib/stats.ts", "if (tn < TN_REFUSE) return \"refuse\";", "if (tn <= TN_REFUSE) return \"refuse\";", "refuses at exactly 10 days per asset", "t-metrics"],
 ];
+
+const missing = [...new Set(M.map(([, , , , suite]) => suite).filter((s) => s && !existsSync(suitePath(s))))];
+if (missing.length) {
+  console.log(`ERROR  no such suite: ${missing.join(", ")}`);
+  process.exit(2);
+}
 
 const only = process.argv[2] ? process.argv[2].replace(/\\/g, "/").replace(/^\.\//, "") : null;
 const todo = only ? M.filter(([file]) => file === only) : M;
@@ -78,7 +126,7 @@ if (run() !== 0) {
 }
 let killed = 0;
 const survivors = [];
-for (const [file, find, replace, why] of todo) {
+for (const [file, find, replace, why, suite] of todo) {
   const path = root + file;
   const src = readFileSync(path, "utf8");
   const hits = src.split(find).length - 1;
@@ -88,8 +136,8 @@ for (const [file, find, replace, why] of todo) {
   }
   writeFileSync(path, src.replace(find, replace));
   try {
-    if (run() !== 0) killed += 1;
-    else survivors.push(`${file}: ${why}`);
+    if (run(suite) !== 0) killed += 1;
+    else survivors.push(`${file}: ${why}${suite ? ` (${suite})` : ""}`);
   } finally {
     writeFileSync(path, src);
   }
