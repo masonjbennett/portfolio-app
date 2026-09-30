@@ -9,6 +9,12 @@
 // other portfolios when the weights are refused (the app's st.stop() at 1727 ended the page), and the
 // weights table downloads as CSV and Excel.
 //
+// On a desktop wide enough for both (./custom/layout.ts), the weights and the frontier sit side by side,
+// the sliders on the left and the frontier on the right, so moving a slider moves the custom dot in
+// view; the five figures run full width beneath the pair. That is CSS alone: the markup keeps the order
+// weights, figures, frontier, so the keyboard walks the tab as it always has and every narrower width,
+// a phone included, stacks exactly as before. Only the frontier's height follows the arrangement.
+//
 // Each section sits inside its own Boundary, keyed on the weights, so a section that throws leaves one
 // line naming it, the rest keeps rendering, and a change of weights tries it again.
 //
@@ -52,6 +58,7 @@ import {
   type CustomView,
 } from "./custom/model.ts";
 import "./custom/Custom.css";
+import { SIDE_FRONTIER_HEIGHT, useSideBySide } from "./custom/layout.ts";
 import { finiteSE } from "./optimization/model.ts";
 import { seedOf, useRedraws } from "./optimization/redraws.ts";
 import { scorecard, type RedrawState } from "./optimization/scorecard.ts";
@@ -111,7 +118,7 @@ const Builder = memo(function Builder({ a, v, weights, setWeights }: { a: Analys
   const { lo } = bounds(a.allowShort);
   const clamp = clampLine(v, a.allowShort);
   return (
-    <section className="cust-section" aria-labelledby="cust-weights">
+    <section className="cust-section cust-section--weights" aria-labelledby="cust-weights">
       <Slug id="cust-weights">Weights</Slug>
       <p className="cust-note">
         Set a weight for each asset, from {lo < 0 ? `${MINUS}1` : "0"} to 1{a.allowShort ? " (shorting is on)" : ""}. The weights are
@@ -151,7 +158,7 @@ const Metrics = memo(function Metrics({ a, v, level }: { a: Analysis; v: CustomV
   // The Sharpe plate carries its standard error, as the Optimization tiles and the scorecard do.
   const se = useMemo(() => (w ? finiteSE(a, w) : null), [a, w]);
   return (
-    <section className="cust-section" aria-label="Custom portfolio figures">
+    <section className="cust-section cust-section--figures" aria-label="Custom portfolio figures">
       <div className="cust-plates">
         {PLATES.map((d) => (
           <Plate
@@ -176,10 +183,13 @@ const FrontierCard = memo(function FrontierCard({ a, v }: { a: Analysis; v: Cust
   const points = useMemo(() => customFrontier(a), [a]);
   const state = useMemo<LoadState<FrontierData>>(() => ({ status: "ready", value: frontierData(a, w, points) }), [a, w, points]);
   const title = useMemo(() => frontierTitle(a, v), [a, v]);
+  // Beside the weights the plot is shorter, so it and the first slider row share one screen; stacked,
+  // the chart keeps its own default height.
+  const side = useSideBySide();
   return (
-    <section className="cust-section" aria-labelledby="cust-frontier">
+    <section className="cust-section cust-section--frontier" aria-labelledby="cust-frontier">
       <Slug id="cust-frontier">Custom Portfolio on Efficient Frontier</Slug>
-      <Frontier title={title} state={state} allowShort={a.allowShort} rf={a.rf} />
+      <Frontier title={title} state={state} allowShort={a.allowShort} rf={a.rf} height={side ? SIDE_FRONTIER_HEIGHT : undefined} />
     </section>
   );
 });
@@ -246,15 +256,19 @@ export default function Custom({ analysis: a, settings, level, weights, setWeigh
         <Headline a={a} v={v} />
       </Boundary>
       <Slug>Custom Portfolio Builder</Slug>
-      <Boundary name="Custom weights" resetKey={v}>
-        <Builder a={a} v={v} weights={weights} setWeights={setWeights} />
-      </Boundary>
-      <Boundary name="Custom portfolio figures" resetKey={v}>
-        <Metrics a={a} v={v} level={level} />
-      </Boundary>
-      <Boundary name="Custom portfolio on the efficient frontier" resetKey={v}>
-        <FrontierCard a={a} v={v} />
-      </Boundary>
+      {/* Weights, figures, frontier: the reading and keyboard order at every width. Custom.css sets the
+          frontier beside the weights on a wide desktop. */}
+      <div className="cust-pair">
+        <Boundary name="Custom weights" resetKey={v}>
+          <Builder a={a} v={v} weights={weights} setWeights={setWeights} />
+        </Boundary>
+        <Boundary name="Custom portfolio figures" resetKey={v}>
+          <Metrics a={a} v={v} level={level} />
+        </Boundary>
+        <Boundary name="Custom portfolio on the efficient frontier" resetKey={v}>
+          <FrontierCard a={a} v={v} />
+        </Boundary>
+      </div>
       <Boundary name="Cumulative wealth" resetKey={v}>
         <WealthCard a={a} v={v} amount={settings.amount} onAmount={onAmount} />
       </Boundary>

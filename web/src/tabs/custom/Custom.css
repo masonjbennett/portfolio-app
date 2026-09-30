@@ -123,6 +123,40 @@
   color: var(--color-ink);
 }
 
+/* A desktop wide enough for both: the weights on the left and the frontier on the right, so a slider
+   moves the custom dot in view, and the five figures full width beneath the pair. The markup keeps its
+   order (weights, figures, frontier), so the keyboard walks the tab as before, and below this width
+   .cust-pair is an ordinary block that stacks its sections exactly as they always stood.
+   1200px is SIDE_BY_SIDE_MIN_PX in ./layout.ts (a media query cannot read a constant). */
+@media (min-width: 1200px) {
+  .cust-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-areas:
+      "weights frontier"
+      "figures figures";
+    column-gap: var(--space-6);
+    align-items: start;
+  }
+
+  .cust-pair > .cust-section--weights {
+    grid-area: weights;
+  }
+
+  .cust-pair > .cust-section--frontier {
+    grid-area: frontier;
+  }
+
+  .cust-pair > .cust-section--figures {
+    grid-area: figures;
+  }
+
+  /* One column of rows: two side by side in the narrower column would leave each slider a stub. */
+  .cust-pair .cust-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
 @media (max-width: 760px) {
   .cust-headline {
