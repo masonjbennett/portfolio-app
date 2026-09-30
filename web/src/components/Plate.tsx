@@ -6,15 +6,24 @@ import Tip from "./Tip.tsx";
 import "./Plate.css";
 
 // allowShort: passed through to the Tip, whose text follows the shorting toggle.
-export default function Plate({ label, value, format: id, tip, level, allowShort = false }: PlateProps) {
+// se: printed small beside the figure, outside the figure's own element, so the figure reads alone. When the
+// plate is too narrow for both on one line, the error goes on a line ABOVE the figure (wrap-reverse), so the
+// figure stays level with its neighbours'. Printed only beside a figure that is itself printed.
+export default function Plate({ label, value, format: id, tip, level, allowShort = false, se = null }: PlateProps) {
   const ok = value !== null && Number.isFinite(value);
+  const err = ok && se !== null && Number.isFinite(se) ? se : null;
   return (
     <div className="plate">
       <div className="plate-label">
         <span>{label}</span>
         {tip ? <Tip tip={tip} level={level} allowShort={allowShort} /> : null}
       </div>
-      {ok ? (
+      {ok && err !== null ? (
+        <div className="plate-figure">
+          <div className="plate-value num">{format(value, id)}</div>{" "}
+          <span className="plate-se num">± {format(err, id)} SE</span>
+        </div>
+      ) : ok ? (
         <div className="plate-value num">{format(value, id)}</div>
       ) : (
         <>

@@ -9,13 +9,24 @@
 // The app's Snapshot shows the EQUAL-WEIGHT figures under the "Tangency" labels when the tangency
 // solve fails (1200-1202). Here a failed tangency is null (src/state/analyze.ts), its two plates
 // print a dash, and the sentence says the optimisation failed.
+//
+// Below the plates sits the what-if panel (./WhatIf.tsx): one expected return moved by hand and the
+// weights solved again on these prices. On a phone it folds behind a closed disclosure, as the published
+// sentence does, so the first row of plates stays on the first screen; on a desktop it is open.
+//
+// The tangency Sharpe plate carries plus or minus one standard error of that Sharpe (the engine's
+// sharpeSE, on the tangency portfolio's own daily returns). It treats the weights as fixed, and they were
+// picked on the same prices, so the true uncertainty is wider still; the plate's tooltip says so.
 import Plate from "../components/Plate.tsx";
 import { CARD_SENTENCE, MEGA_CAP_IN_SAMPLE, PUBLISHED_SETS, PUBLISHED_URL, PUBLISHED_WHEN } from "../content/published.ts";
 import { format } from "../format.ts";
+import { portfolioReturns } from "../lib/portfolio.ts";
+import { sharpeSE } from "../lib/stats.ts";
 import { publishedPresetOf } from "../state/defaults.ts";
 import type { Analysis, BandProps, FormatId, TipKey } from "../types.ts";
 import { usePhone } from "./usePhone.ts";
 import { monthYear } from "./when.ts";
+import WhatIf from "./WhatIf.tsx";
 import "./Band.css";
 
 export interface SnapshotPlate {
@@ -23,6 +34,8 @@ export interface SnapshotPlate {
   value: number | null;
   format: FormatId;
   tip: TipKey;
+  /** One standard error of the figure, printed beside it; only the tangency Sharpe carries one. */
+  se?: number | null;
 }
 
 // A ratio of zero volatility is NaN; a plate prints it as unavailable, not as "NaN".
@@ -36,7 +49,13 @@ function fin(x: number): number | null {
 export function snapshotPlates(a: Analysis): SnapshotPlate[] {
   const t = a.tangency;
   return [
-    { label: "Tangency Sharpe (in-sample)", value: t ? fin(t.sharpe) : null, format: "num3", tip: "best_sharpe" },
+    {
+      label: "Tangency Sharpe (in-sample)",
+      value: t ? fin(t.sharpe) : null,
+      format: "num3",
+      tip: "best_sharpe",
+      se: t ? fin(sharpeSE(portfolioReturns(a.returns, t.w), a.rf)) : null,
+    },
     { label: "Tangency Return", value: t ? fin(t.mu) : null, format: "pct2", tip: "tangency_return" },
     { label: `${a.benchLabel} Return`, value: fin(a.benchStats.mu), format: "pct2", tip: "bench_return" },
     { label: `${a.benchLabel} Volatility`, value: fin(a.benchStats.sigma), format: "pct2", tip: "bench_vol" },
@@ -116,6 +135,19 @@ export function PublishedResult() {
   );
 }
 
+// The what-if panel, open on a desktop and folded shut on a phone.
+function WhatIfFold({ a }: { a: Analysis }) {
+  const phone = usePhone();
+  return phone ? (
+    <details className="band-whatif-fold">
+      <summary>What if one expected return were different?</summary>
+      <WhatIf a={a} />
+    </details>
+  ) : (
+    <WhatIf a={a} />
+  );
+}
+
 export default function Band({ analysis, level, fetching, failure }: BandProps) {
   if (analysis.status !== "ready") {
     // Nothing computed to show: say what happened instead, named, never a blank.
@@ -156,9 +188,10 @@ export default function Band({ analysis, level, fetching, failure }: BandProps) 
       <p className="band-finding">{finding(a)}</p>
       <div className="band-plates">
         {snapshotPlates(a).map((p) => (
-          <Plate key={p.tip} label={p.label} value={p.value} format={p.format} tip={p.tip} level={level} allowShort={a.allowShort} />
+          <Plate key={p.tip} label={p.label} value={p.value} format={p.format} tip={p.tip} level={level} allowShort={a.allowShort} se={p.se} />
         ))}
       </div>
+      <WhatIfFold a={a} />
     </section>
   );
 }

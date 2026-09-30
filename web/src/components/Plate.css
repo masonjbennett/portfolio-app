@@ -38,6 +38,25 @@
   overflow-wrap: anywhere;
 }
 
+/* A figure with one standard error beside it: "1.107 ± 0.412 SE". The pair takes the slack at the foot of the
+   plate, as a lone figure does. When the plate is too narrow for both, wrap-reverse puts the error on a line
+   above the figure rather than below it, so the figure stays level with its neighbours'. */
+.plate-figure {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-items: baseline;
+  column-gap: 0.4em;
+}
+
+.plate-se {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink2);
+  white-space: nowrap;
+}
+
 .plate-na {
   color: var(--color-ink2);
   font-size: 12px;

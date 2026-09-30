@@ -7,6 +7,7 @@ import { check, done } from "./_assert.mjs";
 
 const { createElement: h } = await import("react");
 const Boundary = (await import("../src/components/Boundary.tsx")).default;
+const Plate = (await import("../src/components/Plate.tsx")).default;
 const SegModule = await import("../src/components/SegControl.tsx");
 const SegControl = SegModule.default;
 const { revealLeft } = SegModule;
@@ -186,6 +187,26 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   check(/display:\s*flex/.test(block(sheet, ".plate")) && /flex-direction:\s*column/.test(block(sheet, ".plate")) &&
     /margin-top:\s*auto/.test(block(sheet, ".plate-value")),
     "plate: a label on two lines leaves the figure level with its neighbours'", block(sheet, ".plate") + block(sheet, ".plate-value"));
+}
+
+// A plate with one standard error: the figure reads alone in its own element, the error sits beside it, and
+// a missing figure or a non-finite error prints no error at all.
+{
+  const one = (props) => {
+    const r = render(h(Plate, { label: "Sharpe", format: "num3", level: "plain", ...props }));
+    const out = { value: text(r.container.querySelector(".plate-value") ?? {}), se: r.container.querySelector(".plate-se"), na: !!r.container.querySelector(".plate-na") };
+    r.unmount();
+    return out;
+  };
+  const withSe = one({ value: 1.2346, se: 0.4321 });
+  check(withSe.value === "1.235" && text(withSe.se ?? {}) === "± 0.432 SE", "plate: an error prints beside the figure, in the figure's format", `${withSe.value} ${text(withSe.se ?? {})}`);
+  check(!one({ value: 1.2345 }).se && !one({ value: 1.2345, se: NaN }).se && !one({ value: 1.2345, se: null }).se,
+    "plate: no error, or a non-finite one, prints nothing beside the figure");
+  const gone = one({ value: null, se: 0.4321 });
+  check(gone.na && !gone.se, "plate: a missing figure prints no error beside its dash");
+  const sheet = css("Plate.css");
+  check(/margin-top:\s*auto/.test(block(sheet, ".plate-figure")) && /flex-wrap:\s*wrap-reverse/.test(block(sheet, ".plate-figure")),
+    "plate: a figure with an error keeps to the foot of the plate, the error wrapping above it, never below", block(sheet, ".plate-figure"));
 }
 
 // The chosen pill is scrolled into view, by scrolling the row and never the page. jsdom has no

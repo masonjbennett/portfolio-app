@@ -8,6 +8,7 @@
 // them is computed on, so their heads say "weights chosen on this window". Equal weights are fixed in
 // advance and a custom mix is whatever was typed, so theirs never carry it.
 import { format } from "../format.ts";
+import { FITTED } from "../content/words.ts";
 
 export type Frequency = "daily" | "monthly";
 
@@ -23,8 +24,8 @@ export function windowsSpan(to: string, freq: Frequency = "daily"): string {
   return `${FREQ[freq]} returns, each window ending ${format(to, "date")}`;
 }
 
-/** The sub-line under a GMV or Tangency head. */
-export const FITTED = "weights chosen on this window";
+/** The sub-line under a GMV or Tangency head (defined in content/words.ts, which the band shares). */
+export { FITTED };
 
 /** A Table `subs` map giving each of these heads the fitted sub-line. */
 export function fittedSubs(heads: readonly string[]): Record<string, string> {

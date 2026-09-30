@@ -11,6 +11,10 @@
 // score reached by mixing "optimally" (554) and "the best risk-adjusted portfolio mix" (558). The
 // plates those tips sit on say in-sample, and the tips should too: the mix scored highest on the very
 // prices its weights were picked from, which describes the past and promises nothing.
+//
+// A third: the band's tangency Sharpe plate prints a standard error beside the figure, which the app's
+// plate never had, so that tip gains one closing line (NOTES, below) saying what the ± measures and
+// what it leaves out. The app's text before it is unchanged.
 import type { Level, TipKey } from "../types.ts";
 import TIPS from "./tooltips.json" with { type: "json" };
 
@@ -66,6 +70,20 @@ export const WORD_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Leve
   },
 };
 
+// Lines added after a tip's text, whatever the shorting toggle says. The ± on the tangency Sharpe plate is
+// sharpeSE in lib/stats.ts, and it treats the weights as if they had been fixed before the window began.
+// They were not: they were solved on the same prices, so each level says the true spread is wider.
+export const NOTES: Readonly<Partial<Record<TipKey, Partial<Record<Level, string>>>>> = {
+  best_sharpe: {
+    plain:
+      "The ± beside it is one standard error, how far the figure could miss by chance alone if the weights had been set before the window began. They were set on these same prices, so the true uncertainty is larger.",
+    finance:
+      "The ± is one standard error of the annualised Sharpe ratio (Lo 2002, with Mertens' correction for skew and fat tails), which treats the weights as fixed; they were fitted on this window, so it understates the uncertainty.",
+    formula:
+      "± SE(SR) = √((1 + SR²/2 − γ₁·SR + (γ₂/4)·SR²) / T) × √252, SR the daily Sharpe of the tangency portfolio's daily returns, γ₁ sample skew, γ₂ excess kurtosis, T days (Lo 2002; Mertens 2002); the weights are treated as fixed.",
+  },
+};
+
 // A short human name per key, for the info mark's accessible label ("About Sharpe ratio").
 export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
   return: "annual return",
@@ -84,7 +102,8 @@ export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
 // The tooltip text for a key at a level; "" when there is none (586: no text, no info mark).
 // allowShort defaults to the app's default, off (742-752).
 export function tipText(key: TipKey, level: Level, allowShort = false): string {
-  const text = WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
-  if (!allowShort) return text;
-  return SHORT_OVERRIDES[key]?.[level]?.short ?? text;
+  const base = WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
+  const text = allowShort ? (SHORT_OVERRIDES[key]?.[level]?.short ?? base) : base;
+  const note = NOTES[key]?.[level];
+  return text && note ? `${text} ${note}` : text;
 }

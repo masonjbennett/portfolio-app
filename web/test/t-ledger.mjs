@@ -175,6 +175,7 @@ const FOUND = {
   "one risk-free rate, the latest, for every window -> the mean 3-month yield over the window, the latest beside it": { "rf-window": ["t-api", "t-workbench"] },
   "presets are the app's baskets only -> the three published sets first, marked, the app's under More baskets": { "published-presets": ["t-contract"] },
   "the default-level tips call the tangency mix the best possible -> the highest over this window, in-sample": { "plain-tip-words": ["t-app", "t-tooltips"] },
+  "the tangency Sharpe tip is the app's text alone -> it closes on what the plate's ± is and what it leaves out": { "sharpe-se-note": ["t-tooltips"] },
 };
 const PENDING = [];
 

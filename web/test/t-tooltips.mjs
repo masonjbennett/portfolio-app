@@ -20,10 +20,12 @@ const read = (rel) => readFileSync(new URL(rel, web), "utf8");
 const app = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const committed = read("src/content/tooltips.json");
 const TIPS = JSON.parse(committed);
-const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, TIP_NAMES } = await import("../src/content/tooltips.ts");
+const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, TIP_NAMES, NOTES } = await import("../src/content/tooltips.ts");
 const { LEVELS } = await import("../src/types.ts");
 const Tip = (await import("../src/components/Tip.tsx")).default;
 const LEVEL_IDS = LEVELS.map((l) => l.id);
+// A text as tipText should return it: the closing line on file for that key and level, if any, after it.
+const withNote = (key, level, t) => (NOTES[key]?.[level] ? `${t} ${NOTES[key][level]}` : t);
 
 // ---- (a) the committed json is a fresh dump ------------------------------------------------------
 function findPython() {
@@ -67,12 +69,12 @@ check(same(Object.keys(TIP_NAMES), keys), "tooltips: every key has an accessible
 // ---- (c) the app's text with shorting off ----------------------------------------------------------
 let mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
-  if (!WORD_OVERRIDES[key]?.[level] && tipText(key, level) !== TIPS[key][level]) mismatches.push(`${key}/${level}`);
+  if (!WORD_OVERRIDES[key]?.[level] && tipText(key, level) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
 }
-check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off, bar the reviewed word overrides", mismatches.join(" "));
+check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off, bar the reviewed word overrides and closing lines", mismatches.join(" "));
 mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
-  if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && tipText(key, level, true) !== TIPS[key][level]) mismatches.push(`${key}/${level}`);
+  if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && tipText(key, level, true) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
 }
 check(mismatches.length === 0, "tooltips: with shorting on, every text not overridden is still the app's", mismatches.join(" "));
 check(tipText("no_such_key", "plain") === "" && tipText("no_such_key", "formula", true) === "",
@@ -95,10 +97,10 @@ for (const [key, byLevel] of Object.entries(SHORT_OVERRIDES)) {
     const at = `${key}/${level}`;
     check(o.was === TIPS[key][level] && LONG_ONLY.test(o.was),
       `ledger:short-bounds-copy: ${at} was reviewed against the app's current text, which says long-only`, TIPS[key][level]);
-    check(tipText(key, level, false) === TIPS[key][level],
+    check(tipText(key, level, false) === withNote(key, level, TIPS[key][level]),
       `ledger:short-bounds-copy: ${at} with shorting OFF is the app's text, which is right then`);
     const on = tipText(key, level, true);
-    check(on === o.short && on !== TIPS[key][level] && on.includes("[-1, 1]") && !LONG_ONLY.test(on) && !/unconstrained/i.test(on),
+    check(on === withNote(key, level, o.short) && on !== withNote(key, level, TIPS[key][level]) && on.includes("[-1, 1]") && !LONG_ONLY.test(on) && !/unconstrained/i.test(on),
       `ledger:short-bounds-copy: ${at} with shorting ON states the [-1, 1] bounds and not long-only`, on);
   }
 }
@@ -123,10 +125,36 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
       check(o.was === TIPS[key][level], `ledger:plain-tip-words ${at} was reviewed against the app's current text`, TIPS[key][level]);
       const off = tipText(key, level, false);
       const on = tipText(key, level, true);
-      check(off === o.now && on === o.now && !WORDS.test(o.now) && /in-sample/.test(o.now),
+      check(off === withNote(key, level, o.now) && on === off && !WORDS.test(off) && /in-sample/.test(o.now),
         `ledger:plain-tip-words ${at} shows the replacement, which says in-sample and neither best nor optimal`, `${off} | ${on}`);
     }
   }
+}
+
+// ---- (d3) ledger:sharpe-se-note -------------------------------------------------------------------
+// The band's tangency Sharpe plate prints a standard error the app never had. Its tip closes with one line
+// per level saying what the ± is and that the weights were fitted on the same prices; no other tip does.
+{
+  const WORDS = /\b(best|optimal)|optimally/i;
+  const noted = Object.entries(NOTES).flatMap(([k, byLevel]) => Object.keys(byLevel).map((l) => `${k}/${l}`));
+  check(same(noted, LEVEL_IDS.map((l) => `best_sharpe/${l}`)),
+    "ledger:sharpe-se-note only the tangency Sharpe tip carries a closing line, at every level", noted.join(" "));
+  const band = read("src/chrome/Band.tsx");
+  check(/tip: "best_sharpe",\s*se: /.test(band),
+    "ledger:sharpe-se-note the plate that carries that tip prints a standard error");
+  for (const level of LEVEL_IDS) {
+    const note = NOTES.best_sharpe?.[level] ?? "";
+    for (const short of [false, true]) {
+      const t = tipText("best_sharpe", level, short);
+      check(t.endsWith(` ${note}`) && t.length > note.length + 20 && /±/.test(note) && /fixed|fitted|set on these same prices/.test(note)
+        && !WORDS.test(note) && !/\p{Extended_Pictographic}/u.test(note),
+        `ledger:sharpe-se-note best_sharpe/${level} (shorting ${short ? "on" : "off"}) ends with the ± line, which says the weights were fitted here`, t);
+    }
+  }
+  // The formula the line prints is the bracket sharpeSE computes.
+  check(read("src/lib/stats.ts").includes("const bracket = 1 + (sr * sr) / 2 - g1 * sr + (g2 / 4) * sr * sr;")
+    && (NOTES.best_sharpe?.formula ?? "").includes("√((1 + SR²/2 − γ₁·SR + (γ₂/4)·SR²) / T) × √252"),
+    "ledger:sharpe-se-note the formula line is the bracket sharpeSE computes");
 }
 
 // ---- (e) Tip ---------------------------------------------------------------------------------------
@@ -153,7 +181,7 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
   r.rerender(h(Tip, { tip: "sharpe", level: "formula" }));
   check(text(r.container.querySelector("[role=tooltip]")) === TIPS.sharpe.formula, "tip: follows the level");
   r.rerender(h(Tip, { tip: "best_sharpe", level: "formula", allowShort: true }));
-  check(text(r.container.querySelector("[role=tooltip]")) === SHORT_OVERRIDES.best_sharpe.formula.short,
+  check(text(r.container.querySelector("[role=tooltip]")) === withNote("best_sharpe", "formula", SHORT_OVERRIDES.best_sharpe.formula.short),
     "ledger:short-bounds-copy: the Tip shows the shorting text when shorting is on");
   r.unmount();
   const none = render(h(Tip, { tip: "no_such_key", level: "plain" }));

@@ -21,7 +21,8 @@ const { default: SummaryChip, summaryText } = await import("../src/chrome/Summar
 const { titleChip } = await import("../src/chrome/Masthead.tsx");
 const { format, DASH } = await import("../src/format.ts");
 const { parseTickers } = await import("../src/lib/clean.ts");
-const { portfolioPerformance } = await import("../src/lib/portfolio.ts");
+const { portfolioPerformance, portfolioReturns } = await import("../src/lib/portfolio.ts");
+const { sharpeSE } = await import("../src/lib/stats.ts");
 const { MESSAGES } = await import("../src/state/analyze.ts");
 const { PRESETS, RF_FALLBACK } = await import("../src/state/defaults.ts");
 const { PHONE_QUERY } = await import("../src/styles/tokens.ts");
@@ -406,6 +407,24 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     "ledger:plain-tip-words the band's tips and accessible names call nothing best or optimal", [...named, ...tipped.map((x) => x.slice(0, 80))].join(" | "));
 }
 
+// ---- (d4) the tangency Sharpe plate carries one standard error, the engine's -----------------------
+{
+  const se = sharpeSE(portfolioReturns(EX.returns, EX.tangency.w), EX.rf);
+  const plates = snapshotPlates(EX);
+  check(Number.isFinite(se) && plates[0].label === "Tangency Sharpe (in-sample)" && plates[0].se === se && plates.slice(1).every((p) => p.se === undefined),
+    "band: the tangency Sharpe plate's standard error is sharpeSE on the tangency portfolio's daily returns, and no other plate has one", `${plates[0].se} ${se}`);
+  const r = render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
+  const first = r.container.querySelector(".band-plates .plate");
+  check(!!first && text(first.querySelector(".plate-se") ?? {}) === `± ${format(se, "num3")} SE` &&
+    text(first.querySelector(".plate-value") ?? {}) === format(EX.tangency.sharpe, "num3") && r.container.querySelectorAll(".band-plates .plate-se").length === 1,
+    "band: the plate prints the figure alone and plus or minus one standard error beside it", first ? first.innerHTML.slice(0, 200) : "no plate");
+  r.unmount();
+  const failed = exampleAnalysis({ allowShort: true, rf: 0.4 });
+  const rf = render(h(Band, { analysis: { status: "ready", value: failed }, level: "plain", fetching: false, failure: null }));
+  check(snapshotPlates(failed)[0].se === null && !rf.container.querySelector(".plate-se"), "band: no tangency, no standard error beside the dash");
+  rf.unmount();
+}
+
 // ---- (e) ledger:failed-tangency ------------------------------------------------------------------
 {
   // The app's side (1196-1202): when optimize_tangency fails, the EW weights and EW figures go
@@ -567,12 +586,25 @@ function rail(over = {}) {
     text(fold.querySelector("blockquote") ?? {}) === P.CARD_SENTENCE && !!pFigures && !fold.contains(pFigures) && !!pLink && !fold.contains(pLink),
     "phone: the published sentence folds behind a closed disclosure; the figures and the link stay on the first screen",
     pStrip ? pStrip.innerHTML.slice(0, 200) : "no strip");
+  // The what-if panel: below the plates and folded shut, so the first row of plates stays on the first screen.
+  const wPlates = r.container.querySelector(".band-plates");
+  const wFold = r.container.querySelector(".band details.band-whatif-fold");
+  check(!!wPlates && !!wFold && !wFold.open && !!wFold.querySelector("section.whatif input[type=range]") && !wFold.contains(wPlates) &&
+    !!(wPlates.compareDocumentPosition(wFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
+    text(wFold.querySelector("summary") ?? {}) === "What if one expected return were different?" &&
+    r.container.querySelectorAll("section.whatif").length === 1,
+    "phone: the what-if panel folds behind a closed disclosure below the plates", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
   r.unmount();
   setMedia(() => false);
   const desk = page({});
   check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector("aside [name=tickers]"), "desktop: the rail stands in the left column, no chip");
   check(!desk.container.querySelector(".band-published details") && text(desk.container.querySelector(".band-published blockquote") ?? {}) === P.CARD_SENTENCE,
     "desktop: the published sentence is printed open");
+  const dPlates = desk.container.querySelector(".band-plates");
+  const dPanel = desk.container.querySelector(".band section.whatif");
+  check(!!dPlates && !!dPanel && !dPanel.closest("details") && !!(dPlates.compareDocumentPosition(dPanel) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
+    !!dPanel.querySelector("input[type=range]"),
+    "desktop: the what-if panel is printed open below the plates");
   desk.unmount();
 }
 

@@ -457,4 +457,6 @@ export interface PlateProps {
   level: Level;
   /** The shorting toggle, passed to the tooltip, whose text follows it. Default off. */
   allowShort?: boolean;
+  /** One standard error of the figure, in the figure's own format; null or non-finite prints nothing. */
+  se?: number | null;
 }

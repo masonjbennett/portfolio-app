@@ -1,0 +1,153 @@
+/* The what-if panel: small print under a hairline, below the band's plates. The sentence is body text, not a
+   headline, so it never competes with the finding above the plates. */
+.whatif {
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-4);
+  border-top: var(--line-hair) solid var(--color-hairline);
+  max-width: 46em;
+}
+
+.whatif-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.whatif-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-teal);
+}
+
+.whatif-pick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-ink2);
+}
+
+.whatif-pick select {
+  font: inherit;
+  color: var(--color-ink);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  padding: 2px var(--space-2);
+}
+
+.whatif-note,
+.whatif-load p,
+.whatif-wait {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink2);
+}
+
+.whatif-sentence {
+  margin: var(--space-3) 0 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+
+.whatif-sentence .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tangency weight moves with the range and is marked in teal; the minimum-variance weight never moves. */
+.whatif-tan {
+  color: var(--color-teal);
+  font-weight: 600;
+}
+
+.whatif-control {
+  margin-top: var(--space-3);
+}
+
+.whatif-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-ink2);
+}
+
+/* The range fills the panel's width under the sentence, on every screen. It runs -2 to +2 standard errors, so
+   one standard error either side is the middle half of the thumb's travel: the thumb's centre sits half a
+   thumb in from each end, which puts the band's edges a quarter-thumb inside 25% and 75%. */
+.whatif-range {
+  --thumb: 18px;
+  --track: linear-gradient(
+    to right,
+    var(--color-hairline) 0 calc(25% + var(--thumb) / 4),
+    var(--color-teal) calc(25% + var(--thumb) / 4) calc(50% - 1px),
+    var(--color-ink) calc(50% - 1px) calc(50% + 1px),
+    var(--color-teal) calc(50% + 1px) calc(75% - var(--thumb) / 4),
+    var(--color-hairline) calc(75% - var(--thumb) / 4) 100%
+  );
+  display: block;
+  width: 100%;
+  margin: var(--space-2) 0 0;
+  height: 32px;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.whatif-range:focus-visible {
+  outline: 2px solid var(--color-navy);
+  outline-offset: 2px;
+}
+
+.whatif-range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--track);
+}
+
+.whatif-range::-moz-range-track {
+  height: 4px;
+  background: var(--track);
+}
+
+.whatif-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: calc((4px - var(--thumb)) / 2);
+  border-radius: 50%;
+  border: 2px solid var(--color-paper);
+  background: var(--color-ink);
+}
+
+.whatif-range::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  border-radius: 50%;
+  border: 2px solid var(--color-paper);
+  background: var(--color-ink);
+}
+
+.whatif-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink2);
+}
+
+.whatif-load {
+  margin-top: var(--space-3);
+}
