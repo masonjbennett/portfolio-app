@@ -125,6 +125,24 @@ const M = [
   ["src/lib/rng.ts", "let a = seed >>> 0;", "let a = 0;", "the seed is ignored", "t-robust"],
   ["src/lib/rng.ts", "const theta = 2 * Math.PI * uniform();", "const theta = Math.PI * uniform();", "Box-Muller angle over half a circle", "t-robust"],
   ["src/lib/rng.ts", "spare = r * Math.sin(theta);", "spare = r * Math.cos(theta);", "the second normal of each pair repeats the first", "t-robust"],
+  // episodes.ts (drawdown episodes, stretch returns, the related event), judged by t-periods alone
+  ["src/lib/episodes.ts", "let hi = 0; // the amount invested is the first high", "let hi = 1; // the amount invested is the first high", "the first high taken at the first close, not at the amount invested", "t-periods"],
+  ["src/lib/episodes.ts", "if (path[j] >= path[hi]) {", "if (path[j] > path[hi]) {", "recovery on the first close above the high, not at or above it", "t-periods"],
+  ["src/lib/episodes.ts", "return { trading: b - a, calendar: calendarDays(when[a], when[b]) };", "return { trading: calendarDays(when[a], when[b]), calendar: calendarDays(when[a], when[b]) };", "trading days reported as calendar days", "t-periods"],
+  ["src/lib/episodes.ts", "for (let i = hi + 2; i <= lastUnder; i++) if (path[i] < path[lo]) lo = i;", "", "the trough taken at the first close under water, not the lowest", "t-periods"],
+  ["src/lib/episodes.ts", "if (hi < path.length - 1) all.push(episode(hi, path.length - 1, null));", "", "a fall still open on the last day is never listed", "t-periods"],
+  ["src/lib/episodes.ts", "all.sort((a, b) => a.depth - b.depth || (a.start < b.start ? -1 : 1));", "all.sort((a, b) => a.depth - b.depth || (a.start < b.start ? 1 : -1));", "equal depths ordered later first", "t-periods"],
+  ["src/lib/episodes.ts", "const a = lastOnOrBefore(when, from);", "const a = lastOnOrBefore(when, from) + 1;", "a stretch's first close taken after its first day", "t-periods"],
+  ["src/lib/episodes.ts", "return start <= from && last >= to;", "return start <= from;", "a stretch that runs past the last close reported over the part the window holds", "t-periods"],
+  ["src/lib/episodes.ts", "if (!(lo < hi)) continue;", "if (!(lo <= hi)) continue;", "a fall that shares a single date with an event counted as related", "t-periods"],
+  ["src/lib/episodes.ts", "if (best === null || shared > most || (shared === most && e.from < best.from)) {", "if (best === null || shared < most || (shared === most && e.from < best.from)) {", "the related event is the one sharing the fewest days", "t-periods"],
+  ["src/lib/episodes.ts", "(shared === most && e.from < best.from)", "(shared === most && e.from > best.from)", "an equal overlap goes to the later event", "t-periods"],
+  // monthly.ts, calendar years and the month grid, judged by t-periods alone
+  ["src/lib/monthly.ts", "for (let t = from; t < i; t++) g *= 1 + r[t];", "for (let t = from; t < i; t++) g += r[t];", "a year's returns added, not compounded", "t-periods"],
+  ["src/lib/monthly.ts", "out.forEach((y, i) => (y.partial = i === 0 || i === lastYear));", "out.forEach((y, i) => (y.partial = !(i === 0 || i === lastYear)));", "the years' partial flag inverted", "t-periods"],
+  ["src/lib/monthly.ts", "if (i < r.length && dates[i].slice(0, 4) === dates[from].slice(0, 4)) continue;", "if (i < r.length && dates[i].slice(0, 7) === dates[from].slice(0, 7)) continue;", "a year split at every month", "t-periods"],
+  ["src/lib/monthly.ts", "first: dates[from], last: dates[i - 1],", "first: dates[Math.max(0, from - 1)], last: dates[i - 1],", "a year's first date taken from the year before", "t-periods"],
+  ["src/lib/monthly.ts", ".months[Number(m.ym.slice(5, 7)) - 1] = m;", ".months[Number(m.ym.slice(5, 7)) % 12] = m;", "the grid's months one column late", "t-periods"],
 ];
 
 const missing = [...new Set(M.map(([, , , , suite]) => suite).filter((s) => s && !existsSync(suitePath(s))))];

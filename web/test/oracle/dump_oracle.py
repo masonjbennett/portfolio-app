@@ -236,6 +236,127 @@ def scorecard(r, b, start, rf):
     }
 
 
+# -- the periods: drawdown episodes, returns over fixed stretches, calendar years, the month grid -----
+# Written from the definitions with pandas (running maximum, run edges, groupby, pivot), not from the
+# TypeScript; t-periods.mjs holds src/lib/episodes.ts and the year and grid helpers in monthly.ts to it.
+ISO = "%Y-%m-%d"
+FALL_CLOSES = json.loads((FIX / "gspc-falls.json").read_text("utf-8"))
+
+
+def named_falls():
+    """Each named fall found from the index's own closes: within the span of closes kept for it, the close
+    furthest below the running maximum is the low, and the highest close before it (the first, on a tie)
+    is the high."""
+    out = []
+    for fx in FALL_CLOSES["falls"]:
+        s = pd.Series([c for _, c in fx["rows"]], index=pd.to_datetime([d for d, _ in fx["rows"]]))
+        low = (s / s.cummax() - 1).idxmin()
+        high = s.loc[:low].idxmax()
+        out.append({"id": fx["id"], "from": high.strftime(ISO), "to": low.strftime(ISO)})
+    return out
+
+
+def with_start(r, start):
+    """Wealth on every close, 1 on the first price's date, so a first-day loss is a fall."""
+    return pd.concat([pd.Series([1.0], index=pd.DatetimeIndex([start])), (1 + r).cumprod()])
+
+
+def episodes(r, start, k=5):
+    """Runs of closes below the running maximum of wealth. Each is dated from the close that set the
+    maximum to the first close no longer below it (None when the run reaches the last day); the trough
+    is the run's first lowest close. The k deepest, deepest first, the earlier first on equal depth."""
+    cum = with_start(r, start)
+    top = cum.cummax()
+    dd = (cum - top) / top
+    under = (dd < 0).astype(int).values
+    edges = np.diff(np.concatenate([[0], under, [0]]))
+    idx = cum.index
+    rows = []
+    for s, e in zip(np.where(edges == 1)[0], np.where(edges == -1)[0]):
+        hi, lo = int(s) - 1, int(s) + int(np.argmin(cum.values[s:e]))
+        rec = int(e) if e < len(cum) else None
+        rows.append({"start": idx[hi].strftime(ISO), "trough": idx[lo].strftime(ISO),
+                     "recovery": None if rec is None else idx[rec].strftime(ISO), "depth": f(dd.iloc[lo]),
+                     "down": [lo - hi, int((idx[lo] - idx[hi]).days)],
+                     "recover": None if rec is None else [rec - lo, int((idx[rec] - idx[lo]).days)]})
+    rows.sort(key=lambda x: (x["depth"], x["start"]))
+    return rows[:k]
+
+
+def stretch_return(r, start, first, last):
+    """Compounded return from the last close on or before `first` to the last close on or before `last`;
+    None unless the closes reach back to `first` and on to `last`."""
+    closes = pd.DatetimeIndex([start]).append(r.index)
+    a_day, b_day = pd.Timestamp(first), pd.Timestamp(last)
+    if closes[0] > a_day or closes[-1] < b_day:
+        return None
+    a, b = closes[closes <= a_day][-1], closes[closes <= b_day][-1]
+    inside = r[(r.index > a) & (r.index <= b)]
+    return f((1 + inside).prod() - 1)
+
+
+def calendar_years(r):
+    """Trading days compounded within each calendar year; the first and the last year flagged partial."""
+    grp = r.groupby(r.index.year)
+    ret = (1 + r).groupby(r.index.year).prod() - 1
+    first, last, size = grp.apply(lambda s: s.index.min()), grp.apply(lambda s: s.index.max()), grp.size()
+    n = len(ret)
+    return [[int(y), f(ret[y]), first[y].strftime(ISO), last[y].strftime(ISO), int(size[y]), i in (0, n - 1)]
+            for i, y in enumerate(ret.index)]
+
+
+def month_grid(r):
+    """Months pivoted to years down and January..December across, every year from first to last; a cell is
+    [return, days, partial] or None where the window has no day of that month."""
+    per = r.index.to_period("M")
+    mo = (1 + r).groupby(per).prod() - 1
+    tab = pd.DataFrame({"y": [p.year for p in mo.index], "m": [p.month for p in mo.index], "v": mo.values,
+                        "d": r.groupby(per).size().values, "p": [0.0] * len(mo)})
+    tab.loc[[0, len(tab) - 1], "p"] = 1.0
+    years = range(int(tab.y.min()), int(tab.y.max()) + 1)
+    piv = {c: tab.pivot(index="y", columns="m", values=c).reindex(index=years, columns=range(1, 13))
+           for c in ("v", "d", "p")}
+    return [[y, [None if pd.isna(piv["v"].loc[y, m]) else
+                 [f(piv["v"].loc[y, m]), int(piv["d"].loc[y, m]), bool(piv["p"].loc[y, m])]
+                 for m in range(1, 13)]] for y in years]
+
+
+def related(worst, falls):
+    """The named fall sharing the most calendar days with the worst fall (high to trough), more than one
+    date in common, the earlier fall on a tie; None when none does."""
+    if worst is None:
+        return None
+    a, z = pd.Timestamp(worst["start"]), pd.Timestamp(worst["trough"])
+    best, most = None, 0
+    for fl in sorted(falls, key=lambda x: x["from"]):
+        lo, hi = max(a, pd.Timestamp(fl["from"])), min(z, pd.Timestamp(fl["to"]))
+        if lo < hi and (hi - lo).days > most:
+            best, most = fl["id"], (hi - lo).days
+    return best
+
+
+def periods(series, start):
+    """Per series: the five deepest episodes, the return over every named fall and a few other stretches
+    (ends on non-trading days, and ends the window does not reach), calendar years, the month grid, and the
+    named fall its worst episode overlaps."""
+    falls = named_falls()
+    any_r = next(iter(series.values()))
+    first, last = start, any_r.index[-1]
+    day = pd.Timedelta(days=1)
+    extra = [(first, last), (first, first + 40 * day), (first - day, last), (first, last + day),
+             (pd.Timestamp("2020-02-22"), pd.Timestamp("2020-03-28")),
+             (pd.Timestamp("2020-01-01"), pd.Timestamp("2020-12-31")), (last - 10 * day, last - 10 * day)]
+    stretches = [[fl["from"], fl["to"]] for fl in falls] + [[a.strftime(ISO), b.strftime(ISO)] for a, b in extra]
+    out = {}
+    for k, r in series.items():
+        eps = episodes(r, start)
+        out[k] = {"episodes": eps,
+                  "stretches": [stretch_return(r, start, a, b) for a, b in stretches],
+                  "years": calendar_years(r), "grid": month_grid(r),
+                  "related": related(eps[0] if eps else None, falls)}
+    return {"falls": falls, "stretches": stretches, "series": out}
+
+
 def load_of(R, h=0.02):
     """How much a mean-variance fit estimates, against the days it has."""
     days, n = len(R), R.shape[1]
@@ -408,6 +529,9 @@ def dump(name):
                       "series": {k: scorecard(s, b, start, RF) for k, s in series.items()},
                       "months": months, "share": share,
                       "load": {"full": load_of(R), "1y": load_of(R.iloc[-252:])}}
+
+    # Drawdown episodes, returns over fixed stretches, calendar years and the month grid, same series.
+    out["periods"] = periods(series, start)
     return out
 
 

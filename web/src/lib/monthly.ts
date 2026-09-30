@@ -105,3 +105,57 @@ export function captureRatios(r: Vec, b: Vec, dates: readonly string[]): Capture
     downMonths: bDn.length,
   };
 }
+
+export interface Year {
+  /** The calendar year. */
+  year: number;
+  /** The year's trading days compounded, decimal: from the close before `first` to the close on `last`. */
+  ret: number;
+  /** ISO dates of the year's first and last trading day inside the window. */
+  first: string;
+  last: string;
+  /** Trading days of the year that fall inside the window. */
+  days: number;
+  /** True for the window's first and last year, which may not be whole. */
+  partial: boolean;
+}
+
+// Calendar years out of daily returns, each its trading days compounded, labelled by the year of the return
+// dates in it. A year is judged partial by the months' rule at the top of this file: the dates alone cannot
+// say whether the window opens on a year's first session or closes on its last (the first session of January
+// can fall on the 2nd or the 4th, the last of December on the 29th), so the FIRST and the LAST year are
+// always flagged, and `first` and `last` say what each one actually covers. A window inside one calendar year
+// is one partial year.
+export function calendarYears(r: Vec, dates: readonly string[]): Year[] {
+  if (r.length !== dates.length) throw new Error(`calendarYears: ${r.length} returns but ${dates.length} dates`);
+  const out: Year[] = [];
+  let from = 0;
+  for (let i = 1; i <= r.length; i++) {
+    if (i < r.length && dates[i].slice(0, 4) === dates[from].slice(0, 4)) continue;
+    let g = 1;
+    for (let t = from; t < i; t++) g *= 1 + r[t];
+    out.push({ year: Number(dates[from].slice(0, 4)), ret: g - 1, first: dates[from], last: dates[i - 1], days: i - from, partial: false });
+    from = i;
+  }
+  const lastYear = out.length - 1;
+  out.forEach((y, i) => (y.partial = i === 0 || i === lastYear));
+  return out;
+}
+
+export interface GridRow {
+  year: number;
+  /** Twelve cells, January first: that month's figures, or null where the window holds none of its days. */
+  months: (Month | null)[];
+}
+
+// monthlyReturns() laid out years down and twelve months across, every year from the first to the last
+// (a year the window skips entirely still gets a row, all null). Partial months keep their flag.
+export function monthGrid(months: readonly Month[]): GridRow[] {
+  if (!months.length) return [];
+  const y0 = Number(months[0].ym.slice(0, 4));
+  const y1 = Number(months[months.length - 1].ym.slice(0, 4));
+  const rows: GridRow[] = [];
+  for (let y = y0; y <= y1; y++) rows.push({ year: y, months: new Array<Month | null>(12).fill(null) });
+  for (const m of months) rows[Number(m.ym.slice(0, 4)) - y0].months[Number(m.ym.slice(5, 7)) - 1] = m;
+  return rows;
+}
