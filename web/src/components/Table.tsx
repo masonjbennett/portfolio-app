@@ -23,6 +23,9 @@
 // A head (a column's label, or a row's label) can carry a sub-line under it, keyed by the head's own
 // text in `subs`. The sub-line is the page's alone: the downloads keep the plain heads the app's own
 // downloads use ("GMV", "Tangency"), so a sheet built on one keeps working.
+//
+// A column marked `pageHidden` is left out of the page's head and rows but stays in both downloads, for
+// a figure the page need not print twice in two units while a spreadsheet may want the second one.
 import { useState } from "react";
 import { downloadCsv, downloadXlsx } from "../download.ts";
 import { format, isText } from "../format.ts";
@@ -87,7 +90,8 @@ export function Downloads({ title, columns, rows, filename, rowFormats }: TableP
 }
 
 export default function Table({ title, columns, rows, filename, span, subs, headed = false }: Props) {
-  const label = labelKey(columns);
+  const shown = columns.filter((c) => !c.pageHidden);
+  const label = labelKey(shown);
 
   return (
     <div className="tbl">
@@ -99,7 +103,7 @@ export default function Table({ title, columns, rows, filename, span, subs, head
           </caption>
           <thead>
             <tr>
-              {columns.map((c) => (
+              {shown.map((c) => (
                 <th key={c.key} scope="col" className={cellClass(c, label)}>
                   {c.label}
                   <Sub subs={subs} head={c.label} />
@@ -110,7 +114,7 @@ export default function Table({ title, columns, rows, filename, span, subs, head
           <tbody>
             {rows.map((row, i) => (
               <tr key={i}>
-                {columns.map((c) => {
+                {shown.map((c) => {
                   const text = format(row[c.key] ?? null, c.format);
                   return c.key === label ? (
                     <th key={c.key} scope="row" className={cellClass(c, label)}>

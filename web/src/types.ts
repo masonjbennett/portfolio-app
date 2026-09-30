@@ -389,6 +389,8 @@ export interface Column {
   format: CellFormat;
   /** The label column: left-aligned, and frozen when the table scrolls sideways on a phone. */
   first?: boolean;
+  /** Left off the page but kept in the CSV and Excel downloads, e.g. a count in a second unit a spreadsheet may want. */
+  pageHidden?: boolean;
 }
 
 /** One table row: raw NUMBERS (or ISO dates, or labels in "text" columns), never preformatted strings. null prints as a dash. */

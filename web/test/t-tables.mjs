@@ -212,6 +212,37 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   }
 }
 
+// ---- a column the page leaves off --------------------------------------------------------------------
+
+{
+  // "As of" marked pageHidden: gone from the page's heads and rows, still in the CSV the button saves.
+  const cols = COLS.map((c) => (c.key === "asof" ? { ...c, pageHidden: true } : c));
+  const t = render(h(Table, { title: "Portfolio comparison", columns: cols, rows: ROWS, filename: "c", span: null }));
+  const heads = [...t.container.querySelectorAll("thead th")].map(text);
+  const cells = [...t.container.querySelectorAll("tbody tr")].map((tr) => tr.children.length);
+  check(heads.join() === "Portfolio,Ann. Return,Sharpe" && cells.every((n) => n === 3) && !text(t.container.querySelector("tbody")).includes("Sep"),
+    "table: a column marked pageHidden has no head and no cell on the page", `${heads} / ${cells}`);
+  const saved = { create: URL.createObjectURL, revoke: URL.revokeObjectURL, click: window.HTMLAnchorElement.prototype.click };
+  let blob = null;
+  URL.createObjectURL = (b) => {
+    blob = b;
+    return "blob:test";
+  };
+  URL.revokeObjectURL = () => {};
+  window.HTMLAnchorElement.prototype.click = () => {};
+  try {
+    act(() => t.container.querySelector(".tbl-dl button").click());
+    const csv = blob ? await blob.text() : "";
+    check(csv === D.csvText(cols, ROWS) && csv.split("\n")[0] === "Portfolio,Ann. Return,Sharpe,As of" && csv.split("\n")[1].endsWith(",2026-09-25"),
+      "table: a column marked pageHidden is still in the download, head and values", csv.split("\n").slice(0, 2).join("|"));
+  } finally {
+    URL.createObjectURL = saved.create;
+    URL.revokeObjectURL = saved.revoke;
+    window.HTMLAnchorElement.prototype.click = saved.click;
+  }
+  t.unmount();
+}
+
 // ---- spans and head sub-lines ---------------------------------------------------------------------
 
 {
