@@ -82,6 +82,17 @@ function whenIdle(fn: () => void): () => void {
   return () => window.clearTimeout(handle);
 }
 
+// Runs fn at the start of the next frame, after the one being prepared has painted; returns the cancel.
+// A surface with no frames (a test's DOM without them) waits about one frame's worth of time instead.
+function nextFrame(fn: () => void): () => void {
+  if (typeof window.requestAnimationFrame === "function") {
+    const handle = window.requestAnimationFrame(fn);
+    return () => window.cancelAnimationFrame(handle);
+  }
+  const handle = window.setTimeout(fn, 16);
+  return () => window.clearTimeout(handle);
+}
+
 const TAB_OPTIONS = TAB_IDS.map((id) => ({ value: id, label: TAB_LABELS[id] }));
 // The tab row's ids: pill `analysis-tab-<id>`, the panel it shows `analysis-panel-<id>`.
 const TAB_PREFIX = "analysis";
@@ -125,7 +136,23 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   // The rail has changed and the analysis behind the band and the tab has not caught up yet: both keep
   // the previous figures, marked the same way as a tab switch (aria-busy and the dim), so no figure
   // from the old settings sits unmarked beside the new ones.
-  const settling = settlingOf(wb, ready);
+  //
+  // The mark outlives the render that lands the rebuilt analysis by one frame. That render commits at
+  // transition priority, so its passive effects run after it has painted, and the charts' own store
+  // (Recharts keeps each chart's scales there) takes the new figures only in those effects: for one
+  // painted frame a chart would draw the new points on the previous setting's axes. `held` keeps the
+  // mark on through that frame and lets it go on the next. Only a settle ever sets it, so a cold load,
+  // whose first analysis already matches the rail, never dims.
+  const behind = settlingOf(wb, ready);
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (behind) {
+      setHeld(true);
+      return undefined;
+    }
+    return nextFrame(() => setHeld(false));
+  }, [behind, ready]);
+  const settling = behind || held;
   const Tab = tabs[wb.tab];
   const drawn = ready !== null;
   useEffect(() => (drawn && tabs === TABS ? whenIdle(prefetchTabs) : undefined), [drawn, tabs]);

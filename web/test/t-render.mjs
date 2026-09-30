@@ -273,6 +273,14 @@ for (const tab of TAB_IDS) {
   if (drawn) {
     check(!shortSwitch().checked && !shortingNote(), "switch: it opens with shorting off, and the tab says so");
     check(panel().getAttribute("aria-busy") === null, "switch: before the click nothing is marked busy");
+    // Every DOM state the commits leave behind, read as each commit's mutations are delivered: after the
+    // commit itself and before its passive effects, which is when a chart's own store has not yet taken
+    // the new figures. The first state that shows the rebuilt analysis must still carry the mark.
+    const seen = [];
+    const watch = new window.MutationObserver(() => {
+      seen.push({ rebuilt: shortingNote(), busy: panel()?.getAttribute("aria-busy") ?? null, band: !!host.querySelector("section.band.band--settling") });
+    });
+    watch.observe(host, { subtree: true, childList: true, attributes: true, characterData: true });
     shortSwitch().click();
     await Promise.resolve();
     const flipped = shortSwitch().checked;
@@ -286,6 +294,11 @@ for (const tab of TAB_IDS) {
     const landed = await until(() => shortingNote() && panel().getAttribute("aria-busy") === null);
     check(landed, "switch: the rebuilt analysis lands, and the tab is no longer marked busy");
     check(!host.querySelector("section.band")?.classList.contains("band--settling"), "switch: the band's mark clears with it");
+    watch.disconnect();
+    const firstRebuilt = seen.find((s) => s.rebuilt);
+    check(!!firstRebuilt && firstRebuilt.busy === "true" && firstRebuilt.band,
+      "switch: the commit that lands the rebuilt analysis still carries the mark, which clears only on a later frame",
+      JSON.stringify(firstRebuilt));
   }
   root.unmount();
   host.remove();
