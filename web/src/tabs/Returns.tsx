@@ -1,6 +1,7 @@
 // The Returns & Statistics tab (portfolio_app.py 1225-1312): the finding in one sentence, the growth
-// of the starting amount in every line, where each line ended, the Summary Statistics table, and one
-// asset's return distribution as a histogram with its normal fit or a Q-Q plot.
+// of the starting amount in every line, where each line ended, the portfolios' calendar years and one
+// portfolio's months as a grid, the Summary Statistics table, and one asset's return distribution as a
+// histogram with its normal fit or a Q-Q plot.
 //
 // Every figure comes from src/tabs/returns/model.ts, which test/t-tab-returns.mjs holds to the app's
 // own numbers. Each card computes its own figures inside its own Boundary, so a card that fails is
@@ -15,10 +16,17 @@ import Table from "../components/Table.tsx";
 import Tip from "../components/Tip.tsx";
 import AmountField from "../charts/AmountField.tsx";
 import { format } from "../format.ts";
-import type { Analysis, Level, TabProps } from "../types.ts";
+import type { Analysis, CustomWeights, Level, TabProps } from "../types.ts";
 import { tableSpan } from "./caption.ts";
+import { customWeights } from "./optimization/model.ts";
+import type { ScoreColId } from "./optimization/scorecard.ts";
 import { HistChart, QQChart } from "./returns/DistCharts.tsx";
 import GrowthChart from "./returns/GrowthChart.tsx";
+import MonthHeatmap from "./returns/MonthHeatmap.tsx";
+import {
+  monthColumns, monthRows, monthTitle, monthView, portfolioSeries, seriesOptions, seriesSubs, yearColumns, yearRows,
+  YEARS_FILE, YEARS_TITLE,
+} from "./returns/years.ts";
 import {
   dek, growth, GROWTH_COLUMNS, GROWTH_FILE, growthRows, growthState, growthTitle, headline, histogram, histTitle,
   linesOf, qqState, qqTitle, SUMMARY_COLUMNS, SUMMARY_FILE, summaryRows, BINS,
@@ -84,6 +92,72 @@ const GrowthCard = memo(function GrowthCard({ a, amount, onAmount }: { a: Analys
         span={tableSpan(d[0], d[d.length - 1], "daily", "closes")}
       />
     </>
+  );
+});
+
+// The portfolios' calendar years, then one portfolio's months as a grid, with the grid's own table. Every
+// figure is the engine's (src/lib/monthly.ts) on the portfolio's daily returns; see ./returns/years.ts.
+const YearsCard = memo(function YearsCard({ a, weights }: { a: Analysis; weights: CustomWeights }) {
+  const c = useMemo(() => customWeights(a, weights), [a, weights]);
+  const series = useMemo(() => portfolioSeries(a, c), [a, c]);
+  const years = useMemo(() => yearRows(a, series), [a, series]);
+  const [pick, setPick] = useState<ScoreColId>("ew");
+  const shown = series.find((s) => s.id === pick) ?? series[0];
+  // Keyed on the one series drawn (whose returns portfolioSeries keeps per analysis), so an edited custom
+  // mix leaves another portfolio's grid undrawn.
+  const { r: shownR, label: shownLabel, id: shownId } = shown;
+  const months = useMemo(() => monthView(a, { id: shownId, label: shownLabel, sub: null, r: shownR }), [a, shownId, shownLabel, shownR]);
+  const d = a.dates;
+  const subs = seriesSubs(series);
+  return (
+    <section className="ret-section" aria-labelledby="ret-years">
+      <Slug id="ret-years">{YEARS_TITLE}</Slug>
+      <p className="ret-note">
+        Each year compounds the daily returns from the year's first close in the window (or the last close of the year
+        before) to its last. Every portfolio holds its weights fixed and is rebalanced to them daily; GMV and Tangency's
+        weights were chosen on this window, so their years are in-sample. The first and last years are the window's, so
+        they say which dates they cover.
+      </p>
+      <Table
+        title={YEARS_TITLE}
+        columns={yearColumns(series)}
+        rows={years}
+        filename={YEARS_FILE}
+        span={tableSpan(a.prices.dates[0], a.asOf, "daily", "closes")}
+        subs={subs}
+        headed
+      />
+      <div className="ret-controls ret-months-pick">
+        <span className="ret-pick-label">Months of</span>
+        <SegControl options={seriesOptions(series)} value={shown.id} onChange={setPick} ariaLabel="Portfolio for the months grid" />
+        {shown.sub ? <span className="ret-fitted">{shown.sub}</span> : null}
+      </div>
+      <div className="ret-chart">
+        <ChartFrame
+          title={months.status === "ready" ? monthTitle(months.value) : `${shown.label}'s calendar months`}
+          subtitle={`Each month's trading days compounded, ${format(d[0], "date")} to ${format(d[d.length - 1], "date")}. The shading runs from the loss colour through the paper to the gain colour, the same distance each way from zero; the title's range counts whole months only.`}
+          state={months}
+          height={240}
+        >
+          {(v) => <MonthHeatmap view={v} />}
+        </ChartFrame>
+      </div>
+      {months.status === "ready" ? (
+        <>
+          <p className="ret-note ret-months-note">
+            A dashed outline marks the window's first and last months, which it may hold only part of: their figures run from the
+            first close in the window, or to the last.
+          </p>
+          <Table
+            title={`Monthly returns, ${shown.label}`}
+            columns={monthColumns()}
+            rows={monthRows(months.value.grid)}
+            filename={`monthly_returns_${shown.id}`}
+            span={tableSpan(d[0], a.asOf, "monthly")}
+          />
+        </>
+      ) : null}
+    </section>
   );
 });
 
@@ -170,7 +244,7 @@ const DistributionCard = memo(function DistributionCard({ a }: { a: Analysis }) 
   );
 });
 
-export default function Returns({ analysis, settings, level, requestSettings }: TabProps) {
+export default function Returns({ analysis, settings, level, weights, requestSettings }: TabProps) {
   const amount = settings.amount;
   // Held steady so the memo'd cards skip a render their inputs do not call for. The tooltips read the
   // shorting the analysis was built with, which the rail's switch can be a render ahead of.
@@ -182,6 +256,9 @@ export default function Returns({ analysis, settings, level, requestSettings }: 
       </Boundary>
       <Boundary name="Cumulative growth" resetKey={analysis}>
         <GrowthCard a={analysis} amount={amount} onAmount={onAmount} />
+      </Boundary>
+      <Boundary name="Calendar years" resetKey={analysis}>
+        <YearsCard a={analysis} weights={weights} />
       </Boundary>
       <Boundary name="Summary Statistics" resetKey={analysis}>
         <SummaryCard a={analysis} level={level} allowShort={analysis.allowShort} />

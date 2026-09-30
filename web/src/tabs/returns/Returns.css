@@ -119,6 +119,92 @@
   border-radius: 6px;
 }
 
+/* Calendar years and the months grid. */
+.ret-section {
+  min-width: 0;
+}
+
+.ret-note {
+  margin: 0 0 var(--space-3);
+  max-width: 46em;
+  color: var(--color-ink2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ret-pick-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+.ret-fitted {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--color-ink2);
+}
+
+/* A SegControl row scrolls sideways inside itself; let it shrink instead of pushing the page wide. */
+.ret-months-pick {
+  margin-top: var(--space-5);
+  min-width: 0;
+}
+
+.ret-months-pick > .seg {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ret-months {
+  min-width: 0;
+}
+
+.ret-months-readout {
+  margin: 0 0 var(--space-2);
+  min-height: 1.4em;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink2);
+}
+
+/* The grid keeps its figures legible and scrolls inside this box on a phone; the page never does. */
+.ret-months-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.ret-months-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ret-month {
+  cursor: pointer;
+}
+
+.ret-months-scale {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: 12px;
+  color: var(--color-ink2);
+}
+
+.ret-months-scale-name {
+  font-family: var(--font-sans);
+}
+
+.ret-months-note {
+  margin-top: var(--space-3);
+}
+
 /* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
 @media (max-width: 760px) {
   /* 16px on a phone: a smaller select makes iOS zoom the page on focus (as the rail's inputs). */

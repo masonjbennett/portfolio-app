@@ -228,7 +228,8 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
   // Tables: two, each through Table with both downloads; no raw table outside them.
   const tbls = $$(".tbl");
   const caps = tbls.map((t) => text(t.querySelector("caption .tbl-title")));
-  check(tbls.length === 2 && caps.includes("Summary Statistics") && caps.includes("Growth of $10,000"), "tab: the Summary Statistics and growth tables", caps.join(" | "));
+  check(tbls.length === 4 && caps.includes("Summary Statistics") && caps.includes("Growth of $10,000") && caps.includes("Calendar years") && caps.includes("Monthly returns, Equal-Weight"),
+    "tab: the growth, calendar-year, monthly and Summary Statistics tables", caps.join(" | "));
   check(tbls.every((t) => ["Download CSV", "Download Excel"].every((b) => [...t.querySelectorAll("button")].some((x) => text(x) === b))),
     "ledger:downloads-everywhere every table on the tab carries CSV and Excel downloads");
   check($$("table").length === $$(".tbl table").length, "tab: every table goes through Table");
@@ -268,7 +269,7 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
     "tab: a toggle takes its line and its label off the chart", endLabels().join());
   for (const b of $$(".ret-toggle")) if (b.getAttribute("aria-pressed") === "true") act(() => b.click());
   const growthNote = $$(".chart-note").map(text);
-  check(curves().length === 0 && growthNote.includes("No line selected. Choose at least one above.") && $$(".tbl").length === 2,
+  check(curves().length === 0 && growthNote.includes("No line selected. Choose at least one above.") && $$(".tbl").length === 4,
     "tab: with no line chosen the chart says so and the tables stay", growthNote.join(" | "));
   act(() => toggle("GLD").click());
   check(curves().length === 1 && endLabels().join() === "GLD", "tab: one line back, one label");
@@ -308,7 +309,9 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
   check(/Chart not drawn: the VTI growth line failed/.test(all), "tab: a broken growth line fails the chart closed, naming it");
   check(/Chart not drawn: the return series failed/.test(all), "tab: the distribution of that ticker fails closed, named");
   check(/No growth figure for VTI/.test(all), "tab: the headline names the missing figure and claims no winner");
-  check(r.container.querySelectorAll(".tbl").length === 2 && clean(all) && clean(r.container.innerHTML), "tab: the tables stay, with no NaN on the page");
+  // The months grid of a series with a hole fails closed and named, so its table goes with it: three tables stay.
+  check(r.container.querySelectorAll(".tbl").length === 3 && clean(all) && clean(r.container.innerHTML), "tab: the tables stay, with no NaN on the page");
+  check(/Chart not drawn: Equal-Weight's months failed/.test(all), "tab: a hole in an asset fails the months grid of a portfolio holding it, named");
   const summaryVti = [...[...r.container.querySelectorAll(".tbl")].find((t) => /Summary/.test(text(t.querySelector("caption")))).querySelectorAll("tbody tr")][0];
   check([...summaryVti.querySelectorAll("td")].every((td) => text(td) === "–"), "tab: VTI's summary figures print the dash, not part-figures",
     [...summaryVti.querySelectorAll("td")].map(text).join());
@@ -338,8 +341,10 @@ const typeInto = (input, v) => act(() => {
   const spans = [...r.container.querySelectorAll(".tbl")].map((t) => [text(t.querySelector(".tbl-title")), text(t.querySelector(".tbl-span"))]);
   check(JSON.stringify(spans) === JSON.stringify([
     ["Growth of $10,000", `Daily closes, ${cross.prices.dates[0]} to ${cross.asOf}`],
+    ["Calendar years", `Daily closes, ${cross.prices.dates[0]} to ${cross.asOf}`],
+    ["Monthly returns, Equal-Weight", `Monthly returns, ${cross.dates[0]} to ${cross.asOf}`],
     ["Summary Statistics", `Daily returns, ${cross.dates[0]} to ${cross.asOf}`],
-  ]), "spans: the growth table states its closes and the statistics their daily returns, each with its window", JSON.stringify(spans));
+  ]), "spans: the growth and calendar-year tables state their closes, the months and the statistics their returns, each with its window", JSON.stringify(spans));
   const frame = r.container.querySelector(".ret-chart .chart-frame");
   const input = frame?.querySelector(".chart-head .amount-field input");
   check(!!input && input.value === "10000" && text(frame.querySelector(".amount-field label")) === "Growth of $",
@@ -352,6 +357,145 @@ const typeInto = (input, v) => act(() => {
   check(input.value === "40000" && text(r.container.querySelector(".ret-chart .chart-title")).includes("$40,000"),
     "amount: an amount set elsewhere shows in the chart's field and its title", input.value);
   r.unmount();
+}
+
+// ---- calendar years and the months grid ----------------------------------------------------------------
+// Every printed cell against the engine (calendarYears, monthlyReturns) run here on the column's own daily
+// returns, rebuilt from its weights; the partial years' labels against the dates; the grid's cells, colours
+// and scale against the returns alone. On the baked example and the mega-cap fixture, with a typed mix.
+{
+  const { exampleAnalysis } = await import("./_analysis.mjs");
+  const { calendarYears, monthlyReturns } = await import("../src/lib/monthly.ts");
+  const { portfolioReturns } = await import("../src/lib/portfolio.ts");
+  const { customWeights, weightsOf, PORT_LABEL } = await import("../src/tabs/optimization/model.ts");
+  const { FITTED } = await import("../src/tabs/caption.ts");
+  const { MONTH_TINT } = await import("../src/tabs/returns/years.ts");
+  const { monthYear } = await import("../src/chrome/when.ts");
+  const { tokens } = await import("../src/styles/tokens.ts");
+  const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+  const rowsOf = (tbl) => [...tbl.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map(text));
+  const tableTitled = (root, t) => [...root.querySelectorAll(".tbl")].find((x) => text(x.querySelector(".tbl-title")) === t);
+  const radio = (root, label) => [...root.querySelectorAll("button[role=radio]")].find((b) => text(b) === label);
+  const press = (el) => act(() => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
+  const rgb = (x) => (/rgb\((\d+), (\d+), (\d+)\)/.exec(x) ?? []).slice(1).map(Number);
+  const hex = (x) => [1, 3, 5].map((k) => parseInt(x.slice(k, k + 2), 16));
+  const PAPER = hex(tokens.color.paper);
+  const UP = hex(tokens.color.up);
+  const DOWN = hex(tokens.color.down);
+  const subOf = (tbl, label) => {
+    const sub = [...tbl.querySelectorAll("thead th")].find((th) => text(th.firstChild) === label)?.querySelector(".tbl-sub");
+    return sub ? text(sub) : "";
+  };
+  const columnsOf = (a, typed) => {
+    const c = customWeights(a, typed);
+    const port = (w) => (w ? portfolioReturns(a.returns, w) : null);
+    return [
+      { label: PORT_LABEL.ew, r: port(weightsOf(a, "ew")) },
+      { label: PORT_LABEL.gmv, r: port(weightsOf(a, "gmv")) },
+      { label: PORT_LABEL.tangency, r: port(weightsOf(a, "tangency")) },
+      { label: "Custom", r: c.ok ? port(c.w) : null },
+      { label: a.benchLabel, r: a.bench },
+    ];
+  };
+
+  for (const [set, a] of [["example", exampleAnalysis()], ["megacap", fixtureAnalysis("megacap")]]) {
+    const tag = (x) => `${set}: ${x}`;
+    const typed = Object.fromEntries(a.tickers.map((t, i) => [t, (a.tickers.length - i) / 10]));
+    const cols = columnsOf(a, typed);
+    const r = render(h(Returns, tabProps(a, { weights: typed })));
+    const sec = r.container.querySelector("section[aria-labelledby=ret-years]");
+
+    // Where it sits: right after the growth chart and its table, before the Summary Statistics.
+    const heads = [...r.container.querySelectorAll("h2.slug-text")].map(text);
+    const growthTbl = tableTitled(r.container, "Growth of $10,000");
+    check(!!sec && !!sec.querySelector("h2#ret-years") && heads.indexOf("Calendar years") === heads.indexOf("Summary Statistics") - 1
+      && (growthTbl.compareDocumentPosition(sec) & 4) !== 0, tag("years: the Calendar years section follows the growth chart, anchored ret-years"), heads.join(" | "));
+    if (!sec) {
+      r.unmount();
+      continue;
+    }
+
+    // The table: years down, the five columns across, every cell the engine's year on that column's returns.
+    const tbl = tableTitled(sec, "Calendar years");
+    const thead = [...tbl.querySelectorAll("thead th")].map((th) => text(th.firstChild));
+    check(same(thead, ["Year", ...cols.map((c) => c.label)]), tag("years: Year, then Equal-Weight, GMV, Tangency, Custom and the benchmark"), thead.join(" | "));
+    const spine = calendarYears(a.bench, a.dates);
+    const per = cols.map((c) => calendarYears(c.r, a.dates));
+    const got = rowsOf(tbl);
+    const want = spine.map((y, i) => [got[i]?.[0], ...per.map((ys) => format(ys[i].ret, "pct1"))]);
+    check(spine.length > 1 && same(got, want), tag("years: every cell is the engine's compounded year on that column's daily returns"), JSON.stringify(got[1]));
+    check(tbl.querySelector(".tbl-title").classList.contains("tbl-title-clip"), tag("years: the title repeats the heading right above it, so it is clipped from the screen"));
+    check(subOf(tbl, "GMV") === FITTED && subOf(tbl, "Tangency") === FITTED && subOf(tbl, "Equal-Weight") === "", tag("years: GMV and Tangency carry the fitted line"));
+    check(/fixed and is rebalanced to them daily/.test(text(sec.querySelector(".ret-note"))), tag("years: the note says fixed weights, rebalanced daily"));
+
+    // The partial years' labels, from the dates: the first from the first close, the last to the last close.
+    const labels = got.map((row) => row[0]);
+    const y0 = Number(a.dates[0].slice(0, 4));
+    const yN = Number(a.asOf.slice(0, 4));
+    check(labels[0] === `${y0}, from ${a.prices.dates[0]}` && labels.at(-1) === `${yN}, to ${a.asOf}`
+      && labels.slice(1, -1).every((l, i) => l === String(y0 + 1 + i)), tag("years: the partial first and last years say their dates, the rest are bare years"), labels.join(" | "));
+
+    // The months grid, for each of the five: one cell per month with data, its figure, its colour's side.
+    for (const col of cols) {
+      press(radio(sec, col.label));
+      const months = monthlyReturns(col.r, a.dates);
+      const cells = [...sec.querySelectorAll("g.ret-month")];
+      const reach = Math.max(...months.map((m) => Math.abs(m.ret)));
+      check(cells.length === months.length && same(cells.map((g) => g.getAttribute("data-month")), months.map((m) => m.ym)),
+        tag(`months: ${col.label} has one cell per month with data, in order`), `${cells.length} vs ${months.length}`);
+      check(cells.every((g, i) => text(g.querySelector("text")) === format(months[i].ret, "pct1")), tag(`months: ${col.label}'s cells print the engine's month`));
+      const wrongSide = cells.filter((g, i) => {
+        const [R, G] = rgb(g.querySelector("rect").getAttribute("fill"));
+        const lean = PAPER[0] - R - (PAPER[1] - G); // positive towards the gain colour, negative towards the loss colour
+        return lean !== 0 ? Math.sign(lean) !== Math.sign(months[i].ret) : Math.abs(months[i].ret) / reach > 0.02;
+      });
+      check(wrongSide.length === 0, tag(`months: ${col.label}'s colours sit on the side of zero their returns do`), wrongSide.map((g) => g.getAttribute("data-month")).join());
+      const offScale = cells.filter((g, i) => {
+        const c = rgb(g.querySelector("rect").getAttribute("fill"));
+        const t = months[i].ret < 0 ? (PAPER[1] - c[1]) / (PAPER[1] - DOWN[1]) : (PAPER[0] - c[0]) / (PAPER[0] - UP[0]);
+        return Math.abs(t - (MONTH_TINT * Math.abs(months[i].ret)) / reach) > 0.004;
+      });
+      check(offScale.length === 0, tag(`months: ${col.label}'s shading is proportional to the month over one reach, the same both ways`), offScale.map((g) => g.getAttribute("data-month")).join());
+      const flagged = cells.map((g) => g.getAttribute("data-partial") === "true");
+      check(same(flagged, months.map((m) => m.partial)) && flagged[0] && flagged.at(-1) && !!sec.querySelector(".ret-months-note"),
+        tag(`months: ${col.label}'s first and last months are marked, and the note explains the mark`));
+      const lo = text(sec.querySelector(".ret-months-scale-lo"));
+      const hi = text(sec.querySelector(".ret-months-scale-hi"));
+      check(lo === format(-reach, "pct1") && hi === format(reach, "pct1"), tag(`months: ${col.label}'s scale runs from minus to plus the largest month either way`), `${lo} ${hi}`);
+      const mt = tableTitled(sec, `Monthly returns, ${col.label}`);
+      const mrows = mt ? rowsOf(mt) : [];
+      const byYm = new Map(months.map((m) => [m.ym, m]));
+      const wantRows = mrows.map((row) => [row[0], ...Array.from({ length: 12 }, (_, k) => format(byYm.get(`${row[0]}-${String(k + 1).padStart(2, "0")}`)?.ret ?? null, "pct1"))]);
+      check(mrows.length === yN - y0 + 1 && same(mrows, wantRows), tag(`months: ${col.label}'s table holds the same months, a dash where the window has none`));
+      check(col.label !== "GMV" || (sec.querySelector(".ret-fitted") !== null && text(sec.querySelector(".ret-fitted")) === FITTED), tag("months: GMV's pick carries the fitted line"));
+    }
+    const first = sec.querySelector("g.ret-month");
+    press(first);
+    const m0 = monthlyReturns(cols.at(-1).r, a.dates)[0];
+    check(text(sec.querySelector(".ret-months-readout")) === `${monthYear(`${m0.ym}-01`)}: ${format(m0.ret, "pct1")}, part of the month`,
+      tag("months: a tapped cell is named in the readout, its part-month said"), text(sec.querySelector(".ret-months-readout")));
+    check(clean(r.container.innerHTML), tag("years: no NaN anywhere with the section on the tab"));
+    r.unmount();
+  }
+
+  // A window inside one calendar year (the rail asks for two years, so only a cut series gets here) is one
+  // partial year, labelled with both of its ends, read from the dates.
+  {
+    const { yearLabel } = await import("../src/tabs/returns/years.ts");
+    const a = exampleAnalysis();
+    const k = a.dates.findIndex((d) => d >= "2021-02-01");
+    const n = a.dates.findIndex((d) => d >= "2021-12-01");
+    const ys = calendarYears(a.bench.slice(k, n), a.dates.slice(k, n));
+    const label = yearLabel(ys[0], true, true, a.dates[k - 1]);
+    check(ys.length === 1 && ys[0].partial && label === `2021, ${a.dates[k - 1]} to ${a.dates[n - 1]}`, "years: a window inside one year is one partial year, from its first close to its last", label);
+  }
+
+  // At a phone's width the grid scrolls inside its own box: the box scrolls, the drawing keeps its size.
+  {
+    const css = readFileSync(new URL("../src/tabs/returns/Returns.css", import.meta.url), "utf8");
+    check(/\.ret-months-scroll \{[^}]*overflow-x: auto;[^}]*max-width: 100%;/.test(css) && /\.ret-months-pick > \.seg \{[^}]*min-width: 0;/.test(css),
+      "months: the grid scrolls inside its own box and the pill row may shrink, so the page never scrolls sideways");
+  }
 }
 
 done("t-tab-returns");
