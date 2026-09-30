@@ -2,7 +2,7 @@
 // retyped: tooltips.json is GENERATED from portfolio_app.py by test/oracle/dump_tooltips.py, and
 // test/t-tooltips.mjs fails the run when the committed file and a fresh dump disagree.
 //
-// One deliberate difference, kept as a reviewed table rather than an edit to the json: the app's
+// One deliberate difference, kept as a checked table rather than an edit to the json: the app's
 // tip() ignores the shorting toggle (586 reads only the level), so with shorting on its Advanced
 // texts still promise long-only weights (554 "wᵢ≥0", 559 "long-only constraints") while the solver
 // runs with [-1, 1] bounds (781). Here the text follows the toggle.
@@ -24,7 +24,7 @@ type Texts = Record<Level, string>;
 export const ORACLE_TIPS: Readonly<Record<string, Texts>> = TIPS;
 
 export interface ShortOverride {
-  // The app's text this override was reviewed against; t-tooltips fails when the app's changes.
+  // The app's text this override was checked against; t-tooltips fails when the app's changes.
   was: string;
   // What the port shows instead while shorting is on.
   short: string;
@@ -48,7 +48,7 @@ export const SHORT_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Lev
 };
 
 export interface WordOverride {
-  // The app's text this override was reviewed against; t-tooltips fails when the app's changes.
+  // The app's text this override was checked against; t-tooltips fails when the app's changes.
   was: string;
   // What the port shows instead, whatever the shorting toggle says.
   now: string;
@@ -130,7 +130,7 @@ export type ScoreTipKey =
 export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   annual_return: {
     plain: "The steady yearly growth rate that turns the starting amount into the ending amount over this window.",
-    finance: "Compound annual growth rate (CAGR) of the daily-rebalanced portfolio. Lower than the arithmetic mean return whenever returns vary.",
+    finance: "Compound annual growth rate (CAGR) of the daily-rebalanced portfolio. It is not the mean daily return × 252 that the plates and Sharpe use: against that, compounding takes off about half the annual variance and adds about half the square of the annual log growth rate, so it can land on either side.",
     formula: "(∏(1 + rₜ))^(252/T) − 1, over the T daily returns in the window.",
   },
   cumulative: {
@@ -160,8 +160,8 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   },
   sharpe_se: {
     plain: "The risk-vs-reward score, with a ± showing how far it could be off just from the luck of this window.",
-    finance: "Annualised Sharpe ratio ± one standard error. With errors this size, two Sharpes a few tenths apart may not really differ.",
-    formula: "SE = √252 × √((1 + ½SR² − γ₃SR + ¼γ₄SR²) / T), SR the daily Sharpe, γ₃ skew, γ₄ excess kurtosis (Lo 2002, Mertens 2002).",
+    finance: "Annualised Sharpe ratio ± one standard error. Each ± is for that figure alone: portfolios scored on the same prices move together, so whether two of them differ needs a test of the difference, not a comparison of their ± bands.",
+    formula: "SE = √252 × √((1 + ½SR² − γ₁SR + ¼γ₂SR²) / T), SR the daily Sharpe, γ₁ sample skew, γ₂ excess kurtosis (Lo 2002, Mertens 2002).",
   },
   calmar: {
     plain: "Yearly growth divided by the worst fall: how much return each unit of the deepest loss paid for.",

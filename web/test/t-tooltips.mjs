@@ -71,7 +71,7 @@ let mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
   if (!WORD_OVERRIDES[key]?.[level] && tipText(key, level) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
 }
-check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off, bar the reviewed word overrides and closing lines", mismatches.join(" "));
+check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off, bar the word overrides and closing lines", mismatches.join(" "));
 mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
   if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && tipText(key, level, true) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
@@ -96,7 +96,7 @@ for (const [key, byLevel] of Object.entries(SHORT_OVERRIDES)) {
   for (const [level, o] of Object.entries(byLevel)) {
     const at = `${key}/${level}`;
     check(o.was === TIPS[key][level] && LONG_ONLY.test(o.was),
-      `ledger:short-bounds-copy: ${at} was reviewed against the app's current text, which says long-only`, TIPS[key][level]);
+      `ledger:short-bounds-copy: ${at} was checked against the app's current text, which says long-only`, TIPS[key][level]);
     check(tipText(key, level, false) === withNote(key, level, TIPS[key][level]),
       `ledger:short-bounds-copy: ${at} with shorting OFF is the app's text, which is right then`);
     const on = tipText(key, level, true);
@@ -122,7 +122,7 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
   for (const [key, byLevel] of Object.entries(WORD_OVERRIDES)) {
     for (const [level, o] of Object.entries(byLevel)) {
       const at = `${key}/${level}`;
-      check(o.was === TIPS[key][level], `ledger:plain-tip-words ${at} was reviewed against the app's current text`, TIPS[key][level]);
+      check(o.was === TIPS[key][level], `ledger:plain-tip-words ${at} was checked against the app's current text`, TIPS[key][level]);
       const off = tipText(key, level, false);
       const on = tipText(key, level, true);
       check(off === withNote(key, level, o.now) && on === off && !WORDS.test(off) && /in-sample/.test(o.now),

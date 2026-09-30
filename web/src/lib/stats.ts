@@ -240,8 +240,10 @@ export function cumulativeReturn(r: Vec): number {
 }
 
 // The COMPOUND annual rate over the series' trading days, (growth)^(252 / T) - 1. It is not the
-// arithmetic mean times 252 that annualizedStats().mu reports (and Sharpe uses); the two differ by
-// roughly half the variance, which is why both exist. NaN on an empty series.
+// arithmetic mean times 252 that annualizedStats().mu reports (and Sharpe uses). Against that mean,
+// compounding subtracts about half the annual variance and adds about half the square of the annual
+// log growth rate G (the rate is e^G - 1), so the compound rate is the higher of the two whenever |G|
+// exceeds the annual volatility; that is why both exist. NaN on an empty series.
 export function annualReturn(r: Vec): number {
   const T = r.length;
   if (T < 1) return NaN;
