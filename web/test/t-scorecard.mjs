@@ -58,8 +58,11 @@ for (const [name, make] of [
 // ---- (a) every cell is the engine's function ----------------------------------------------------------
 for (const { label, a } of baskets) {
   const tag = (s) => `${label}: ${s}`;
-  const raw = Object.fromEntries(a.tickers.map((t, i) => [t, i + 1]));
+  // Tenths, so no value passes the 0-1 bound: typed as whole numbers every one clamps to 1, the mix is
+  // equal weight again, and the Custom column tests nothing the Equal-Weight column does not.
+  const raw = Object.fromEntries(a.tickers.map((t, i) => [t, (i + 1) / 10]));
   const c = M.customWeights(a, raw);
+  check(c.ok && !c.clamped && !M.customIsEqual(a, c), tag("the typed mix is not equal weight, and no value was clamped"));
   const rd = solveRedraws(a, DEFAULT_SEED);
   check(rd.status === "ready" && rd.value && rd.value.seed === DEFAULT_SEED, tag("the redraws solve on the fixed seed"));
   const m = SC.scorecard(a, c, rd);
@@ -287,7 +290,8 @@ for (const { label, a } of baskets) {
 // ---- (e) the Custom tab reuses the component, its mix in bold ---------------------------------------------
 {
   const a = fixtureAnalysis("megacap");
-  const props = tabProps(a, { weights: Object.fromEntries(a.tickers.map((t, i) => [t, i + 1])) });
+  // Tenths, as in (a): whole numbers clamp to 1 each and type equal weight.
+  const props = tabProps(a, { weights: Object.fromEntries(a.tickers.map((t, i) => [t, (i + 1) / 10])) });
   const r = quiet(() => render(h(Custom, props)));
   await settle();
   const sc = r.container.querySelector('section[aria-labelledby="cust-scorecard"] .tbl.sc');
@@ -298,6 +302,8 @@ for (const { label, a } of baskets) {
   const v = M.customWeights(a, props.weights);
   const want = scorecardRow(portfolioReturns(a.returns, v.w), a.bench, a.dates, a.prices.dates[0], a.rf);
   const annual = [...sc.querySelector('tr[data-metric="annual"]').children].map(text);
+  check(v.ok && !v.clamped && !M.customIsEqual(a, v) && annual[4] !== annual[1],
+    "custom: the typed mix is not equal weight, no value was clamped, and its column differs from Equal-Weight's", annual.join(" "));
   check(annual[4] === format(want.annualReturn, "pct2"), "custom: its column is the engine's figure for the typed mix", annual.join(" "));
   const sharpePlate = [...r.container.querySelectorAll(".cust-plates .plate")].find((p) => text(p.querySelector(".plate-label span")) === "Sharpe");
   const plateSE = sharpePlate?.querySelector(".plate-se") ? text(sharpePlate.querySelector(".plate-se")) : null;
