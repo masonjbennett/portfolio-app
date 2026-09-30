@@ -204,6 +204,12 @@ check(/\.tip-mark:focus-visible \+ \.tip-text/.test(css) && /\.tip\[data-open\] 
     "score-tips: every scorecard key has an accessible name, and the app's keys keep theirs");
   check(sk.every((k) => LEVEL_IDS.every((l) => !/\p{Extended_Pictographic}/u.test(SCORE_TIPS[k][l]) && !/best (possible|mix|portfolio)|optimal/i.test(SCORE_TIPS[k][l]))),
     "score-tips: no emoji, and no text calls a mix best or optimal");
+  // The scorecard prints a ± beside GMV's and Tangency's Sharpe too, whose weights were fitted on the same
+  // prices: the plain and finance texts must say the ± understates their uncertainty, as the plate's note does.
+  const seText = (l) => SCORE_TIPS.sharpe_se[l];
+  check(/GMV's and Tangency's/.test(seText("plain")) && /off by more/.test(seText("plain")) &&
+    /GMV's and Tangency's were fitted on this window/.test(seText("finance")) && /understates the uncertainty/.test(seText("finance")),
+    "score-tips: the Sharpe ± text says the fitted mixes' error understates their uncertainty", seText("finance"));
 }
 
 done("t-tooltips");

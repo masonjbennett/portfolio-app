@@ -159,12 +159,12 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     formula: "max over drawdown spells of (recovery day − peak day); a spell still open on the last day runs to that day.",
   },
   sharpe_se: {
-    plain: "The risk-vs-reward score, with a ± showing how far it could be off just from the luck of this window.",
-    finance: "Annualised Sharpe ratio ± one standard error. Each ± is for that figure alone: portfolios scored on the same prices move together, so whether two of them differ needs a test of the difference, not a comparison of their ± bands.",
+    plain: "The risk-vs-reward score, with a ± showing how far it could be off just from the luck of this window. GMV's and Tangency's weights were picked on these same prices, so theirs could be off by more.",
+    finance: "Annualised Sharpe ratio ± one standard error. The error treats the weights as fixed; GMV's and Tangency's were fitted on this window, so for them it understates the uncertainty. Each ± is for that figure alone: portfolios scored on the same prices move together, so whether two of them differ needs a test of the difference, not a comparison of their ± bands.",
     formula: "SE = √252 × √((1 + ½SR² − γ₁SR + ¼γ₂SR²) / T), SR the daily Sharpe, γ₁ sample skew, γ₂ excess kurtosis (Lo 2002, Mertens 2002).",
   },
   calmar: {
-    plain: "Yearly growth divided by the worst fall: how much return each unit of the deepest loss paid for.",
+    plain: "Yearly growth divided by the worst fall: how much growth came with each point of the deepest loss.",
     finance: "Calmar ratio over the whole window: compound annual return over the absolute maximum drawdown.",
     formula: "CAGR / |MDD|, with MDD measured from the amount invested.",
   },
@@ -175,16 +175,16 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   },
   r_squared: {
     plain: "How much of the portfolio's daily movement the benchmark explains, from 0% to 100%.",
-    finance: "R² of the single-index regression on the benchmark: the share of variance that is market-driven.",
+    finance: "R² of the single-index regression on the benchmark: the share of the portfolio's variance the benchmark explains.",
     formula: "R² = ρ², the squared correlation of daily returns.",
   },
   tracking_error: {
-    plain: "How far the portfolio's path wanders from the benchmark's, as a yearly percentage.",
+    plain: "How much the portfolio's day-to-day returns differ from the benchmark's, scaled to a year.",
     finance: "Annualised standard deviation of daily active returns against the benchmark.",
     formula: "TE = std(rₜ − bₜ) × √252, sample standard deviation (ddof 1).",
   },
   information_ratio: {
-    plain: "The extra return over the benchmark, per unit of wandering away from it.",
+    plain: "The extra yearly return over the benchmark, per unit of that day-to-day difference from it.",
     finance: "Annualised mean active return over tracking error.",
     formula: "IR = 252 × mean(rₜ − bₜ) / TE.",
   },
@@ -211,7 +211,7 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   frag_cut: {
     plain: "Lower the largest holding's expected return by one standard error, a change well inside its own noise, and solve again: how much of its weight it loses.",
     finance: "Weight drop of the largest holding when its mean is set one standard error lower and the portfolio is re-solved. A what-if on these prices, in-sample.",
-    formula: "wⱼ − wⱼ′, where w′ is re-solved with μⱼ lowered by σⱼ / √(T/252), the standard error of its annual mean.",
+    formula: "wⱼ − wⱼ′, where w′ is re-solved with μⱼ lowered by σⱼ / √(T/252), the standard error of its annual mean, σⱼ its annual volatility.",
   },
   frag_draws: {
     plain: "Draw expected returns anywhere their own noise allows, many times, and solve on each: the range the largest holding's weight covers, 10th to 90th percentile.",
