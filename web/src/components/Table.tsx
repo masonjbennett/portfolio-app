@@ -16,6 +16,10 @@
 // compared with anything, so `span` is a required prop; a table of weights as someone typed them, which
 // comes from no dates at all, passes null and says so at its call site.
 //
+// A table whose section heading sits right above it with the same words (`headed`) keeps its title in
+// the caption, where it names the table for a screen reader and titles the Excel sheet, but clips it
+// from the screen (Table.css), so the page does not print the same words twice in a row.
+//
 // A head (a column's label, or a row's label) can carry a sub-line under it, keyed by the head's own
 // text in `subs`. The sub-line is the page's alone: the downloads keep the plain heads the app's own
 // downloads use ("GMV", "Tangency"), so a sheet built on one keeps working.
@@ -30,6 +34,8 @@ export interface Props extends TableProps {
   span: string | null;
   /** A sub-line under any head whose text is a key: a column label, or a label-column cell. */
   subs?: Readonly<Record<string, string>>;
+  /** The section's heading right above already prints this title, with nothing drawn between them. */
+  headed?: boolean;
 }
 
 function Sub({ subs, head }: { subs?: Readonly<Record<string, string>>; head: string }) {
@@ -80,7 +86,7 @@ export function Downloads({ title, columns, rows, filename, rowFormats }: TableP
   );
 }
 
-export default function Table({ title, columns, rows, filename, span, subs }: Props) {
+export default function Table({ title, columns, rows, filename, span, subs, headed = false }: Props) {
   const label = labelKey(columns);
 
   return (
@@ -88,7 +94,7 @@ export default function Table({ title, columns, rows, filename, span, subs }: Pr
       <div className="tbl-scroll" role="region" aria-label={title} tabIndex={0}>
         <table>
           <caption>
-            <span className="tbl-title">{title}</span>
+            <span className={headed ? "tbl-title tbl-title-clip" : "tbl-title"}>{title}</span>
             {span ? <span className="tbl-span">{span}</span> : null}
           </caption>
           <thead>

@@ -216,7 +216,7 @@ function WeightsTable({ v }: { v: CustomView }) {
       {state.status === "ready" ? (
         <>
           {/* No span: these are the weights as typed, which come from no dates. */}
-          <Table title={TABLE_TITLE} columns={WEIGHT_COLUMNS} rows={state.value} filename="custom_normalized_weights" span={null} />
+          <Table title={TABLE_TITLE} columns={WEIGHT_COLUMNS} rows={state.value} filename="custom_normalized_weights" span={null} headed />
           <p className="cust-note">
             {clamped
               ? `Entered is the weight as set above. A weight outside the bounds counts at the nearest bound, and the normalized weight is that divided by the weight total, ${format(v.custom.total, "num2")}.`

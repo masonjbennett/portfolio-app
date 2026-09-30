@@ -8,8 +8,9 @@
 //
 // It shares Table's ledger styles (.tbl), so it scrolls sideways inside its own box on a phone with the
 // figure column frozen at the left, and its caption carries the same title and span lines, plus a third
-// with the conventions every row follows. The title line is clipped from the screen (Scorecard.css): the
-// section's heading right above says the same word, and the caption keeps it for a screen reader.
+// with the conventions every row follows. The title line is clipped from the screen, as Table does for a
+// `headed` table: the section's heading right above says the same word, and the caption keeps it for a
+// screen reader.
 //
 // Each row's label carries its explanation: an info mark where the tooltip component takes the key, and
 // every visible row's text at the chosen level under "What each row means", which works on touch too.
@@ -56,7 +57,7 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
       <div className="tbl-scroll" role="region" aria-label={model.title} tabIndex={0}>
         <table>
           <caption>
-            <span className="tbl-title">{model.title}</span>
+            <span className="tbl-title tbl-title-clip">{model.title}</span>
             <span className="tbl-span">{model.span}</span>
             <span className="tbl-span sc-conv">{model.conventions}</span>
           </caption>

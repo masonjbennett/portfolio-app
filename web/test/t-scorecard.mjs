@@ -172,11 +172,13 @@ for (const { label, a } of baskets) {
     "scorecard: every benchmark cell, and only those, carries the heavier rule");
   const css = readFileSync(new URL("../src/components/Scorecard.css", import.meta.url), "utf8");
   check(/\.sc \.sc-bench \{[^}]*border-left: var\(--line-bar\) solid/.test(css), "scorecard: the heavier rule is the bar-weight line, not a hairline");
-  // The caption's title line repeats the section heading right above it: clipped from the screen, and kept
-  // in the caption so the table still has its name for a screen reader (display: none would drop it).
-  check(/\.sc caption \.tbl-title \{[^}]*position: absolute;[^}]*clip-path: inset\(50%\);/.test(css) && !/\.sc caption \.tbl-title \{[^}]*display: none/.test(css)
-    && text(r.container.querySelector("caption .tbl-title")) === m.title,
-    "caption: the title line is clipped from the screen, not removed, so the table keeps its name");
+  // The caption's title line repeats the section heading right above it: it carries Table's clip class
+  // (t-tables holds the rule itself), and stays in the caption so the table keeps its name.
+  {
+    const t = r.container.querySelector("caption .tbl-title");
+    check(t.classList.contains("tbl-title-clip") && text(t) === m.title,
+      "caption: the title line is clipped from the screen, not removed, so the table keeps its name");
+  }
   // jsdom lays nothing out, so the phone rule is read from the sheet: under the 760px query the frozen label
   // column wraps inside a bounded width, and the conventions line is held to the screen.
   {

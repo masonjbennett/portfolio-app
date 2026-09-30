@@ -106,7 +106,7 @@ function SummaryCard({ a, level, allowShort }: { a: Analysis; level: Level; allo
         is the daily standard deviation times the square root of 252. Excess kurtosis is 0 for a normal
         distribution; above 0, extreme days are more common than a normal curve allows.
       </p>
-      <Table title="Summary Statistics" columns={SUMMARY_COLUMNS} rows={rows} filename={SUMMARY_FILE} span={tableSpan(a.dates[0], a.asOf)} />
+      <Table title="Summary Statistics" columns={SUMMARY_COLUMNS} rows={rows} filename={SUMMARY_FILE} span={tableSpan(a.dates[0], a.asOf)} headed />
     </>
   );
 }

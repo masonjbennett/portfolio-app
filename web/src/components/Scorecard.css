@@ -6,19 +6,6 @@
   line-height: 1.4;
 }
 
-/* The section's heading just above already reads "Scorecard", so the caption's own title line printed
-   the word twice in a row. The title stays in the caption, where it names the table for a screen reader,
-   and is clipped from the screen: display: none would take it from the reader too. */
-.sc caption .tbl-title {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* A group's name: a quiet small-caps line on its own rule, spanning the table. */
 .sc .sc-group th {
   padding-top: var(--space-3);

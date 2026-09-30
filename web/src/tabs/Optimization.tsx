@@ -64,10 +64,10 @@ interface SectionProps {
 
 // A table, or its own named error line in the table's place. Its GMV and Tangency heads say the weights
 // were chosen on this window; its caption says which window, and that the returns are daily.
-function TableState({ state, title, filename, span }: { state: LoadState<TableData>; title: string; filename: string; span: string }) {
+function TableState({ state, title, filename, span, headed }: { state: LoadState<TableData>; title: string; filename: string; span: string; headed?: boolean }) {
   if (state.status === "ready") {
     const t = state.value;
-    return <Table title={title} columns={t.columns} rows={t.rows} filename={filename} span={span} subs={fittedSubs(fittedHeads(t))} />;
+    return <Table title={title} columns={t.columns} rows={t.rows} filename={filename} span={span} subs={fittedSubs(fittedHeads(t))} headed={headed} />;
   }
   const says =
     state.status === "error"
@@ -258,7 +258,7 @@ function Summary({ a, c }: { a: Analysis; c: Custom }) {
   return (
     <section className="opt-section" aria-labelledby="opt-summary">
       <Slug id="opt-summary">Summary Comparison</Slug>
-      <TableState state={table} title="Summary comparison" filename="portfolio_comparison" span={spanOf(a)} />
+      <TableState state={table} title="Summary comparison" filename="portfolio_comparison" span={spanOf(a)} headed />
       <Failures a={a} />
       {note ? <p className="opt-note">{note}</p> : null}
       <p className="opt-note">

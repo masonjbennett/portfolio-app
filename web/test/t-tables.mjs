@@ -265,8 +265,22 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
       const tr = render(h(Tab, tabProps(fixtureAnalysis("cross"))));
       const box = tr.container.querySelector(".sens-check input");
       if (box) act(() => box.click());
+      // For the heading check below: the section heading last before each table, and whether a chart's
+      // own title sits between the two (4 = DOCUMENT_POSITION_FOLLOWING: the argument comes later).
+      const after = (x, y) => (x.compareDocumentPosition(y) & 4) !== 0;
+      const heads = [...tr.container.querySelectorAll("h2.slug-text")];
+      const charts = [...tr.container.querySelectorAll("h3.chart-title")];
       for (const tb of tr.container.querySelectorAll(".tbl")) {
-        found.push({ tab: name, title: text(tb.querySelector(".tbl-title")), span: tb.querySelector(".tbl-span") ? text(tb.querySelector(".tbl-span")) : null });
+        const t = tb.querySelector(".tbl-title");
+        const head = heads.filter((x) => after(x, tb)).pop() ?? null;
+        found.push({
+          tab: name,
+          title: text(t),
+          span: tb.querySelector(".tbl-span") ? text(tb.querySelector(".tbl-span")) : null,
+          head: head ? text(head) : null,
+          chartBetween: head !== null && charts.some((c) => after(head, c) && after(c, tb)),
+          clipped: t.classList.contains("tbl-title-clip"),
+        });
       }
       tr.unmount();
     }
@@ -278,6 +292,17 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   check(found.length >= 17 && TYPED.every((t) => found.some((f) => f.title === t)) && bad.length === 0,
     "spans: every table on the six tabs states its window and return frequency; only the typed weights claim none",
     `${found.length} tables; ${bad.map((f) => `${f.tab}/${f.title}=${f.span}`).join(" | ")}`);
+
+  // A title that repeats the heading right above it, with no chart between, is clipped from the screen, and
+  // no other title is: one with a chart between still separates the table from that chart.
+  const same = (f) => f.head !== null && f.head.toLowerCase() === f.title.toLowerCase();
+  const wrong = found.filter((f) => f.clipped !== (same(f) && !f.chartBetween));
+  check(wrong.length === 0 && found.filter((f) => f.clipped).length >= 7,
+    "headed: a table title that repeats the section heading right above it is clipped from the screen, and no other title is",
+    `${found.filter((f) => f.clipped).length} clipped; wrong: ${wrong.map((f) => `${f.tab}/${f.title} (heading ${f.head ?? "none"}${f.chartBetween ? ", chart between" : ""}, ${f.clipped ? "clipped" : "shown"})`).join(" | ")}`);
+  const sheet = readFileSync(new URL("../src/components/Table.css", import.meta.url), "utf8");
+  check(/\.tbl \.tbl-title-clip \{[^}]*position: absolute;[^}]*clip-path: inset\(50%\);/.test(sheet) && !/\.tbl-title-clip \{[^}]*display: none/.test(sheet),
+    "headed: the clipped title is clipped, never display: none, so the table keeps its name for a screen reader");
 }
 
 r.unmount();

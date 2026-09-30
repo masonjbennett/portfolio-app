@@ -34,6 +34,18 @@
   display: block;
 }
 
+/* A title the section's heading right above already prints: kept in the caption, where it names the
+   table for a screen reader, and clipped from the screen. display: none would take it from the reader too. */
+.tbl .tbl-title-clip {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .tbl-span {
   margin-top: 2px;
   font-weight: 400;

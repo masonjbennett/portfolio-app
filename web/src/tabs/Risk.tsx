@@ -136,7 +136,7 @@ function Metrics({ a, level, allowShort }: SectionProps) {
         <span aria-hidden="true"> · </span>
         Sortino ratio <Tip tip="sortino" level={level} allowShort={allowShort} />
       </p>
-      <Table title="Risk-adjusted metrics" columns={RISK_COLUMNS} rows={rows} filename="risk_metrics" span={tableSpan(a.dates[0], a.asOf)} />
+      <Table title="Risk-adjusted metrics" columns={RISK_COLUMNS} rows={rows} filename="risk_metrics" span={tableSpan(a.dates[0], a.asOf)} headed />
       <p className="risk-note">
         Annual figures at the {format(a.rf, "pct2")} risk-free rate this analysis used. Sortino divides by the shortfall below the
         daily risk-free rate, averaged over every day.

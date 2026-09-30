@@ -96,6 +96,7 @@ function CovCard({ analysis, level, allowShort }: { analysis: Analysis; level: L
         rows={matrixRows(tickers, S)}
         filename="daily-covariance"
         span={tableSpan(analysis.dates[0], analysis.asOf)}
+        headed
       />
     </>
   );
