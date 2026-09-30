@@ -251,22 +251,25 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
   const spans = tables.map((t) => text(t.querySelector(".tbl-span")));
   check(JSON.stringify(spans) === JSON.stringify([
     `Daily closes, ${props.analysis.prices.dates[0]} to ${props.analysis.asOf}`,
+    `Daily closes, ${props.analysis.prices.dates[0]} to ${props.analysis.asOf}`,
+    `Daily closes, ${props.analysis.prices.dates[0]} to ${props.analysis.asOf}`,
     `Daily returns, ${props.analysis.dates[0]} to ${props.analysis.asOf}`,
     `Daily returns, ${props.analysis.dates[0]} to ${props.analysis.asOf}`,
   ]), "spans: the drawdowns state their closes and the ratios their daily returns, each with its window", spans.join(" | "));
-  check(JSON.stringify(captions) === JSON.stringify(["Worst drawdown by asset", "Risk-adjusted metrics", "CAPM beta and alpha"]), "tab: its three tables", captions.join(" | "));
-  check(tables.length === 3 && tables.every((t) => {
+  check(JSON.stringify(captions) === JSON.stringify(["Deepest falls, Equal-Weight", "Named falls in this window", "Worst drawdown by asset", "Risk-adjusted metrics", "CAPM beta and alpha"]),
+    "tab: its five tables, the portfolios' falls first", captions.join(" | "));
+  check(tables.length === 5 && tables.every((t) => {
     const b = [...t.querySelectorAll("button")].map(text);
     return b.includes("Download CSV") && b.includes("Download Excel");
   }), "ledger:downloads-everywhere every table on the tab has a CSV and an Excel download");
   check(!/download_button/.test(lines(1370, 1416)) && (lines(1360, 1367).match(/download_button/g) ?? []).length === 2,
     "ledger:downloads-everywhere the app gives the risk table two downloads (1364-1366) and the CAPM table none (1372-1416)");
-  const capmTable = tables[2];
+  const capmTable = tables[4];
   check(capmTable && [...capmTable.querySelectorAll("button")].map(text).includes("Download Excel"), "ledger:downloads-everywhere the port's CAPM table has both");
-  check(r.container.querySelectorAll("table").length === 3, "tab: no table outside the Table component");
+  check(r.container.querySelectorAll("table").length === 5, "tab: no table outside the Table component");
 
   // The printed cells: the risk table's first row, at the app's own format, from the oracle's figures.
-  const firstRow = [...tables[1].querySelectorAll("tbody tr")][0];
+  const firstRow = [...tables[3].querySelectorAll("tbody tr")][0];
   const cells = firstRow ? [...firstRow.children].map(text) : [];
   check(JSON.stringify(cells) === JSON.stringify(["VTI", format(o.perColumn.VTI.sharpe, "num3"), format(o.perColumn.VTI.sortino, "num3")]),
     "tab: VTI's Sharpe and Sortino print at the app's 3 decimals", cells.join(" "));
@@ -323,7 +326,7 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
     "ledger:rf-live the app's tabs read the rate saved at Run (1087, 1158)");
   const b = fixtureAnalysis("cross", { rf: 0.05 });
   quiet(() => r.rerender(h(Risk, { ...props, analysis: b })));
-  const row = [...r.container.querySelectorAll(".tbl")[1].querySelectorAll("tbody tr")][0];
+  const row = [...r.container.querySelectorAll(".tbl")[3].querySelectorAll("tbody tr")][0];
   const sharpe5 = annualizedStats(b.returns[0], 0.05).sharpe;
   check(row && text(row.children[1]) === format(sharpe5, "num3") && format(sharpe5, "num3") !== format(o.perColumn.VTI.sharpe, "num3") && text(r.container).includes("5.00% risk-free rate"),
     "ledger:rf-live the tab's Sharpe follows a new rate at once", row ? text(row) : "no row");
@@ -345,8 +348,8 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
   if (r) {
     const fallback = [...r.container.querySelectorAll(".boundary")].map(text);
     check(JSON.stringify(fallback) === JSON.stringify(["Risk-adjusted metrics could not be shown."]), "ledger:boundary the failed section is one line naming it", fallback.join(" | "));
-    check(!!r.container.querySelector(".risk-headline") && r.container.querySelectorAll(".recharts-surface").length === 3 && r.container.querySelectorAll(".tbl").length === 2,
-      "ledger:boundary the headline, the three charts and the other two tables still render");
+    check(!!r.container.querySelector(".risk-headline") && r.container.querySelectorAll(".recharts-surface").length === 3 && r.container.querySelectorAll(".tbl").length === 4,
+      "ledger:boundary the headline, the three charts and the other four tables still render");
     r.unmount();
   }
 }

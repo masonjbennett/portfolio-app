@@ -16,6 +16,8 @@ import { format } from "../../format.ts";
 import { spreadLabels } from "../../charts/labels.ts";
 import { annualizedStats, capm, drawdowns, rollingStd, TRADING_DAYS } from "../../lib/stats.ts";
 import { monthYear } from "../../chrome/when.ts";
+import { drawdownEpisodes, relatedEvent } from "../../lib/episodes.ts";
+import { NAMED_FALLS } from "../../content/episodes.ts";
 import type { Analysis, Column, LoadState, TableRow } from "../../types.ts";
 
 // ---- rolling volatility (1321-1328) ----------------------------------------------------------------
@@ -213,13 +215,24 @@ export const DRAWDOWN_COLUMNS: Column[] = [
   { key: "peak", label: "High", format: "date" },
   { key: "low", label: "Low", format: "date" },
   { key: "back", label: "Back at the high", format: "date" },
+  { key: "event", label: "Related event", format: "text" },
 ];
+
+/**
+ * The named market fall a series' deepest fall overlaps (the engine's rule: more than one shared date,
+ * the most shared days winning), by its label; "" when it overlaps none, which prints as an empty cell.
+ */
+export function relatedLabel(a: Analysis, r: number[]): string {
+  const worst = drawdownEpisodes(r, a.dates, a.prices.dates[0], 1)[0] ?? null;
+  return relatedEvent(worst, NAMED_FALLS)?.label ?? "";
+}
 
 // Tickers, then the benchmark (as the risk table orders its rows, 1356-1358). A path that never fell
 // has no high or low to date.
 export function drawdownRows(a: Analysis): TableRow[] {
   const list = [...tickerDrawdowns(a), drawdownOf(a, a.benchLabel, a.bench)];
-  return list.map((d) => {
+  const series = [...a.returns, a.bench];
+  return list.map((d, i) => {
     const fell = Number.isFinite(d.max) && d.max < 0;
     return {
       asset: d.name,
@@ -227,6 +240,7 @@ export function drawdownRows(a: Analysis): TableRow[] {
       peak: fell ? d.dates[d.peak] : null,
       low: fell ? d.dates[d.trough] : null,
       back: fell && d.recovered !== null ? d.dates[d.recovered] : null,
+      event: fell ? relatedLabel(a, series[i]) : "",
     };
   });
 }

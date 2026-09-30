@@ -63,6 +63,14 @@
   color: var(--color-ink2);
 }
 
+/* A GMV or Tangency pick says, beside the pill, that its weights were chosen on this window. */
+.risk-fitted {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--color-ink2);
+}
+
 /* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
 @media (max-width: 760px) {
   .risk-headline {
