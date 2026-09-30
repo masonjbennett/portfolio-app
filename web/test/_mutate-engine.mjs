@@ -106,6 +106,25 @@ const M = [
   ["src/lib/stats.ts", "return { se: sigma / Math.sqrt(years), yearsNeeded: (sigma / h) ** 2 };", "return { se: sigma / Math.sqrt(years), yearsNeeded: sigma / h };", "years needed not squared", "t-metrics"],
   ["src/lib/stats.ts", "if (tn < TN_WARN) return \"warn\";", "if (tn <= TN_WARN) return \"warn\";", "warns at exactly 25 days per asset", "t-metrics"],
   ["src/lib/stats.ts", "if (tn < TN_REFUSE) return \"refuse\";", "if (tn <= TN_REFUSE) return \"refuse\";", "refuses at exactly 10 days per asset", "t-metrics"],
+  // robust.ts and rng.ts (the what-if, redraw and fragility arithmetic), judged by t-robust alone
+  ["src/lib/robust.ts", "return S.map((row, i) => TRADING_DAYS * Math.sqrt(row[i] / T));", "return S.map((row, i) => TRADING_DAYS * Math.sqrt(row[i] / (T - 1)));", "standard error from T - 1 days", "t-robust"],
+  ["src/lib/robust.ts", "const mu = Math.min(band.hi2, Math.max(band.lo2, annualMu));", "const mu = annualMu;", "what-if not held to two standard errors", "t-robust"],
+  ["src/lib/robust.ts", "means[asset] = mu / TRADING_DAYS;", "means[asset] = mu;", "what-if mean left annual in a daily vector", "t-robust"],
+  ["src/lib/robust.ts", "for (let i = 0; i < w.length; i++) if (best < 0 || w[i] > w[best]) best = i;", "for (let i = 0; i < w.length; i++) if (best < 0 || Math.abs(w[i]) > Math.abs(w[best])) best = i;", "largest holding by size, a short counted as a holding", "t-robust"],
+  ["src/lib/robust.ts", "const scale = 1 / Math.sqrt(T);", "const scale = 1;", "draws spread as S, not S / T", "t-robust"],
+  ["src/lib/robust.ts", "for (let k = 0; k <= i; k++) s += L[i][k] * zs[k];", "for (let k = 0; k <= i; k++) s += L[k][i] * zs[k];", "Cholesky factor transposed in the draw", "t-robust"],
+  ["src/lib/robust.ts", "const hi = Math.ceil(pos);", "const hi = Math.floor(pos);", "lower percentile instead of numpy's linear", "t-robust"],
+  ["src/lib/robust.ts", "const a = Array.from(xs).sort((x, y) => x - y);", "const a = Array.from(xs).sort();", "percentile sorts as strings", "t-robust"],
+  ["src/lib/robust.ts", "for (const w of ok) largest[largestHolding(w)] += 1;", "for (const w of ok) largest[largestHolding(w)] = 1;", "largest-holding counts never pass one", "t-robust"],
+  ["src/lib/robust.ts", "belowRf: tans.filter((t) => t && !t.beatsRf).length,", "belowRf: 0,", "draws below the risk-free rate never counted", "t-robust"],
+  ["src/lib/robust.ts", "means: draws.map((d) => d.map((x) => x * TRADING_DAYS)),", "means: draws,", "drawn means reported daily, not annual", "t-robust"],
+  ["src/lib/robust.ts", "if (ok.length < 2) return null;", "if (ok.length < 1) return null;", "lookback row from a single window", "t-robust"],
+  ["src/lib/robust.ts", "const cut = nudgeTangency(m, S, rf, allowShort, T, from, band.lo1);", "const cut = nudgeTangency(m, S, rf, allowShort, T, from, band.lo2);", "cut row at two standard errors, not one", "t-robust"],
+  ["src/lib/robust.ts", "const base = kind === \"tan\" ? tangency(x.m, x.S, x.rf, x.allowShort) : gmv(x.m, x.S, x.allowShort);", "const base = tangency(x.m, x.S, x.rf, x.allowShort);", "GMV's draw row reads the tangency's largest holding", "t-robust"],
+  ["src/lib/robust.ts", "if (kind === \"tan\") return n + (n * (n + 1)) / 2;", "if (kind === \"tan\") return (n * (n + 1)) / 2;", "tangency's parameters leave out the means", "t-robust"],
+  ["src/lib/rng.ts", "let a = seed >>> 0;", "let a = 0;", "the seed is ignored", "t-robust"],
+  ["src/lib/rng.ts", "const theta = 2 * Math.PI * uniform();", "const theta = Math.PI * uniform();", "Box-Muller angle over half a circle", "t-robust"],
+  ["src/lib/rng.ts", "spare = r * Math.sin(theta);", "spare = r * Math.cos(theta);", "the second normal of each pair repeats the first", "t-robust"],
 ];
 
 const missing = [...new Set(M.map(([, , , , suite]) => suite).filter((s) => s && !existsSync(suitePath(s))))];
