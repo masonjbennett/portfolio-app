@@ -281,4 +281,19 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
 }
 
 r.unmount();
+// Per-row formats (a scorecard sheet): a row's own format replaces its column's for numbers, never for a
+// label column, and a sheet without them is unchanged.
+{
+  const cols = [
+    { key: "name", label: "Figure", format: "text", first: true },
+    { key: "x", label: "X", format: "num4" },
+  ];
+  const rows = [{ name: "Return", x: 0.12 }, { name: "Days", x: 41 }];
+  const ws2 = worksheet(cols, rows, ["pct2", "int"]);
+  check(same(ws2.B2, { t: "n", v: 0.12, z: "0.00%" }) && same(ws2.B3, { t: "n", v: 41, z: "#,##0" }) && same(ws2.A2, { t: "s", v: "Return" }),
+    "row-formats: each row's numbers carry that row's own Excel format; labels stay text", JSON.stringify([ws2.A2, ws2.B2, ws2.B3]));
+  check(same(worksheet(cols, rows), worksheet(cols, rows, undefined)) && same(worksheet(cols, rows).B2, { t: "n", v: 0.12, z: "0.0000" }),
+    "row-formats: without them every number keeps its column's format");
+}
+
 done("t-tables");

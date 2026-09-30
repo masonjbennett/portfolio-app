@@ -22,7 +22,7 @@
 import { useState } from "react";
 import { downloadCsv, downloadXlsx } from "../download.ts";
 import { format, isText } from "../format.ts";
-import type { Column, TableProps } from "../types.ts";
+import type { CellFormat, Column, TableProps } from "../types.ts";
 import "./Table.css";
 
 export interface Props extends TableProps {
@@ -41,16 +41,20 @@ function labelKey(columns: Column[]): string | undefined {
   return (columns.find((c) => c.first) ?? columns[0])?.key;
 }
 
-export default function Table({ title, columns, rows, filename, span, subs }: Props) {
+/**
+ * The two download buttons, on their own so a table laid out elsewhere (the scorecard, whose rows each
+ * carry their own format) saves through exactly the same path. `rowFormats` is download.ts's: one format
+ * per row, for a sheet whose rows measure different things.
+ */
+export function Downloads({ title, columns, rows, filename, rowFormats }: TableProps & { rowFormats?: readonly CellFormat[] }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const label = labelKey(columns);
 
   async function excel() {
     setBusy(true);
     setFailed(false);
     try {
-      await downloadXlsx(filename, title, columns, rows);
+      await downloadXlsx(filename, title, columns, rows, rowFormats);
     } catch (err) {
       console.error(`[table] ${title}: the Excel file could not be built`, err);
       setFailed(true);
@@ -58,6 +62,26 @@ export default function Table({ title, columns, rows, filename, span, subs }: Pr
       setBusy(false);
     }
   }
+
+  return (
+    <div className="tbl-dl">
+      <button type="button" onClick={() => downloadCsv(filename, columns, rows)} aria-label={`Download CSV of ${title}`}>
+        Download CSV
+      </button>
+      <button type="button" onClick={excel} disabled={busy} aria-busy={busy} aria-label={`Download Excel of ${title}`}>
+        Download Excel
+      </button>
+      {failed && (
+        <span className="tbl-note" role="status">
+          The Excel file could not be built. The CSV holds the same numbers.
+        </span>
+      )}
+    </div>
+  );
+}
+
+export default function Table({ title, columns, rows, filename, span, subs }: Props) {
+  const label = labelKey(columns);
 
   return (
     <div className="tbl">
@@ -98,19 +122,7 @@ export default function Table({ title, columns, rows, filename, span, subs }: Pr
           </tbody>
         </table>
       </div>
-      <div className="tbl-dl">
-        <button type="button" onClick={() => downloadCsv(filename, columns, rows)} aria-label={`Download CSV of ${title}`}>
-          Download CSV
-        </button>
-        <button type="button" onClick={excel} disabled={busy} aria-busy={busy} aria-label={`Download Excel of ${title}`}>
-          Download Excel
-        </button>
-        {failed && (
-          <span className="tbl-note" role="status">
-            The Excel file could not be built. The CSV holds the same numbers.
-          </span>
-        )}
-      </div>
+      <Downloads title={title} columns={columns} rows={rows} filename={filename} />
     </div>
   );
 }

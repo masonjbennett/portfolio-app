@@ -22,7 +22,8 @@
 import { format, MINUS } from "../../format.ts";
 import type { Vec } from "../../lib/num.ts";
 import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, type Custom, type Row } from "../../lib/portfolio.ts";
-import { maxDrawdown, wealth } from "../../lib/stats.ts";
+import { maxDrawdown, returnShare, wealth } from "../../lib/stats.ts";
+import type { Role } from "../../charts/theme.ts";
 import type { Analysis, Column, CustomWeights, FormatId, LoadState, TableRow, TipKey } from "../../types.ts";
 
 // ---- the three portfolios (1470-1502) --------------------------------------------------------------
@@ -189,30 +190,98 @@ export function weightTable(a: Analysis): LoadState<TableData> {
   return tableState({ columns, rows }, "the weights table");
 }
 
+// ---- money, return and risk shares -------------------------------------------------------------------
+
+/** The portfolios the share table and chart cover: the three the tab solves or fixes, and the typed mix. */
+export type SharePort = "ew" | "gmv" | "tangency" | "custom";
+export const SHARE_PORTS: readonly SharePort[] = ["ew", "gmv", "tangency", "custom"];
+export const SHARE_LABEL: Readonly<Record<SharePort, string>> = { ...PORT_LABEL, custom: "Custom" };
+// The table's column keys per portfolio; gmv and tan keep the keys the table always had.
+const SHARE_KEY: Readonly<Record<SharePort, string>> = { ew: "ew", gmv: "gmv", tangency: "tan", custom: "cu" };
+
+/** One portfolio's three shares per asset: of the money (its weight), of the return, of the risk (PRC). */
+export interface Shares {
+  w: Vec;
+  /** w_i m_i / w'm (the engine's returnShare), or null when w'm is zero and no share is defined. */
+  ret: Vec | null;
+  risk: Vec;
+}
+
+/** The weights behind a share column: a failed solve and a refused mix have none. */
+export function shareWeights(a: Analysis, c: Custom | null, id: SharePort): Vec | null {
+  if (id === "custom") return c && c.ok ? c.w : null;
+  return weightsOf(a, id);
+}
+
+export function sharesOf(a: Analysis, w: Vec): Shares {
+  const rs = returnShare(w, a.m);
+  return { w, ret: rs.degenerate ? null : rs.share, risk: riskContribution(w, a.S) };
+}
+
+const shareHead = (id: SharePort, w: Vec | null) => (w ? SHARE_LABEL[id] : id === "custom" ? "Custom (not shown)" : failedLabel(id));
+
 /**
- * The risk contribution table: the frame the app builds (1563-1566), GMV Weight, GMV PRC, Tangency
- * Weight, Tangency PRC, which it never shows. risk_contribution (974-979): w_i (S w)_i / w'S w.
+ * The risk contribution table: the frame the app builds (1563-1566), each portfolio's Weight and PRC,
+ * which it never shows, and beside them each portfolio's share of the return. risk_contribution
+ * (974-979): w_i (S w)_i / w'S w. Return share: w_i m_i / w'm, which falls below 0% for an asset that
+ * took from the portfolio's return and passes 100% when the others took from it; it is printed as it is.
+ * Equal weight, GMV and Tangency always; Custom when the tab passes its mix.
  */
-export function prcTable(a: Analysis): LoadState<TableData> {
-  const g = a.gmv ? riskContribution(a.gmv.w, a.S) : null;
-  const t = a.tangency ? riskContribution(a.tangency.w, a.S) : null;
-  const gl = a.gmv ? "GMV" : failedLabel("gmv");
-  const tl = a.tangency ? "Tangency" : failedLabel("tangency");
-  const columns: Column[] = [
-    { key: "asset", label: "Asset", format: "text", first: true },
-    { key: "gmvW", label: `${gl} Weight`, format: "pct2" },
-    { key: "gmvPrc", label: `${gl} PRC`, format: "pct2" },
-    { key: "tanW", label: `${tl} Weight`, format: "pct2" },
-    { key: "tanPrc", label: `${tl} PRC`, format: "pct2" },
-  ];
-  const rows = a.tickers.map((ticker, i): TableRow => ({
-    asset: ticker,
-    gmvW: a.gmv ? a.gmv.w[i] : null,
-    gmvPrc: g ? g[i] : null,
-    tanW: a.tangency ? a.tangency.w[i] : null,
-    tanPrc: t ? t[i] : null,
-  }));
+export function prcTable(a: Analysis, c: Custom | null = null): LoadState<TableData> {
+  const ports = SHARE_PORTS.filter((id) => id !== "custom" || c !== null);
+  const columns: Column[] = [{ key: "asset", label: "Asset", format: "text", first: true }];
+  const per = ports.map((id) => {
+    const w = shareWeights(a, c, id);
+    const head = shareHead(id, w);
+    const k = SHARE_KEY[id];
+    columns.push(
+      { key: `${k}W`, label: `${head} Weight`, format: "pct2" },
+      { key: `${k}Ret`, label: `${head} Return share`, format: "pct2" },
+      { key: `${k}Prc`, label: `${head} PRC`, format: "pct2" },
+    );
+    return { k, sh: w ? sharesOf(a, w) : null };
+  });
+  const rows = a.tickers.map((ticker, i): TableRow => {
+    const row: TableRow = { asset: ticker };
+    for (const { k, sh } of per) {
+      row[`${k}W`] = sh ? sh.w[i] : null;
+      row[`${k}Ret`] = sh && sh.ret ? sh.ret[i] : null;
+      row[`${k}Prc`] = sh ? sh.risk[i] : null;
+    }
+    return row;
+  });
   return tableState({ columns, rows }, "the risk contribution table");
+}
+
+/**
+ * The line under the share table: every return share outside 0% to 100%, named with its portfolio, and
+ * what such a share means; and any portfolio whose mean return is zero, for which no share is defined.
+ * Null when every share is inside the range.
+ */
+export function shareNote(a: Analysis, c: Custom | null): string | null {
+  const out: string[] = [];
+  const none: string[] = [];
+  for (const id of SHARE_PORTS) {
+    const w = shareWeights(a, c, id);
+    if (!w) continue;
+    const ret = sharesOf(a, w).ret;
+    if (!ret) {
+      none.push(SHARE_LABEL[id]);
+      continue;
+    }
+    a.tickers.forEach((t, i) => {
+      if (ret[i] < 0 || ret[i] > 1) out.push(`${t} in ${SHARE_LABEL[id]} (${pct1(ret[i])})`);
+    });
+  }
+  const parts: string[] = [];
+  if (out.length) {
+    parts.push(
+      `Return shares outside 0% to 100% on this window: ${listing(out)}. Below 0% means the holding took from the portfolio's ` +
+        `return (a negative mean return held long, or a positive one held short); above 100% means the other holdings together took from it.`,
+    );
+  }
+  if (none.length) parts.push(`${listing(none)} averaged a zero return over this window, so no return share is defined for ${none.length === 1 ? "it" : "them"}.`);
+  return parts.length ? parts.join(" ") : null;
 }
 
 export const SUMMARY_COLUMNS: Column[] = [
@@ -259,7 +328,7 @@ export interface Group {
 /** One series of bars: its name, written on the chart, and its role colour (src/charts/theme.ts ROLE). */
 export interface BarSeries {
   label: string;
-  role: "gmv" | "tangency" | "ew";
+  role: Role;
 }
 
 export interface Bars {
@@ -284,6 +353,33 @@ export function weightBars(a: Analysis): LoadState<Bars> {
   const series = live.map((id): BarSeries => ({ label: PORT_LABEL[id], role: id }));
   const groups = a.tickers.map((t, i) => ({ name: t, values: live.map((id) => (weightsOf(a, id) as Vec)[i]) }));
   return barsState({ groups, series }, "the weights chart", "No portfolio to draw.");
+}
+
+/**
+ * The share chart for one portfolio: per asset, its weight, its return share and its risk share, three
+ * bars side by side. Empty, and saying why, when that portfolio failed or the mix was refused.
+ */
+export function shareBars(a: Analysis, c: Custom | null, id: SharePort): LoadState<Bars> {
+  const w = shareWeights(a, c, id);
+  if (!w) return { status: "empty", reason: id === "custom" ? "Custom is not shown: its weights were refused." : FAILED[id as "gmv" | "tangency"] };
+  const sh = sharesOf(a, w);
+  const ret = sh.ret;
+  const series: BarSeries[] = [{ label: "Weight", role: "cal" }];
+  if (ret) series.push({ label: "Return share", role: "frontier" });
+  series.push({ label: "Risk share", role: id });
+  const groups = a.tickers.map((t, i) => ({ name: t, values: ret ? [sh.w[i], ret[i], sh.risk[i]] : [sh.w[i], sh.risk[i]] }));
+  return barsState({ groups, series }, "the share chart", "No portfolio to draw.");
+}
+
+/** The share chart's title: the asset carrying most of the picked portfolio's risk, against its weight and return share. */
+export function shareTitle(a: Analysis, c: Custom | null, id: SharePort): string {
+  const w = shareWeights(a, c, id);
+  if (!w) return `${SHARE_LABEL[id]}: money, return and risk shares`;
+  const sh = sharesOf(a, w);
+  const top = largest(sh.risk, a.tickers);
+  const k = a.tickers.indexOf(top.ticker);
+  const ret = sh.ret ? `, ${pct1(sh.ret[k])} of its return` : "";
+  return `${top.ticker} is ${pct1(sh.w[k])} of ${SHARE_LABEL[id]}'s money${ret} and ${pct1(top.w)} of its risk`;
 }
 
 /** The risk contribution chart (1561-1572): GMV PRC and Tangency PRC per ticker. */

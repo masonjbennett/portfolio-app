@@ -99,9 +99,168 @@ export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
   alpha: "alpha",
 };
 
+// ---- the scorecard's own texts ---------------------------------------------------------------------
+//
+// The scorecard prints figures the app never had, so their texts are the port's, written here beside the
+// app's and never added to tooltips.json (that file is a dump of the app and must stay one). The keys are
+// their own type, so TipKey stays exactly the app's list. Same three levels, same voice: plain words,
+// then the finance term, then the formula.
+
+export type ScoreTipKey =
+  | "annual_return"
+  | "cumulative"
+  | "month_range"
+  | "positive_months"
+  | "downside"
+  | "longest_dd"
+  | "sharpe_se"
+  | "calmar"
+  | "correlation"
+  | "r_squared"
+  | "tracking_error"
+  | "information_ratio"
+  | "capture"
+  | "var"
+  | "es"
+  | "frag_lookback"
+  | "frag_cut"
+  | "frag_draws"
+  | "frag_params";
+
+export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
+  annual_return: {
+    plain: "The steady yearly growth rate that turns the starting amount into the ending amount over this window.",
+    finance: "Compound annual growth rate (CAGR) of the daily-rebalanced portfolio. Lower than the arithmetic mean return whenever returns vary.",
+    formula: "(∏(1 + rₜ))^(252/T) − 1, over the T daily returns in the window.",
+  },
+  cumulative: {
+    plain: "How much the starting amount grew or shrank in total over the whole window.",
+    finance: "Total return over the window, with the weights held fixed and rebalanced daily.",
+    formula: "∏(1 + rₜ) − 1, over every daily return in the window.",
+  },
+  month_range: {
+    plain: "The single best and worst calendar month over the window.",
+    finance: "Highest and lowest calendar-month return, compounding the daily returns inside each month. Only complete months count.",
+    formula: "max and min over complete months m of ∏(1 + rₜ) − 1 for t in m; the window's first and last months are left out.",
+  },
+  positive_months: {
+    plain: "The share of months that ended with a gain.",
+    finance: "Hit rate on calendar-month returns, complete months only.",
+    formula: "#{m : Rₘ > 0} / #{complete months}, with Rₘ = ∏(1 + rₜ) − 1 over the days t in month m.",
+  },
+  downside: {
+    plain: "How much the returns swing, counting only the days that fell short of the risk-free rate.",
+    finance: "Annualised downside deviation below the daily risk-free rate: the denominator of the Sortino ratio.",
+    formula: "√(252 × mean over all t of min(rₜ − Rf/252, 0)²).",
+  },
+  longest_dd: {
+    plain: "The longest stretch spent below an earlier high before climbing back to it, or to the last day if it never did.",
+    finance: "Longest drawdown duration, from the peak to the first close at or above it, in trading days and in calendar days.",
+    formula: "max over drawdown spells of (recovery day − peak day); a spell still open on the last day runs to that day.",
+  },
+  sharpe_se: {
+    plain: "The risk-vs-reward score, with a ± showing how far it could be off just from the luck of this window.",
+    finance: "Annualised Sharpe ratio ± one standard error. With errors this size, two Sharpes a few tenths apart may not really differ.",
+    formula: "SE = √252 × √((1 + ½SR² − γ₃SR + ¼γ₄SR²) / T), SR the daily Sharpe, γ₃ skew, γ₄ excess kurtosis (Lo 2002, Mertens 2002).",
+  },
+  calmar: {
+    plain: "Yearly growth divided by the worst fall: how much return each unit of the deepest loss paid for.",
+    finance: "Calmar ratio over the whole window: compound annual return over the absolute maximum drawdown.",
+    formula: "CAGR / |MDD|, with MDD measured from the amount invested.",
+  },
+  correlation: {
+    plain: "How closely the portfolio's daily moves follow the benchmark's, from −1 (opposite) to +1 (in step).",
+    finance: "Pearson correlation of daily returns with the benchmark.",
+    formula: "ρ = cov(r, b) / (σᵣ σ_b), over the window's daily returns.",
+  },
+  r_squared: {
+    plain: "How much of the portfolio's daily movement the benchmark explains, from 0% to 100%.",
+    finance: "R² of the single-index regression on the benchmark: the share of variance that is market-driven.",
+    formula: "R² = ρ², the squared correlation of daily returns.",
+  },
+  tracking_error: {
+    plain: "How far the portfolio's path wanders from the benchmark's, as a yearly percentage.",
+    finance: "Annualised standard deviation of daily active returns against the benchmark.",
+    formula: "TE = std(rₜ − bₜ) × √252, sample standard deviation (ddof 1).",
+  },
+  information_ratio: {
+    plain: "The extra return over the benchmark, per unit of wandering away from it.",
+    finance: "Annualised mean active return over tracking error.",
+    formula: "IR = 252 × mean(rₜ − bₜ) / TE.",
+  },
+  capture: {
+    plain: "In months the benchmark rose (up) or fell (down), how much of its move the portfolio made, on average.",
+    finance: "Up and down capture ratios on calendar-month returns, complete months only. Down capture under 100% means it fell less.",
+    formula: "mean(Rₘ) / mean(Bₘ), over complete months with Bₘ > 0 (up) or Bₘ < 0 (down).",
+  },
+  var: {
+    plain: "On the worst 5% of days in this window, the portfolio lost at least this much.",
+    finance: "Historical one-day Value at Risk at 95%: the 5th percentile of daily returns, as a positive loss.",
+    formula: "VaR₉₅ = −q₀.₀₅(rₜ), linear interpolation between order statistics.",
+  },
+  es: {
+    plain: "The average loss on those worst 5% of days.",
+    finance: "Historical one-day expected shortfall (CVaR) at 95%: the mean of the returns at or below the VaR return.",
+    formula: "ES₉₅ = −mean(rₜ | rₜ ≤ −VaR₉₅).",
+  },
+  frag_lookback: {
+    plain: "Solve the portfolio again on the last 1, 2, 3 and 5 years and on the full window: the most any one asset's weight moves between those answers.",
+    finance: "Largest max-minus-min weight of a single asset across the lookback windows. Fixed weights move by zero. In-sample.",
+    formula: "maxᵢ (maxₖ wᵢ⁽ᵏ⁾ − minₖ wᵢ⁽ᵏ⁾), over the windows k that solved.",
+  },
+  frag_cut: {
+    plain: "Lower the largest holding's expected return by one standard error, a change well inside its own noise, and solve again: how much of its weight it loses.",
+    finance: "Weight drop of the largest holding when its mean is set one standard error lower and the portfolio is re-solved. A what-if on these prices, in-sample.",
+    formula: "wⱼ − wⱼ′, where w′ is re-solved with μⱼ lowered by σⱼ / √(T/252), the standard error of its annual mean.",
+  },
+  frag_draws: {
+    plain: "Draw expected returns anywhere their own noise allows, many times, and solve on each: the range the largest holding's weight covers, 10th to 90th percentile.",
+    finance: "p90 − p10 of the largest holding's weight across seeded redraws of the means from N(μ̂, Σ/T), the covariance held at its estimate. In-sample.",
+    formula: "q₉₀ − q₁₀ of wⱼ over draws μ⁽ᵈ⁾ = μ̂ + L z⁽ᵈ⁾ / √T, with L L′ = Σ and z standard normal.",
+  },
+  frag_params: {
+    plain: "How many numbers had to be estimated from the price history to choose these weights. Equal weight and a typed mix need none.",
+    finance: "Minimum variance reads the covariance matrix; maximum Sharpe reads it and the expected returns. Compare with the days of data they rest on.",
+    formula: "GMV: n(n + 1)/2; tangency: n + n(n + 1)/2; fixed weights: 0.",
+  },
+};
+
+// A short name per scorecard key, for the info mark's accessible label.
+export const SCORE_TIP_NAMES: Readonly<Record<ScoreTipKey, string>> = {
+  annual_return: "compound annual return",
+  cumulative: "cumulative return",
+  month_range: "best and worst month",
+  positive_months: "positive months",
+  downside: "downside deviation",
+  longest_dd: "longest drawdown",
+  sharpe_se: "Sharpe ratio and its standard error",
+  calmar: "Calmar ratio",
+  correlation: "correlation",
+  r_squared: "R squared",
+  tracking_error: "tracking error",
+  information_ratio: "information ratio",
+  capture: "up and down capture",
+  var: "value at risk",
+  es: "expected shortfall",
+  frag_lookback: "weight range across lookbacks",
+  frag_cut: "weight lost to a one standard error cut",
+  frag_draws: "weight range across redraws",
+  frag_params: "parameters estimated",
+};
+
+/** True for a scorecard key. */
+export const isScoreTip = (key: string): key is ScoreTipKey => Object.hasOwn(SCORE_TIPS, key);
+
+/** The accessible name for any key, the app's or the scorecard's. */
+export function tipName(key: TipKey | ScoreTipKey): string {
+  return isScoreTip(key) ? SCORE_TIP_NAMES[key] : TIP_NAMES[key];
+}
+
 // The tooltip text for a key at a level; "" when there is none (586: no text, no info mark).
-// allowShort defaults to the app's default, off (742-752).
-export function tipText(key: TipKey, level: Level, allowShort = false): string {
+// allowShort defaults to the app's default, off (742-752). A scorecard key reads its own texts, which
+// say nothing about the bounds and so do not follow the toggle.
+export function tipText(key: TipKey | ScoreTipKey, level: Level, allowShort = false): string {
+  if (isScoreTip(key)) return SCORE_TIPS[key][level];
   const base = WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
   const text = allowShort ? (SHORT_OVERRIDES[key]?.[level]?.short ?? base) : base;
   const note = NOTES[key]?.[level];

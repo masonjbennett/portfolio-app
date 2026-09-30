@@ -1,0 +1,112 @@
+/* The scorecard: Table's ledger (.tbl) with row groups, bold short-view rows, and a heavier rule in front
+   of the benchmark column. Every colour is a token. */
+.sc .sc-conv {
+  max-width: 72ch;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+/* A group's name: a quiet small-caps line on its own rule, spanning the table. */
+.sc .sc-group th {
+  padding-top: var(--space-3);
+  border-bottom: var(--line-hair) solid var(--color-hairline);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+/* The short view's rows stay bold in the full view, so the two read as one table. */
+.sc .sc-short th,
+.sc .sc-short td {
+  font-weight: 700;
+}
+
+/* The benchmark is not a portfolio built from these assets: a heavier rule sets it apart. */
+.sc .sc-bench {
+  border-left: var(--line-bar) solid var(--color-ink2);
+}
+
+.sc thead .sc-focus {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.sc tbody th .tip {
+  margin-left: 4px;
+}
+
+.sc-controls {
+  margin-top: var(--space-2);
+}
+
+.sc-toggle {
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 6px;
+  background: var(--color-paper);
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-teal);
+  cursor: pointer;
+}
+
+.sc-toggle:hover {
+  border-color: var(--color-teal);
+}
+
+.sc-note {
+  margin: var(--space-3) 0 0;
+  max-width: 72ch;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-ink2);
+}
+
+.sc-defs {
+  margin-top: var(--space-3);
+  max-width: 72ch;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink2);
+}
+
+.sc-defs summary {
+  cursor: pointer;
+  color: var(--color-teal);
+}
+
+.sc-defs dl {
+  margin: var(--space-2) 0 0;
+}
+
+.sc-defs dt {
+  margin-top: var(--space-2);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.sc-defs dd {
+  margin: 2px 0 0;
+  line-height: 1.45;
+}
+
+/* On a phone the frozen label column must leave room for the figures: unbounded, a label as long as
+   "Widest weight range across lookback windows" made the column wider than the screen, and the figures
+   scrolled under it out of sight. Labels wrap inside a bounded column instead. The conventions line sits
+   in the caption, which is as wide as the scrolling table, so it is held to the screen's width (less the
+   page's gutters) to stay readable without scrolling sideways. */
+@media (max-width: 760px) {
+  .sc tbody tr:not(.sc-group) th.first {
+    white-space: normal;
+    min-width: 9em;
+    max-width: 10.5em;
+  }
+
+  .sc .sc-conv {
+    max-width: calc(100vw - 2 * var(--space-4));
+  }
+}

@@ -6,6 +6,7 @@ import type { CleanError, CleanEvent, Frame, RequestError } from "./lib/clean.ts
 import type { Mat, Vec } from "./lib/num.ts";
 import type { FrontierPoint, Solution, Tangency } from "./lib/optimize.ts";
 import type { AnnualStats } from "./lib/stats.ts";
+import type { ScoreTipKey } from "./content/tooltips.ts";
 
 // ---- explanation level -----------------------------------------------------------------------
 
@@ -435,8 +436,8 @@ export type TipKey =
 
 /** An info mark that shows one tooltip at the chosen level. */
 export interface TipProps {
-  /** Which tooltip. */
-  tip: TipKey;
+  /** Which tooltip: one of the app's, or one of the scorecard's own. */
+  tip: TipKey | ScoreTipKey;
   /** Which of its three texts. */
   level: Level;
   /** The shorting toggle: two formula-level texts follow it (content/tooltips.ts). Default off. */

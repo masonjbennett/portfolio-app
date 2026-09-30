@@ -273,8 +273,8 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   if (r) {
     const fallback = [...r.container.querySelectorAll(".boundary")].map(text);
     check(JSON.stringify(fallback) === JSON.stringify(["Efficient frontier could not be shown."]), "ledger:boundary the failed section is one line naming it", fallback.join(" | "));
-    check(!!r.container.querySelector(".opt-headline") && r.container.querySelectorAll(".recharts-surface").length === 3 && tablesOf(r).length === 3,
-      "ledger:boundary the headline, the other three charts and all three tables still render");
+    check(!!r.container.querySelector(".opt-headline") && r.container.querySelectorAll(".recharts-surface").length === 3 && tablesOf(r).length === 4,
+      "ledger:boundary the headline, the other three charts and all four tables still render");
     r.unmount();
   }
   // A failed GMV: said in every place its figures would be, and the tab still renders.
@@ -337,16 +337,16 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(head && text(head) === M.headline(a) && text(head).startsWith("With hindsight, the maximum-Sharpe portfolio holds 54.2% GLD"), "tab: the headline is on it, literal", head ? text(head) : "none");
   // The hero chart comes right after the headline.
   const order = [...r.container.querySelectorAll(".opt-headline, section[aria-labelledby]")].map((e) => e.getAttribute("aria-labelledby") ?? "headline");
-  check(JSON.stringify(order) === JSON.stringify(["headline", "opt-frontier", "opt-tiles", "opt-weights", "opt-prc", "opt-wealth", "opt-summary"]),
-    "tab: headline, the frontier, then the figures, weights, risk contribution, wealth and summary", order.join(" "));
+  check(JSON.stringify(order) === JSON.stringify(["headline", "opt-frontier", "opt-tiles", "opt-weights", "opt-scorecard", "opt-prc", "opt-wealth", "opt-summary"]),
+    "tab: headline, the frontier, then the figures, weights, scorecard, risk contribution, wealth and summary", order.join(" "));
   check(r.container.querySelectorAll(".recharts-surface").length === 4, "tab: all four charts are drawn", `${r.container.querySelectorAll(".recharts-surface").length}`);
   check(r.container.querySelectorAll(".recharts-legend-wrapper").length === 0, "tab: no legend, the series are named in the charts");
 
   // Every table, and each carries both downloads (downloads-everywhere, the tab half).
   const tables = tablesOf(r);
   const captions = tables.map((t) => text(t.querySelector("caption .tbl-title")));
-  check(JSON.stringify(captions) === JSON.stringify(["Portfolio weights", "Weight and risk contribution", "Summary comparison"]), "tab: its three tables", captions.join(" | "));
-  check(tables.length === 3 && tables.every((t) => {
+  check(JSON.stringify(captions) === JSON.stringify(["Portfolio weights", "Scorecard", "Weight, return and risk contribution", "Summary comparison"]), "tab: its four tables", captions.join(" | "));
+  check(tables.length === 4 && tables.every((t) => {
     const b = [...t.querySelectorAll("button")].map(text);
     return b.includes("Download CSV") && b.includes("Download Excel");
   }), "ledger:downloads-everywhere every table on the tab has a CSV and an Excel download");
@@ -354,14 +354,15 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     "ledger:downloads-everywhere the app gives the weights and the summary two downloads each (1548-1551, 1700-1703) and the risk contribution none (1555-1572)");
   const prcSec = sectionOf(r, "opt-prc");
   check(prcSec && [...prcSec.querySelectorAll(".tbl button")].map(text).join() === "Download CSV,Download Excel", "ledger:downloads-everywhere the port's risk contribution table has both");
-  check(r.container.querySelectorAll("table").length === 3, "tab: no table outside the Table component");
+  check(r.container.querySelectorAll("table").length === 4 && r.container.querySelectorAll(".tbl.sc table").length === 1,
+    "tab: no table outside the Table and Scorecard components");
 
   // Printed cells: the summary's Equal-Weight row at the app's formats, from the oracle's own figures.
-  const sumCells = rowCells(tables[2], 0);
+  const sumCells = rowCells(tables[3], 0);
   const e = o.modes.long.perf.ew;
   check(JSON.stringify(sumCells) === JSON.stringify(["Equal-Weight", format(e.mu, "pct2"), format(e.sigma, "pct2"), format(e.sharpe, "num3"), format(e.sortino, "num3"), format(e.mdd, "pct2")]),
     "tab: the Equal-Weight summary row prints the oracle's figures at the app's formats", sumCells.join(" "));
-  check(rowCells(tables[2], 4)[0] === "S&P 500" && rowCells(tables[2], 4)[3] === format(o.bench.sharpe, "num3"), "tab: the benchmark row, under its display name");
+  check(rowCells(tables[3], 4)[0] === "S&P 500" && rowCells(tables[3], 4)[3] === format(o.bench.sharpe, "num3"), "tab: the benchmark row, under its display name");
   const ewPlates = [...sectionOf(r, "opt-tiles").querySelector('[data-port="ew"]').querySelectorAll(".plate-value")].map(text);
   check(JSON.stringify(ewPlates) === JSON.stringify([format(e.mu, "pct2"), format(e.sigma, "pct2"), format(e.sharpe, "num3"), format(e.sortino, "num3"), format(e.mdd, "pct2")]),
     "tab: the Equal-Weight plates print the oracle's figures", ewPlates.join(" "));
@@ -369,12 +370,12 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   // Series named in the charts.
   const svgText = (id) => text(sectionOf(r, id).querySelector(".recharts-surface"));
   check(["GMV", "Tangency", "Equal-Weight"].every((s) => svgText("opt-weights").includes(s)), "tab: the weights chart names its three series on the bars", svgText("opt-weights"));
-  check(["GMV PRC", "Tangency PRC"].every((s) => svgText("opt-prc").includes(s)), "tab: the PRC chart names its two series on the bars", svgText("opt-prc"));
+  check(["Weight", "Return share", "Risk share"].every((s) => svgText("opt-prc").includes(s)), "tab: the share chart names its three series on the bars", svgText("opt-prc"));
   // Bronze text measures 3.6:1 on paper, under WCAG AA's 4.5:1: Tangency's bars stay bronze, their name is ink2.
   const bn = ["opt-weights", "opt-prc"].flatMap((id) => [...sectionOf(r, id).querySelectorAll(".opt-bar-name")].map((n) => ({ text: n.textContent, fill: n.getAttribute("fill") })));
   const nameFill = (s) => bn.find((n) => n.text === s)?.fill;
   const tanBars = [...sectionOf(r, "opt-weights").querySelectorAll(".recharts-bar-rectangle path")].filter((p) => p.getAttribute("fill") === ROLE.tangency);
-  check(bn.length === 5 && nameFill("Tangency") === tokens.color.ink2 && nameFill("Tangency PRC") === tokens.color.ink2 && nameFill("GMV") === ROLE.gmv &&
+  check(bn.length === 6 && nameFill("Tangency") === tokens.color.ink2 && nameFill("Risk share") === tokens.color.ink2 && nameFill("GMV") === ROLE.gmv &&
     nameFill("Equal-Weight") === ROLE.ew && bn.every((n) => contrastRatio(n.fill, tokens.color.paper) >= TEXT_AA) && tanBars.length > 0,
     "tab: every series name on the bars reads on paper at 4.5:1; Tangency's is ink2 while its bars stay bronze", JSON.stringify(bn));
   // Hovering a Tangency bar: Recharts writes the hover row in the series' colour, so ReadableTip sets it in ink2.
@@ -386,9 +387,10 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     return rows.map((li) => `${text(li.querySelector(".recharts-tooltip-item-name"))}=${li.style.color}`).join(" ");
   };
   const tanRow = rowColour("opt-weights", ROLE.tangency);
-  const gmvRow = rowColour("opt-prc", ROLE.gmv);
-  check(tanRow === `Tangency=${rgb(tokens.color.ink2)}` && gmvRow === `GMV PRC=${rgb(ROLE.gmv)}`,
-    "tab: hovering a bar names it alone, Tangency in ink2 and GMV in its teal", `${tanRow} | ${gmvRow}`);
+  const gmvRow = rowColour("opt-weights", ROLE.gmv);
+  const retRow = rowColour("opt-prc", ROLE.frontier);
+  check(tanRow === `Tangency=${rgb(tokens.color.ink2)}` && gmvRow === `GMV=${rgb(ROLE.gmv)}` && retRow === `Return share=${rgb(ROLE.frontier)}`,
+    "tab: hovering a bar names it alone, Tangency in ink2, GMV in its teal and a return share in navy", `${tanRow} | ${gmvRow} | ${retRow}`);
   check([...a.tickers, "GMV", "Tangency", "Equal-Weight", "Custom", "S&P 500"].every((s) => svgText("opt-frontier").includes(s)), "tab: the frontier names every asset and portfolio in the chart");
   check(/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: untouched custom weights are said to repeat Equal-Weight");
 
@@ -414,7 +416,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   // Custom weights from the Custom tab reach the frontier, the wealth chart and the summary (1581).
   const raw = o.modes.long.custom.uneven.raw;
   quiet(() => r.rerender(h(Optimization, { ...props, weights: Object.fromEntries(a.tickers.map((t, i) => [t, raw[i]])) })));
-  const cust = rowCells(tablesOf(r)[2], 3);
+  const cust = rowCells(tablesOf(r)[3], 3);
   const cp = o.modes.long.custom.uneven.perf;
   check(cust[0] === "Custom" && cust[1] === format(cp.mu, "pct2") && cust[3] === format(cp.sharpe, "num3"), "tab: the custom weights score in the summary", cust.join(" "));
   check(!/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: moved custom weights are not called equal");
@@ -475,7 +477,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const heads = [...r.container.querySelectorAll(".tbl thead th, .tbl tbody th")].map((th) => ({ own: own(th), sub: th.querySelector(".tbl-sub") ? text(th.querySelector(".tbl-sub")) : null }));
   const fitted = heads.filter((x) => /^(GMV|Tangency)\b/.test(x.own));
   const plain = heads.filter((x) => /^(Equal-Weight|Custom|S&P 500)/.test(x.own));
-  check(fitted.length === 8 && fitted.every((x) => x.sub === FITTED) && plain.length >= 3 && plain.every((x) => x.sub === null),
+  check(fitted.length === 12 && fitted.every((x) => x.sub === FITTED) && plain.length >= 3 && plain.every((x) => x.sub === null),
     "fitted-heads: every GMV and Tangency head in the tab's tables says weights chosen on this window, and no Equal-Weight head does",
     heads.map((x) => `${x.own}=${x.sub}`).join(" | "));
   const tiles = [...r.container.querySelectorAll(".opt-tile")].map((t) => [t.dataset.port, t.querySelector(".opt-tile-sub") ? text(t.querySelector(".opt-tile-sub")) : null]);
@@ -494,7 +496,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
 
   // Every table says which window and which frequency.
   const spans = tablesOf(r).map((t) => text(t.querySelector(".tbl-span")));
-  check(spans.length === 3 && spans.every((s) => s === `Daily returns, ${a.dates[0]} to ${a.asOf}`),
+  check(spans.length === 4 && spans.every((s) => s === `Daily returns, ${a.dates[0]} to ${a.asOf}`),
     "spans: every table's caption states its window and that the returns are daily", spans.join(" | "));
 
   // The starting amount is edited on the wealth chart itself.

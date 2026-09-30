@@ -262,7 +262,8 @@ check(hindsightSeen.some((r) => r === "gmv" || r === "tangency"),
 const figures = (root) => [...root.querySelectorAll("figure.chart-frame")];
 const titleOf = (fig) => fig?.querySelector(".chart-title")?.textContent ?? "";
 const chartLabels = (fig) => [...(fig?.querySelectorAll(".direct-label text") ?? [])].map((t) => t.textContent);
-const tables = (root) => [...root.querySelectorAll(".tbl")];
+// The normalized weights table; the scorecard shares its ledger class and is held apart (.sc).
+const tables = (root) => [...root.querySelectorAll(".tbl:not(.sc)")];
 const buttons = (tb) => [...tb.querySelectorAll(".tbl-dl button")].map((b) => b.textContent);
 const plates = (root) => [...root.querySelectorAll(".cust-plates .plate")].map((p) => ({
   label: p.querySelector(".plate-label span")?.textContent,
@@ -390,7 +391,7 @@ function Harness({ a, init = {}, level = "plain" }) {
   check(JSON.stringify(calls) === JSON.stringify([{ amount: 12000 }]), "amount: the Custom tab's wealth chart edits the same starting amount", JSON.stringify(calls));
   check(text(we.querySelector(".chart-sub")).endsWith("GMV and Tangency are hypothetical: weights chosen with the whole period's prices."),
     "hypothetical: the Custom tab's wealth caption names GMV and Tangency as hypothetical", text(we.querySelector(".chart-sub")));
-  const tb = r.container.querySelector(".tbl");
+  const tb = r.container.querySelector(".tbl:not(.sc)");
   check(tb && !tb.querySelector(".tbl-span"), "spans: the normalized weights come from no dates, and their table claims none");
   r.unmount();
 }
@@ -482,9 +483,19 @@ function Harness({ a, init = {}, level = "plain" }) {
     "ledger:rf-live: the app freezes rf in session state at Run (1087) and every tab reads it back (1158)");
   const at5 = fixtureAnalysis("cross", { rf: 0.05 });
   const base = fixtureAnalysis("cross");
-  const sharpe = (a) => plates(render(h(Custom, tabProps(a))).container)[2].value;
+  // Each render is read and unmounted at once, so no tab is left mounted for its after-paint work to land
+  // outside the test.
+  const once = (a, read) => {
+    const r = render(h(Custom, tabProps(a)));
+    try {
+      return read(r.container);
+    } finally {
+      r.unmount();
+    }
+  };
+  const sharpe = (a) => once(a, (c) => plates(c)[2].value);
   const s5 = n3(portfolioPerformance(at5.ew, at5.m, at5.S, 0.05).sharpe);
-  check(sharpe(at5) === s5 && s5 !== sharpe(base) && render(h(Custom, tabProps(at5))).container.textContent.includes("at the 5.00% risk-free rate"),
+  check(sharpe(at5) === s5 && s5 !== sharpe(base) && once(at5, (c) => c.textContent.includes("at the 5.00% risk-free rate")),
     "ledger:rf-live: the Sharpe plate and its note follow the analysis's rate", `${sharpe(at5)} vs ${s5}`);
 }
 

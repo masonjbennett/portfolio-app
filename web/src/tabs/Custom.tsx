@@ -11,9 +11,14 @@
 //
 // Each section sits inside its own Boundary, keyed on the weights, so a section that throws leaves one
 // line naming it, the rest keeps rendering, and a change of weights tries it again.
+//
+// The scorecard is the Optimization tab's own component, the Custom column set in bold: the typed mix
+// beside every other portfolio and the benchmark, on every figure. Its redraw row is solved after the
+// tab has painted, on the first draw set's seed, the same one the Optimization tab opens on.
 import { useId, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import Plate from "../components/Plate.tsx";
+import Scorecard from "../components/Scorecard.tsx";
 import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import Frontier, { frontierData, type FrontierData } from "../charts/Frontier.tsx";
@@ -44,6 +49,8 @@ import {
   type CustomView,
 } from "./custom/model.ts";
 import "./custom/Custom.css";
+import { seedOf, useRedraws } from "./optimization/redraws.ts";
+import { scorecard, type RedrawState } from "./optimization/scorecard.ts";
 
 const TABLE_TITLE = "Normalized Weights";
 
@@ -175,6 +182,17 @@ function WealthCard({ a, v, amount, onAmount }: { a: Analysis; v: CustomView; am
   );
 }
 
+// The scorecard for the typed mix, beside the other portfolios and the benchmark.
+function ScorecardCard({ a, v, redraws, level }: { a: Analysis; v: CustomView; redraws: RedrawState; level: Level }) {
+  const model = useMemo(() => scorecard(a, v.custom, redraws), [a, v, redraws]);
+  return (
+    <section className="cust-section" aria-labelledby="cust-scorecard">
+      <Slug id="cust-scorecard">Scorecard</Slug>
+      <Scorecard model={model} redraws={redraws} level={level} allowShort={a.allowShort} filename="custom_scorecard" focus="custom" />
+    </section>
+  );
+}
+
 // Entered is the weight as typed; a weight outside the bounds counts at the nearest bound, so when one
 // was held there the note says so rather than claim every row is its entry over the total.
 function WeightsTable({ v }: { v: CustomView }) {
@@ -204,6 +222,8 @@ function WeightsTable({ v }: { v: CustomView }) {
 
 export default function Custom({ analysis: a, settings, level, weights, setWeights, requestSettings }: TabProps) {
   const v = useMemo(() => customView(a, weights), [a, weights]);
+  const redraws = useRedraws(a, seedOf(0));
+  const scoreKey = useMemo(() => [v, redraws], [v, redraws]);
   return (
     <div className="cust" data-tab="custom">
       <Boundary name="The headline" resetKey={v}>
@@ -221,6 +241,9 @@ export default function Custom({ analysis: a, settings, level, weights, setWeigh
       </Boundary>
       <Boundary name="Cumulative wealth" resetKey={v}>
         <WealthCard a={a} v={v} amount={settings.amount} onAmount={(n) => requestSettings({ amount: n })} />
+      </Boundary>
+      <Boundary name="Scorecard" resetKey={scoreKey}>
+        <ScorecardCard a={a} v={v} redraws={redraws} level={level} />
       </Boundary>
       <Boundary name="Normalized weights" resetKey={v}>
         <WeightsTable v={v} />

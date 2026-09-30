@@ -3,7 +3,7 @@
 // from the keyboard, and on a tap or click, which pins it open until a second tap, a tap elsewhere
 // or Escape. Escape also hides a hover or focus showing, until the pointer or focus leaves.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { tipText, TIP_NAMES } from "../content/tooltips.ts";
+import { tipName, tipText } from "../content/tooltips.ts";
 import type { TipProps } from "../types.ts";
 import "./Tip.css";
 
@@ -45,7 +45,7 @@ export default function Tip({ tip, level, allowShort = false }: TipProps) {
       <button
         type="button"
         className="tip-mark"
-        aria-label={`About ${TIP_NAMES[tip]}`}
+        aria-label={`About ${tipName(tip)}`}
         aria-expanded={open}
         aria-controls={id}
         aria-describedby={id}

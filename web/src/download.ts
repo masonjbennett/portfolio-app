@@ -13,7 +13,7 @@
 // package stopped at 0.18.5 and carries unfixed advisories. Building the sheet is the pure function
 // worksheet(), so node tests the cells without the CDN.
 import { EXCEL_FORMATS, excelSerial, isText } from "./format.ts";
-import type { Column, TableRow } from "./types.ts";
+import type { CellFormat, Column, TableRow } from "./types.ts";
 
 // The SheetJS build loaded at click time.
 export const SHEETJS_URL = "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
@@ -80,8 +80,11 @@ export function cellFor(value: number | string | null | undefined, column: Colum
   return { t: "s", v: value };
 }
 
-// The worksheet for a table: labels in row 1, one row per table row, blanks left out.
-export function worksheet(columns: Column[], rows: TableRow[]): Worksheet {
+// The worksheet for a table: labels in row 1, one row per table row, blanks left out. A table whose rows
+// each measure something different (a scorecard: a percent on one row, a day count on the next) passes
+// `rowFormats`, one per row: that row's numbers carry its format instead of their column's. Label
+// columns stay text either way.
+export function worksheet(columns: Column[], rows: TableRow[], rowFormats?: readonly CellFormat[]): Worksheet {
   const ws: Worksheet = {
     "!ref": `A1:${colName(Math.max(columns.length, 1) - 1)}${rows.length + 1}`,
     "!cols": columns.map((c) => ({ wch: Math.max(10, c.label.length + 2) })),
@@ -89,7 +92,8 @@ export function worksheet(columns: Column[], rows: TableRow[]): Worksheet {
   columns.forEach((c, j) => {
     ws[`${colName(j)}1`] = { t: "s", v: c.label };
     rows.forEach((row, i) => {
-      const cell = cellFor(row[c.key], c);
+      const own = rowFormats?.[i];
+      const cell = cellFor(row[c.key], own && !isText(c.format) ? { ...c, format: own } : c);
       if (cell) ws[`${colName(j)}${i + 2}`] = cell;
     });
   });
@@ -138,10 +142,10 @@ function loadSheetJS(): Promise<SheetJS> {
 }
 
 // Saves `<filename>.xlsx` with one sheet named `sheet`. Rejects when SheetJS cannot be loaded.
-export async function downloadXlsx(filename: string, sheet: string, columns: Column[], rows: TableRow[]): Promise<void> {
+export async function downloadXlsx(filename: string, sheet: string, columns: Column[], rows: TableRow[], rowFormats?: readonly CellFormat[]): Promise<void> {
   const XLSX = await loadSheetJS();
   const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, worksheet(columns, rows), sheetName(sheet));
+  XLSX.utils.book_append_sheet(book, worksheet(columns, rows, rowFormats), sheetName(sheet));
   const bytes = XLSX.write(book, { bookType: "xlsx", type: "array" });
   save(`${filename}.xlsx`, new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
 }

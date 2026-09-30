@@ -192,4 +192,18 @@ const css = read("src/components/Tip.css");
 check(/\.tip-mark:focus-visible \+ \.tip-text/.test(css) && /\.tip\[data-open\] \.tip-text/.test(css) && /@media \(hover: hover\)/.test(css),
   "tip: its CSS shows the text on keyboard focus, when pinned, and on hover only where hover exists");
 
+// The scorecard's own texts: their own keys, beside the app's, never in the dump.
+{
+  const { SCORE_TIPS, SCORE_TIP_NAMES, isScoreTip, tipName } = await import("../src/content/tooltips.ts");
+  const sk = Object.keys(SCORE_TIPS);
+  check(sk.length >= 18 && sk.every((k) => !keys.includes(k)) && sk.every((k) => isScoreTip(k)) && !keys.some((k) => isScoreTip(k)),
+    "score-tips: the scorecard keys are their own, none an app key", sk.join(","));
+  check(sk.every((k) => same(Object.keys(SCORE_TIPS[k]), LEVEL_IDS) && LEVEL_IDS.every((l) => SCORE_TIPS[k][l].trim().length > 20 && tipText(k, l) === SCORE_TIPS[k][l])),
+    "score-tips: every scorecard key carries all three levels, in order, and tipText returns them");
+  check(same(Object.keys(SCORE_TIP_NAMES), sk) && tipName("var") === "value at risk" && tipName("sharpe") === TIP_NAMES.sharpe,
+    "score-tips: every scorecard key has an accessible name, and the app's keys keep theirs");
+  check(sk.every((k) => LEVEL_IDS.every((l) => !/\p{Extended_Pictographic}/u.test(SCORE_TIPS[k][l]) && !/best (possible|mix|portfolio)|optimal/i.test(SCORE_TIPS[k][l]))),
+    "score-tips: no emoji, and no text calls a mix best or optimal");
+}
+
 done("t-tooltips");
