@@ -221,4 +221,27 @@ function expected(a, i, z) {
   check(!/#[0-9a-f]{3,6}\b|rgb\(/i.test(sheet), "whatif: paper and ink tokens only");
 }
 
+// ---- (g) the thin-data line asks about the shortest window, and the sentence is not re-read per step --
+{
+  // Twelve assets over a thousand days: the whole window is well fed, its one-year window is not (252 / 12).
+  const n = 12;
+  const days = 1000;
+  const R = Array.from({ length: n }, (_, i) => Array.from({ length: days }, (_, t) => 0.01 * Math.sin(t * (i + 1) * 0.37 + i) + 0.0002 * (i + 1)));
+  const L = estimationLoad(R);
+  const lines = W.loadLines("A0", 0, L);
+  check(days / n >= 25 && lines.length === 3 && lines[2].startsWith(`The one-year window gives ${(TRADING_DAYS / n).toFixed(1)} days of returns per asset`),
+    "whatif: the thin-data line is asked of the shortest window on offer, the one-year window, not the whole window", lines[2] ?? "(no third line)");
+
+  const r = render(h(WhatIf, { a: EX }));
+  const p = parts(r.container);
+  const para = r.container.querySelector(".whatif-sentence");
+  check(para && !para.hasAttribute("aria-live") && !para.closest("[aria-live]"),
+    "whatif: the sentence is not a live region, so a screen reader does not re-read it on every step of the range");
+  const i0 = defaultAsset(EX);
+  const want = expected(EX, i0, 0);
+  check(p.range.getAttribute("aria-valuetext") === `${pct(want.mu)} a year; tangency holds ${want.tan} ${EX.tickers[i0]}`,
+    "whatif: the range's value text carries the solved tangency weight, which is what a screen reader hears", p.range.getAttribute("aria-valuetext"));
+  r.unmount();
+}
+
 done("t-whatif");

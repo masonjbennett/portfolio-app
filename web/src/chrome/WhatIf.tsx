@@ -18,7 +18,7 @@ import { FITTED } from "../content/words.ts";
 import { DASH, format } from "../format.ts";
 import { largestHolding, nudgeTangency, returnBand } from "../lib/robust.ts";
 import type { Nudge, ReturnBand } from "../lib/robust.ts";
-import { estimationLoad, loadVerdict, TN_WARN } from "../lib/stats.ts";
+import { estimationLoad, loadVerdict, TN_WARN, TRADING_DAYS } from "../lib/stats.ts";
 import type { EstimationLoad } from "../lib/stats.ts";
 import type { Analysis } from "../types.ts";
 import "./WhatIf.css";
@@ -125,8 +125,15 @@ export function loadLines(ticker: string, asset: number, load: EstimationLoad): 
     `To pin ${ticker}'s expected return to ±${(load.h * 100).toFixed(0)} points a year would take about ` +
       `${format(mine ? Math.round(mine.yearsNeeded) : null, "int")} years of daily prices; this window has ${oneDecimal(load.years)}.`,
   ];
-  if (loadVerdict(load.days, load.n) !== "ok") {
-    lines.push(`That is ${oneDecimal(load.daysPerAsset)} days of returns per asset, under the ${TN_WARN} below which these weights rest on thin data.`);
+  // Asked of the SHORTEST window the page offers: the one-year window, or the whole window when it is
+  // shorter than a year. A long window can be well fed while its one-year window is not.
+  const shortest = Math.min(load.days, TRADING_DAYS);
+  if (loadVerdict(shortest, load.n) !== "ok") {
+    lines.push(
+      shortest < load.days
+        ? `The one-year window gives ${oneDecimal(shortest / load.n)} days of returns per asset, under the ${TN_WARN} below which its weights rest on thin data.`
+        : `That is ${oneDecimal(load.daysPerAsset)} days of returns per asset, under the ${TN_WARN} below which these weights rest on thin data.`,
+    );
   }
   return lines;
 }
@@ -202,7 +209,9 @@ export default function WhatIf({ a }: { a: WhatIfInput }) {
         </label>
       </div>
       {note}
-      <p className="whatif-sentence" aria-live="polite">
+      {/* Not a live region: the range steps in hundredths of a standard error, and a live paragraph
+          would be read out again on every step. The range's own value text carries the result. */}
+      <p className="whatif-sentence">
         <span className="whatif-band">{bandSentence(ticker, band)}</span>{" "}
         {words ? (
           <>
@@ -228,7 +237,7 @@ export default function WhatIf({ a }: { a: WhatIfInput }) {
           max={SE_REACH}
           step={SE_STEP}
           value={draft}
-          aria-valuetext={`${pct(muAt(band, draft))} a year`}
+          aria-valuetext={`${pct(muAt(band, draft))} a year${!waiting && words?.tan != null ? `; tangency holds ${words.tan} ${ticker}` : ""}`}
           onChange={onMove}
           onPointerUp={onRelease}
           onMouseUp={onRelease}
