@@ -342,9 +342,12 @@ const typeInto = (input, v) => act(() => {
   check(JSON.stringify(spans) === JSON.stringify([
     ["Growth of $10,000", `Daily closes, ${cross.prices.dates[0]} to ${cross.asOf}`],
     ["Calendar years", `Daily closes, ${cross.prices.dates[0]} to ${cross.asOf}`],
-    ["Monthly returns, Equal-Weight", `Monthly returns, ${cross.dates[0]} to ${cross.asOf}`],
+    ["Monthly returns, Equal-Weight", `Monthly returns, ${cross.prices.dates[0]} to ${cross.asOf}`],
     ["Summary Statistics", `Daily returns, ${cross.dates[0]} to ${cross.asOf}`],
-  ]), "spans: the growth and calendar-year tables state their closes, the months and the statistics their returns, each with its window", JSON.stringify(spans));
+  ]), "spans: the growth, calendar-year and month tables start at the window's first close, the statistics at its first return", JSON.stringify(spans));
+  const monthSub = text(r.container.querySelector('section[aria-labelledby="ret-years"] .chart-sub'));
+  check(monthSub.startsWith(`Each month's trading days compounded, ${cross.prices.dates[0]} to `),
+    "spans: the months grid dates its window from the first close, as the calendar years do", monthSub);
   const frame = r.container.querySelector(".ret-chart .chart-frame");
   const input = frame?.querySelector(".chart-head .amount-field input");
   check(!!input && input.value === "10000" && text(frame.querySelector(".amount-field label")) === "Growth of $",
@@ -427,6 +430,8 @@ const typeInto = (input, v) => act(() => {
     check(tbl.querySelector(".tbl-title").classList.contains("tbl-title-clip"), tag("years: the title repeats the heading right above it, so it is clipped from the screen"));
     check(subOf(tbl, "GMV") === FITTED && subOf(tbl, "Tangency") === FITTED && subOf(tbl, "Equal-Weight") === "", tag("years: GMV and Tangency carry the fitted line"));
     check(/fixed and is rebalanced to them daily/.test(text(sec.querySelector(".ret-note"))), tag("years: the note says fixed weights, rebalanced daily"));
+    check(/GMV's and Tangency's\s+weights were chosen on this window, so their years are in-sample/.test(text(sec.querySelector(".ret-note"))),
+      tag("years: the note says GMV's and Tangency's weights were chosen on this window, so their years are in-sample"));
 
     // The partial years' labels, from the dates: the first from the first close, the last to the last close.
     const labels = got.map((row) => row[0]);

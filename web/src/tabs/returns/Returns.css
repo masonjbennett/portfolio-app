@@ -140,6 +140,8 @@
   color: var(--color-ink2);
 }
 
+/* Beside the "Months of" pill, the sub-line of the column picked, as .risk-fitted: GMV's and Tangency's "weights
+   chosen on this window", or a Custom mix that is equal weight saying it matches Equal-Weight. */
 .ret-fitted {
   font-family: var(--font-sans);
   font-size: 13px;

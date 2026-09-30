@@ -27,7 +27,7 @@ export interface NamedFall {
 }
 
 export const NAMED_FALLS: readonly NamedFall[] = [
-  { id: "gfc", label: "GFC 2007-09", from: "2007-10-09", to: "2009-03-09", search: ["2006-07-01", "2009-12-31"], listed: false },
+  { id: "gfc", label: "GFC 2007–2009", from: "2007-10-09", to: "2009-03-09", search: ["2006-07-01", "2009-12-31"], listed: false },
   { id: "2011", label: "2011", from: "2011-04-29", to: "2011-10-03", search: ["2010-07-01", "2011-12-31"], listed: false },
   { id: "q4-2018", label: "Q4 2018", from: "2018-09-20", to: "2018-12-24", search: ["2017-07-01", "2018-12-31"], listed: true },
   { id: "covid", label: "Covid", from: "2020-02-19", to: "2020-03-23", search: ["2019-07-01", "2020-12-31"], listed: true },

@@ -63,7 +63,8 @@
   color: var(--color-ink2);
 }
 
-/* A GMV or Tangency pick says, beside the pill, that its weights were chosen on this window. */
+/* A pick whose column carries a sub-line repeats it beside the pill: GMV's and Tangency's "weights chosen on
+   this window", or a Custom mix that is equal weight saying it matches Equal-Weight. */
 .risk-fitted {
   font-family: var(--font-sans);
   font-size: 13px;

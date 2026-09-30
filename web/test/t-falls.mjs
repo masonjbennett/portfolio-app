@@ -97,6 +97,12 @@ function expectEpisodes(a, r) {
   ]);
 }
 
+// A fall's name sits beside dates printed yyyy-mm-dd, so no name may read as a year and month.
+{
+  const ym = NAMED_FALLS.filter((e) => /\d{4}-\d{2}(?!\d)/.test(e.label)).map((e) => e.label);
+  check(ym.length === 0, "names: no named fall's label reads as a year and month", ym.join(", "));
+}
+
 // The event an asset's worst fall overlaps, from the dates alone: more than one shared date, the most
 // shared calendar days winning, a tie to the event that began first.
 function overlapLabel(a, r) {
@@ -190,8 +196,8 @@ for (const [set, a] of [["example", exampleAnalysis()], ["megacap", fixtureAnaly
     return sub ? text(sub) : "";
   };
   check(subOf("GMV") === FITTED && subOf("Tangency") === FITTED && subOf("Equal-Weight") === "", tag("named: GMV and Tangency carry the fitted line, Equal-Weight does not"));
-  check(/chosen on this window, which includes every\s+fall listed, so their figures are hindsight/.test(text(sec.querySelector("[data-note=hindsight]"))),
-    tag("named: the note says GMV's and Tangency's weights saw these falls, so their figures are hindsight"));
+  check(/chosen on this window, which includes every\s+fall listed, so their figures are in-sample, hindsight/.test(text(sec.querySelector("[data-note=hindsight]"))),
+    tag("named: the note says GMV's and Tangency's weights saw these falls, so their figures are in-sample, hindsight"));
 
   // (c) Related event, from overlap, and the asset table's High and Low are the engine's deepest fall.
   const ddTable = [...r.container.querySelectorAll(".tbl")].find((t) => text(t.querySelector(".tbl-title")) === "Worst drawdown by asset");

@@ -112,7 +112,7 @@ const Falls = memo(function Falls({ a, weights }: { a: Analysis; weights: Custom
           <p className="risk-note" data-note="hindsight">
             Each figure compounds the series from the S&amp;P 500{"’"}s high close to its low close; a fall the window holds only
             part of is not listed. GMV{"’"}s and Tangency{"’"}s weights were chosen on this window, which includes every
-            fall listed, so their figures are hindsight: the optimiser had already seen these days.
+            fall listed, so their figures are in-sample, hindsight: the optimiser had already seen these days.
           </p>
         </>
       ) : (

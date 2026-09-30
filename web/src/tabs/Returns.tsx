@@ -114,7 +114,7 @@ const YearsCard = memo(function YearsCard({ a, weights }: { a: Analysis; weights
       <Slug id="ret-years">{YEARS_TITLE}</Slug>
       <p className="ret-note">
         Each year compounds the daily returns from the year's first close in the window (or the last close of the year
-        before) to its last. Every portfolio holds its weights fixed and is rebalanced to them daily; GMV and Tangency's
+        before) to its last. Every portfolio holds its weights fixed and is rebalanced to them daily; GMV's and Tangency's
         weights were chosen on this window, so their years are in-sample. The first and last years are the window's, so
         they say which dates they cover.
       </p>
@@ -135,7 +135,7 @@ const YearsCard = memo(function YearsCard({ a, weights }: { a: Analysis; weights
       <div className="ret-chart">
         <ChartFrame
           title={months.status === "ready" ? monthTitle(months.value) : `${shown.label}'s calendar months`}
-          subtitle={`Each month's trading days compounded, ${format(d[0], "date")} to ${format(d[d.length - 1], "date")}. The shading runs from the loss colour through the paper to the gain colour, the same distance each way from zero; the title's range counts whole months only.`}
+          subtitle={`Each month's trading days compounded, ${format(a.prices.dates[0], "date")} to ${format(d[d.length - 1], "date")}. The shading runs from the loss colour through the paper to the gain colour, the same distance each way from zero; the title's range counts whole months only.`}
           state={months}
           height={240}
         >
@@ -153,7 +153,7 @@ const YearsCard = memo(function YearsCard({ a, weights }: { a: Analysis; weights
             columns={monthColumns()}
             rows={monthRows(months.value.grid)}
             filename={`monthly_returns_${shown.id}`}
-            span={tableSpan(d[0], a.asOf, "monthly")}
+            span={tableSpan(a.prices.dates[0], a.asOf, "monthly")}
           />
         </>
       ) : null}
