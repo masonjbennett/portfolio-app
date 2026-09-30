@@ -22,7 +22,7 @@
 import { format, MINUS } from "../../format.ts";
 import type { Vec } from "../../lib/num.ts";
 import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, type Custom, type Row } from "../../lib/portfolio.ts";
-import { maxDrawdown, returnShare, wealth } from "../../lib/stats.ts";
+import { maxDrawdown, returnShare, sharpeSE, wealth } from "../../lib/stats.ts";
 import type { Role } from "../../charts/theme.ts";
 import type { Analysis, Column, CustomWeights, FormatId, LoadState, TableRow, TipKey } from "../../types.ts";
 
@@ -63,6 +63,15 @@ export function portRow(a: Analysis, w: Vec, includeStart = true): Row {
   return summaryRow(a.returns, w, a.m, a.S, a.rf, includeStart);
 }
 
+/**
+ * One standard error of a portfolio's Sharpe ratio, on its own daily returns at the analysis' rate: the
+ * figure the band's plate and the scorecard print beside it. Null when it is not a finite number.
+ */
+export function finiteSE(a: Analysis, w: Vec): number | null {
+  const se = sharpeSE(portfolioReturns(a.returns, w), a.rf);
+  return Number.isFinite(se) ? se : null;
+}
+
 // ---- the tiles (1504-1530) --------------------------------------------------------------------------
 
 /** One tile's figure: the app's st.metric label, format and tooltip (1507-1511). */
@@ -88,6 +97,8 @@ export interface Tile {
   row: Row | null;
   /** The failure sentence, or null. */
   failed: string | null;
+  /** The Sharpe ratio's standard error on this portfolio's own daily returns (finiteSE), or null. */
+  se: number | null;
 }
 
 export function tiles(a: Analysis): Tile[] {
@@ -98,6 +109,7 @@ export function tiles(a: Analysis): Tile[] {
       title: TILE_TITLE[id],
       row: w ? portRow(a, w) : null,
       failed: w ? null : FAILED[id as "gmv" | "tangency"],
+      se: w ? finiteSE(a, w) : null,
     };
   });
 }
@@ -225,7 +237,8 @@ const shareHead = (id: SharePort, w: Vec | null) => (w ? SHARE_LABEL[id] : id ==
  * which it never shows, and beside them each portfolio's share of the return. risk_contribution
  * (974-979): w_i (S w)_i / w'S w. Return share: w_i m_i / w'm, which falls below 0% for an asset that
  * took from the portfolio's return and passes 100% when the others took from it; it is printed as it is.
- * Equal weight, GMV and Tangency always; Custom when the tab passes its mix.
+ * When the portfolio's own mean return is negative the shares are of a loss and both readings flip
+ * (shareNote says which). Equal weight, GMV and Tangency always; Custom when the tab passes its mix.
  */
 export function prcTable(a: Analysis, c: Custom | null = null): LoadState<TableData> {
   const ports = SHARE_PORTS.filter((id) => id !== "custom" || c !== null);
@@ -256,10 +269,14 @@ export function prcTable(a: Analysis, c: Custom | null = null): LoadState<TableD
 /**
  * The line under the share table: every return share outside 0% to 100%, named with its portfolio, and
  * what such a share means; and any portfolio whose mean return is zero, for which no share is defined.
+ * A share is a holding's part of its portfolio's mean return, so when that mean is a loss the reasons
+ * turn round: below 0% is a holding that earned while the portfolio lost, above 100% one that lost more
+ * than the whole portfolio. Those are listed apart, with their own reasons.
  * Null when every share is inside the range.
  */
 export function shareNote(a: Analysis, c: Custom | null): string | null {
   const out: string[] = [];
+  const lost: string[] = [];
   const none: string[] = [];
   for (const id of SHARE_PORTS) {
     const w = shareWeights(a, c, id);
@@ -269,8 +286,10 @@ export function shareNote(a: Analysis, c: Custom | null): string | null {
       none.push(SHARE_LABEL[id]);
       continue;
     }
+    const total = w.reduce((acc, x, i) => acc + x * a.m[i], 0);
+    const into = total < 0 ? lost : out;
     a.tickers.forEach((t, i) => {
-      if (ret[i] < 0 || ret[i] > 1) out.push(`${t} in ${SHARE_LABEL[id]} (${pct1(ret[i])})`);
+      if (ret[i] < 0 || ret[i] > 1) into.push(`${t} in ${SHARE_LABEL[id]} (${pct1(ret[i])})`);
     });
   }
   const parts: string[] = [];
@@ -278,6 +297,13 @@ export function shareNote(a: Analysis, c: Custom | null): string | null {
     parts.push(
       `Return shares outside 0% to 100% on this window: ${listing(out)}. Below 0% means the holding took from the portfolio's ` +
         `return (a negative mean return held long, or a positive one held short); above 100% means the other holdings together took from it.`,
+    );
+  }
+  if (lost.length) {
+    parts.push(
+      `Return shares outside 0% to 100% in a portfolio that lost on average over this window, so the shares are of that loss: ` +
+        `${listing(lost)}. There below 0% means the holding earned while its portfolio lost, and above 100% means the holding ` +
+        `lost more than its whole portfolio did.`,
     );
   }
   if (none.length) parts.push(`${listing(none)} averaged a zero return over this window, so no return share is defined for ${none.length === 1 ? "it" : "them"}.`);

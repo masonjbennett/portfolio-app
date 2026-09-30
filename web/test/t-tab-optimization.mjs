@@ -472,12 +472,13 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     wcap.endsWith(" GMV and Tangency are hypothetical: weights chosen with the whole period's prices."),
     "hypothetical: the wealth caption names GMV and Tangency as hypothetical, weights chosen with the whole period's prices", wcap);
 
-  // Every GMV and Tangency head in a table carries the sub-line; Equal-Weight, Custom and the benchmark do not.
+  // Every GMV and Tangency head in a table carries the sub-line; Equal-Weight, Custom and the benchmark do not
+  // (the scorecard's Custom head may say instead that its weights are equal, which is not the fitted line).
   const own = (th) => (th.firstChild?.nodeType === 3 ? th.firstChild.textContent : text(th)).trim();
   const heads = [...r.container.querySelectorAll(".tbl thead th, .tbl tbody th")].map((th) => ({ own: own(th), sub: th.querySelector(".tbl-sub") ? text(th.querySelector(".tbl-sub")) : null }));
   const fitted = heads.filter((x) => /^(GMV|Tangency)\b/.test(x.own));
   const plain = heads.filter((x) => /^(Equal-Weight|Custom|S&P 500)/.test(x.own));
-  check(fitted.length === 12 && fitted.every((x) => x.sub === FITTED) && plain.length >= 3 && plain.every((x) => x.sub === null),
+  check(fitted.length === 12 && fitted.every((x) => x.sub === FITTED) && plain.length >= 3 && plain.every((x) => x.sub === null || (x.own === "Custom" && x.sub !== FITTED)),
     "fitted-heads: every GMV and Tangency head in the tab's tables says weights chosen on this window, and no Equal-Weight head does",
     heads.map((x) => `${x.own}=${x.sub}`).join(" | "));
   const tiles = [...r.container.querySelectorAll(".opt-tile")].map((t) => [t.dataset.port, t.querySelector(".opt-tile-sub") ? text(t.querySelector(".opt-tile-sub")) : null]);

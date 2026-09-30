@@ -110,6 +110,12 @@ export default function DotStrips({ a, redraws, set, seed, onRedraw }: DotStrips
                 : "No draws: the covariance matrix has no Cholesky factor."}
         </span>
       </div>
+      {ready && ready.belowRf > 0 ? (
+        <p className="opt-note opt-strips-below">
+          On {ready.belowRf} of {ready.count} draws no long-only mix earned more than the risk-free rate; on those draws the dot is
+          the single asset that fell least short of it.
+        </p>
+      ) : null}
       {rows ? (
         <ul className="opt-strip-list">
           {rows.map((r) => (

@@ -49,6 +49,7 @@ import {
   type CustomView,
 } from "./custom/model.ts";
 import "./custom/Custom.css";
+import { finiteSE } from "./optimization/model.ts";
 import { seedOf, useRedraws } from "./optimization/redraws.ts";
 import { scorecard, type RedrawState } from "./optimization/scorecard.ts";
 
@@ -144,11 +145,22 @@ function Builder({ a, v, weights, setWeights }: { a: Analysis; v: CustomView; we
 function Metrics({ a, v, level }: { a: Analysis; v: CustomView; level: Level }) {
   const w = customWeights(v);
   const p = useMemo(() => (w ? customMetrics(a, w) : null), [a, w]);
+  // The Sharpe plate carries its standard error, as the Optimization tiles and the scorecard do.
+  const se = useMemo(() => (w ? finiteSE(a, w) : null), [a, w]);
   return (
     <section className="cust-section" aria-label="Custom portfolio figures">
       <div className="cust-plates">
         {PLATES.map((d) => (
-          <Plate key={d.key} label={d.label} value={p ? p[d.key] : null} format={d.format} tip={d.tip} level={level} allowShort={a.allowShort} />
+          <Plate
+            key={d.key}
+            label={d.label}
+            value={p ? p[d.key] : null}
+            format={d.format}
+            tip={d.tip}
+            level={level}
+            allowShort={a.allowShort}
+            se={d.key === "sharpe" ? se : null}
+          />
         ))}
       </div>
       <p className="cust-note">{p ? platesNote(a) : "No figures: the weights above were refused."}</p>

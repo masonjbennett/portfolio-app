@@ -141,7 +141,16 @@ function Tiles({ a, level }: SectionProps) {
           ) : null}
           <div className="opt-plates">
             {METRICS.map((m) => (
-              <Plate key={m.key} label={m.label} value={t.row ? t.row[m.key] : null} format={m.format} tip={m.tip} level={level} allowShort={a.allowShort} />
+              <Plate
+                key={m.key}
+                label={m.label}
+                value={t.row ? t.row[m.key] : null}
+                format={m.format}
+                tip={m.tip}
+                level={level}
+                allowShort={a.allowShort}
+                se={m.key === "sharpe" ? t.se : null}
+              />
             ))}
           </div>
         </div>

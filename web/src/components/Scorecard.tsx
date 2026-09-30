@@ -111,6 +111,7 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
         of weights rests on, all from {model.days.toLocaleString("en-US")} daily returns.
         {model.seed !== null ? ` The redraw row uses seed ${model.seed}.` : ""}
       </p>
+      {model.cut ? <p className="sc-note sc-cut">{model.cut}</p> : null}
       {pending ? (
         <p className="sc-note" role="status">
           {pending}

@@ -21,6 +21,7 @@ import { scorecardRow, type ScoreRow } from "../../lib/stats.ts";
 import type { ScoreTipKey } from "../../content/tooltips.ts";
 import type { Analysis, CellFormat, Column, FormatId, TableRow, TipKey } from "../../types.ts";
 import { FITTED, tableSpan } from "../caption.ts";
+import { isEqualWeight } from "../custom/model.ts";
 import { fitWindows } from "../sensitivity/model.ts";
 import { failedLabel, PORT_LABEL, weightsOf } from "./model.ts";
 
@@ -129,11 +130,11 @@ export const SCORE_METRICS: readonly ScoreMetric[] = [
   {
     id: "draws",
     group: "fragility",
-    label: `Largest holding's weight, 10th to 90th percentile over ${REDRAWS} redraws`,
+    label: `Spread of the largest holding's weight, 10th to 90th percentile, over ${REDRAWS} redraws`,
     format: "pct1",
     short: false,
     tip: "frag_draws",
-    unit: "weight points, decimal",
+    unit: "weight points, decimal (p90 − p10)",
     value: (f) => (f.frag?.draws ? f.frag.draws.width : null),
   },
   { id: "params", group: "fragility", label: "Parameters estimated", format: "int", short: false, tip: "frag_params", unit: "count", value: (f) => (f.frag ? f.frag.params : null) },
@@ -164,6 +165,8 @@ export interface ScoreModel {
   days: number;
   /** The redraws the draw row used: null while they are still being solved, or when there are none. */
   seed: number | null;
+  /** What the cut row's re-solve did to each solved portfolio, in words, or null when none was cut. */
+  cut: string | null;
 }
 
 /** The redraws the fragility group reads: ready (possibly none, when the covariance has no factor), or pending. */
@@ -176,12 +179,16 @@ function columnWeights(a: Analysis, c: Custom, id: ScoreColId): Vec | null {
   return weightsOf(a, id);
 }
 
+/** The sub-line under Custom's head when its weights are all 1/n: why its column repeats Equal-Weight's. */
+export const CUSTOM_EQUAL = "equal weights, so it matches Equal-Weight";
+
 /** The columns' heads: a failed solve and a refused mix keep their column, labelled. */
 export function scoreColumns(a: Analysis, c: Custom): ScoreColumn[] {
   return SCORE_COL_IDS.map((id): ScoreColumn => {
     if (id === "bench") return { id, label: a.benchLabel, sub: null, ok: true };
     const w = columnWeights(a, c, id);
-    if (id === "custom") return { id, label: w ? "Custom" : "Custom (not shown)", sub: null, ok: w !== null };
+    // Untyped tickers default to 1/n, so on a first visit the typed mix IS equal weight; the head says so.
+    if (id === "custom") return { id, label: w ? "Custom" : "Custom (not shown)", sub: w && isEqualWeight(w) ? CUSTOM_EQUAL : null, ok: w !== null };
     const fitted = id === "gmv" || id === "tangency";
     return { id, label: w ? PORT_LABEL[id] : failedLabel(id), sub: w && fitted ? FITTED : null, ok: w !== null };
   });
@@ -222,7 +229,8 @@ export function columnFigures(a: Analysis, c: Custom, redraws: Redraws | null): 
 export function scoreConventions(rf: number): string {
   return (
     `Annual figures at the ${format(rf, "pct2")} risk-free rate. Month rows and capture ratios compound the daily returns into ` +
-    `complete calendar months. Tracking error is the standard deviation of daily active returns × √252. VaR and expected ` +
+    `complete calendar months; capture is the portfolio's average monthly return over the benchmark's, in the months the ` +
+    `benchmark rose (up) or fell (down). Tracking error is the standard deviation of daily active returns × √252. VaR and expected ` +
     `shortfall are historical, one day, at 95%. Drawdowns count from the amount invested. Sharpe prints ± one standard error ` +
     `(Lo, adjusted for skew and fat tails). Every figure is in-sample.`
   );
@@ -250,7 +258,26 @@ export function scorecard(a: Analysis, c: Custom, redraws: RedrawState): ScoreMo
     conventions: scoreConventions(a.rf),
     days: a.dates.length,
     seed: value ? value.seed : null,
+    cut: cutWords(a, columns, figs),
   };
+}
+
+/**
+ * The cut row's re-solve in words, per solved column: which holding was cut, its weight before and after,
+ * and the largest holding once it was re-solved. The row itself prints only the weight lost. A column
+ * whose weights did not move at the printed precision (GMV reads no expected returns) is left to its zero.
+ */
+export function cutWords(a: Analysis, columns: ScoreColumn[], figs: ColFigures[]): string | null {
+  const one = (k: number): string | null => {
+    const cut = figs[k].frag?.cut;
+    if (!cut || cut.from === null || cut.weightBefore === null || cut.weightAfter === null || cut.to === null || cut.toWeight === null) return null;
+    if (cut.to === cut.from && format(cut.weightBefore, "pct1") === format(cut.weightAfter, "pct1")) return null;
+    const from = a.tickers[cut.from];
+    const moved = `${columns[k].label} held ${from} at ${format(cut.weightBefore, "pct1")}, ${format(cut.weightAfter, "pct1")} after the cut,`;
+    return cut.to === cut.from ? `${moved} and it stayed the largest holding` : `${moved} and its largest holding became ${a.tickers[cut.to]} at ${format(cut.toWeight, "pct1")}`;
+  };
+  const parts = columns.map((_, k) => one(k)).filter((x): x is string => x !== null);
+  return parts.length ? `With the largest holding's expected return cut by one standard error and the weights solved again: ${parts.join("; ")}.` : null;
 }
 
 /** The rows a view shows: the short view keeps the bold rows, the full view every row. */
@@ -301,10 +328,26 @@ export function scoreSheet(m: ScoreModel): ScoreSheet {
       rowFormats.push(l.metric.format);
     }
   }
+  // The file names what it was computed on, so a copy saved after Redraw still says which draw set it holds.
+  for (const [metric, unit] of sheetNotes(m)) {
+    const row: TableRow = { group: "Notes", metric, unit };
+    m.columns.forEach((c) => (row[c.id] = null));
+    rows.push(row);
+    rowFormats.push("text");
+  }
   return { columns, rows, rowFormats };
 }
 
 const finiteOrNull = (x: number | null) => (x !== null && Number.isFinite(x) ? x : null);
+
+/** The notes at the foot of the downloads: the window, the conventions (which carry the rate), the draw set. */
+export function sheetNotes(m: ScoreModel): [string, string][] {
+  return [
+    ["Window", m.span],
+    ["Conventions", m.conventions],
+    ["Redraw seed", m.seed !== null ? String(m.seed) : "none: the redraws were not solved"],
+  ];
+}
 
 /** A note on the fragility group, or null: why the draw row is still a dash for the solved portfolios. */
 export function drawRowNote(redraws: RedrawState): string | null {

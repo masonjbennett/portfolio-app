@@ -22,7 +22,8 @@ const { stripRows } = await import("../src/tabs/optimization/DotStrips.tsx");
 const Scorecard = (await import("../src/components/Scorecard.tsx")).default;
 const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
 const Custom = (await import("../src/tabs/Custom.tsx")).default;
-const { scorecardRow, returnShare } = await import("../src/lib/stats.ts");
+const { scorecardRow, returnShare, sharpeSE } = await import("../src/lib/stats.ts");
+const DotStrips = (await import("../src/tabs/optimization/DotStrips.tsx")).default;
 const { fragility, REDRAWS } = await import("../src/lib/robust.ts");
 const { DEFAULT_SEED } = await import("../src/lib/rng.ts");
 const { portfolioReturns, riskContribution } = await import("../src/lib/portfolio.ts");
@@ -65,7 +66,8 @@ for (const { label, a } of baskets) {
 
   // Column order, labels and the fitted sub-line.
   check(m.columns.map((x) => x.id).join() === "ew,gmv,tangency,custom,bench", tag("scorecard: column order is EW, GMV, Tangency, Custom, then the benchmark"), m.columns.map((x) => x.id).join());
-  check(m.columns[4].label === a.benchLabel && m.columns.map((x) => x.sub).join("|") === `|${FITTED}|${FITTED}||`,
+  // Custom may carry its own sub-line (equal weights), never the fitted one.
+  check(m.columns[4].label === a.benchLabel && m.columns.map((x) => (x.id === "custom" ? "" : (x.sub ?? ""))).join("|") === `|${FITTED}|${FITTED}||` && m.columns[3].sub !== FITTED,
     tag("scorecard: the benchmark under its display name; only GMV and Tangency say weights chosen on this window"));
 
   // The expected figures, from the engine directly.
@@ -226,7 +228,7 @@ for (const { label, a } of baskets) {
 
   // The downloads: every row, raw numbers, the SE its own row, each row in its own Excel format.
   const sheet = SC.scoreSheet(m);
-  check(sheet.rows.length === SC.SCORE_METRICS.length + 1 && sheet.rows.some((x) => x.metric === "Sharpe standard error" && x.ew === m.lines.find((l) => l.metric.id === "sharpe").cells[0].se),
+  check(sheet.rows.length === SC.SCORE_METRICS.length + 1 + SC.sheetNotes(m).length && sheet.rows.some((x) => x.metric === "Sharpe standard error" && x.ew === m.lines.find((l) => l.metric.id === "sharpe").cells[0].se),
     "downloads: every row is in the file, whichever view is on screen, and the Sharpe standard error is its own row");
   const ws = worksheet(sheet.columns, sheet.rows, sheet.rowFormats);
   const at = (metric, col) => ws[`${String.fromCharCode(65 + sheet.columns.findIndex((x) => x.key === col))}${sheet.rows.findIndex((x) => x.metric === metric) + 2}`];
@@ -287,8 +289,97 @@ for (const { label, a } of baskets) {
   const want = scorecardRow(portfolioReturns(a.returns, v.w), a.bench, a.dates, a.prices.dates[0], a.rf);
   const annual = [...sc.querySelector('tr[data-metric="annual"]').children].map(text);
   check(annual[4] === format(want.annualReturn, "pct2"), "custom: its column is the engine's figure for the typed mix", annual.join(" "));
+  const sharpePlate = [...r.container.querySelectorAll(".cust-plates .plate")].find((p) => text(p.querySelector(".plate-label span")) === "Sharpe");
+  const plateSE = sharpePlate?.querySelector(".plate-se") ? text(sharpePlate.querySelector(".plate-se")) : null;
+  check(plateSE === `± ${format(want.sharpeSE, "num3")} SE` && r.container.querySelectorAll(".cust-plates .plate-se").length === 1,
+    "sharpe-se: the Custom tab's Sharpe plate prints the ± the scorecard gives its column", plateSE ?? "(none)");
   r.unmount();
 }
+
+// ---- (f) words that must match the figures beside them ------------------------------------------------
+{
+  // The compound-return tip claims nothing the page's own figures contradict: on the mega-cap fixture the
+  // compound rate sits ABOVE the mean daily return × 252 for the tangency portfolio.
+  const mc = fixtureAnalysis("megacap");
+  const row = scorecardRow(portfolioReturns(mc.returns, mc.tangency.w), mc.bench, mc.dates, mc.prices.dates[0], mc.rf);
+  const fin = tipText("annual_return", "finance");
+  check(row.annualReturn > row.mu && !/lower than the (arithmetic )?mean/i.test(fin) && /either side/.test(fin),
+    "tips: the compound-return tip allows the compound rate on either side of the mean × 252, as the mega-cap figures require", `${row.annualReturn} ${row.mu} | ${fin}`);
+
+  // A portfolio that loses on average: its shares are of a loss, and the reasons say so.
+  const e = exampleAnalysis();
+  const lossy = { ...e, m: e.m.map((x, i) => (i === 0 ? 4e-4 : -5e-4)) };
+  const c = M.customWeights(lossy, {});
+  const rs = returnShare(lossy.ew, lossy.m).share;
+  const note = M.shareNote(lossy, c) ?? "";
+  const LOST = "in a portfolio that lost on average";
+  const lossPart = note.includes(LOST) ? note.slice(note.indexOf(LOST)) : "";
+  const gainPart = note.includes(LOST) ? note.slice(0, note.indexOf(LOST)) : note;
+  const entry = `${lossy.tickers[0]} in Equal-Weight (${format(rs[0], "pct1")})`;
+  check(rs[0] < 0 && lossPart.includes(entry) && !gainPart.includes(entry) &&
+    /below 0% means the holding earned while its portfolio lost/.test(lossPart) && /lost more than its whole portfolio did/.test(lossPart),
+    "return-share: in a portfolio with a negative mean return a share below 0% is a holding that earned, and is said so", note);
+
+  // The Sharpe tiles on the Optimization tab carry the same ± as the scorecard below them.
+  const a = exampleAnalysis();
+  const r = quiet(() => render(h(Optimization, tabProps(a))));
+  await settle();
+  const plateSE = (root) => {
+    const plate = [...(root?.querySelectorAll(".plate") ?? [])].find((p) => text(p.querySelector(".plate-label span")) === "Sharpe");
+    return plate?.querySelector(".plate-se") ? text(plate.querySelector(".plate-se")) : null;
+  };
+  const wOf = { ew: a.ew, gmv: a.gmv.w, tangency: a.tangency.w };
+  const tiles = Object.entries(wOf).map(([id, w]) => [plateSE(r.container.querySelector(`.opt-tile[data-port="${id}"]`)), `± ${format(sharpeSE(portfolioReturns(a.returns, w), a.rf), "num3")} SE`]);
+  check(tiles.every(([got, want]) => got === want) && r.container.querySelectorAll(".opt-tile .plate-se").length === 3,
+    "sharpe-se: each Sharpe tile on the Optimization tab prints its ± standard error, and only the Sharpe plate", JSON.stringify(tiles));
+
+  // The Custom head says why its column repeats Equal-Weight on a first visit, and nothing once a mix is typed.
+  const heads = SC.scoreColumns(a, M.customWeights(a, {}));
+  // Typed weights are held to the 0 to 1 range, so an uneven mix is typed as fractions.
+  const typed = SC.scoreColumns(a, M.customWeights(a, Object.fromEntries(a.tickers.map((t, i) => [t, (i + 1) / 10]))));
+  const customHead = r.container.querySelector('.tbl.sc thead th[data-col="custom"]');
+  check(heads.find((x) => x.id === "custom").sub === SC.CUSTOM_EQUAL && typed.find((x) => x.id === "custom").sub === null && text(customHead ?? {}).includes(SC.CUSTOM_EQUAL),
+    "scorecard: at equal weights the Custom head says it matches Equal-Weight; a typed mix carries no such line", text(customHead ?? {}));
+
+  // Capture's convention is printed, and the cut row's re-solve names the largest holding after it.
+  const m = SC.scorecard(a, M.customWeights(a, {}), solveRedraws(a, DEFAULT_SEED));
+  check(/average monthly return over the benchmark's/.test(m.conventions) && /rose \(up\) or fell \(down\)/.test(m.conventions),
+    "caption: capture is said to be a ratio of average monthly returns", m.conventions);
+  const tanCut = SC.columnFigures(a, M.customWeights(a, {}), null)[2].frag.cut;
+  const after = tanCut.to === tanCut.from ? "and it stayed the largest holding" : `and its largest holding became ${a.tickers[tanCut.to]} at ${format(tanCut.toWeight, "pct1")}`;
+  check(m.cut !== null && m.cut.includes(`Tangency held ${a.tickers[tanCut.from]} at ${format(tanCut.weightBefore, "pct1")}, ${format(tanCut.weightAfter, "pct1")} after the cut, ${after}`) && !m.cut.includes("GMV held") &&
+    text(r.container.querySelector(".sc-cut") ?? {}) === m.cut,
+    "fragility: the cut row's note names the holding cut and the largest holding after the re-solve", m.cut ?? "(none)");
+  check(/^Spread of the largest holding's weight, 10th to 90th percentile/.test(SC.SCORE_METRICS.find((x) => x.id === "draws").label),
+    "fragility: the draw row says it is a spread of weights, not a weight");
+
+  // The download names its window, its rate and its draw set, and a Redraw's file names the new seed.
+  const notes = (mm) => Object.fromEntries(SC.scoreSheet(mm).rows.filter((x) => x.group === "Notes").map((x) => [x.metric, x.unit]));
+  const next = SC.scorecard(a, M.customWeights(a, {}), solveRedraws(a, seedOf(1)));
+  check(notes(m).Window === m.span && notes(m).Conventions.includes(format(a.rf, "pct2")) && notes(m)["Redraw seed"] === String(DEFAULT_SEED) && notes(next)["Redraw seed"] === String(seedOf(1)),
+    "downloads: the file carries its window, rate and redraw seed, and a Redraw's file names the new seed", JSON.stringify(notes(next)));
+  r.unmount();
+
+  // On a phone the strip spans the width under its ticker and range, not what is left beside them.
+  const ocss = readFileSync(new URL("../src/tabs/optimization/Optimization.css", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const phone = ocss.slice(ocss.lastIndexOf("@media (max-width: 760px)"));
+  check(/\.opt-strip \{[^}]*grid-template-areas:\s*"name range"\s*"strip strip";/.test(phone) && /\.opt-strip-svg,\s*\.opt-strip-ends \{\s*grid-area: strip;/.test(phone),
+    "strips: on a phone the strip takes the whole width, its ticker and range on the line above");
+
+  // Draws on which no long-only mix earns more than the rate are counted in words, not silently mixed in.
+  const rd = solveRedraws(a, DEFAULT_SEED);
+  const strips = (value) => {
+    const s = quiet(() => render(h(DotStrips, { a, redraws: { status: "ready", value }, set: 0, seed: value.seed, onRedraw: () => {} })));
+    const t = text(s.container);
+    s.unmount();
+    return t;
+  };
+  const below = strips({ ...rd.value, belowRf: 7 });
+  check(below.includes(`On 7 of ${rd.value.count} draws no long-only mix earned more than the risk-free rate`) && !strips({ ...rd.value, belowRf: 0 }).includes("earned more than the risk-free rate") &&
+    !/out-of-sample|\bbeat|\bwins?\b|outperform|% of draws/i.test(below),
+    "strips: draws below the risk-free rate are counted in words, and only when there are any", below.slice(0, 400));
+}
+
 
 check(!Object.keys((await import("../src/content/tooltips.json", { with: { type: "json" } })).default).some((k) => isScoreTip(k)),
   "tips: no scorecard key is in the app's dumped tooltips");

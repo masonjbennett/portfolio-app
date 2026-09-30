@@ -183,9 +183,24 @@
   margin: var(--space-3) 0;
 }
 
+/* On a phone the ticker and its 10th-to-90th range share the first line and the strip takes the whole
+   width under them, so two hundred dots are not squeezed into what is left beside two labels. */
 @media (max-width: 760px) {
   .opt-strip {
-    grid-template-columns: 3.5em minmax(0, 1fr) 7.5em;
-    gap: var(--space-2);
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name range"
+      "strip strip";
+    gap: 2px var(--space-2);
+  }
+  .opt-strip-name {
+    grid-area: name;
+  }
+  .opt-strip-range {
+    grid-area: range;
+  }
+  .opt-strip-svg,
+  .opt-strip-ends {
+    grid-area: strip;
   }
 }
