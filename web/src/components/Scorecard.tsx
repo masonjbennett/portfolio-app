@@ -8,7 +8,8 @@
 //
 // It shares Table's ledger styles (.tbl), so it scrolls sideways inside its own box on a phone with the
 // figure column frozen at the left, and its caption carries the same title and span lines, plus a third
-// with the conventions every row follows.
+// with the conventions every row follows. The title line is clipped from the screen (Scorecard.css): the
+// section's heading right above says the same word, and the caption keeps it for a screen reader.
 //
 // Each row's label carries its explanation: an info mark where the tooltip component takes the key, and
 // every visible row's text at the chosen level under "What each row means", which works on touch too.

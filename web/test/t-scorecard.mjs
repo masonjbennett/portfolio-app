@@ -169,6 +169,11 @@ for (const { label, a } of baskets) {
     "scorecard: every benchmark cell, and only those, carries the heavier rule");
   const css = readFileSync(new URL("../src/components/Scorecard.css", import.meta.url), "utf8");
   check(/\.sc \.sc-bench \{[^}]*border-left: var\(--line-bar\) solid/.test(css), "scorecard: the heavier rule is the bar-weight line, not a hairline");
+  // The caption's title line repeats the section heading right above it: clipped from the screen, and kept
+  // in the caption so the table still has its name for a screen reader (display: none would drop it).
+  check(/\.sc caption \.tbl-title \{[^}]*position: absolute;[^}]*clip-path: inset\(50%\);/.test(css) && !/\.sc caption \.tbl-title \{[^}]*display: none/.test(css)
+    && text(r.container.querySelector("caption .tbl-title")) === m.title,
+    "caption: the title line is clipped from the screen, not removed, so the table keeps its name");
   // jsdom lays nothing out, so the phone rule is read from the sheet: under the 760px query the frozen label
   // column wraps inside a bounded width, and the conventions line is held to the screen.
   {
@@ -256,6 +261,9 @@ for (const { label, a } of baskets) {
   const r = quiet(() => render(h(Optimization, tabProps(a))));
   const strips = () => r.container.querySelector(".opt-strips");
   check(strips() && !strips().dataset.seed && /Solving the draws/.test(text(strips())), "strips: the first render does not solve the draws; it says they are pending");
+  // The clipped caption title loses nothing only while the heading above it says the same.
+  check(text(r.container.querySelector("#opt-scorecard")) === text(r.container.querySelector('section[aria-labelledby="opt-scorecard"] caption .tbl-title')),
+    "caption: on Optimization the clipped title is what the section heading prints");
   await settle();
   check(strips().dataset.seed === String(DEFAULT_SEED) && strips().querySelectorAll(".opt-strip[data-ticker]").length === a.tickers.length,
     "strips: after paint, one strip per asset from the fixed seed");
@@ -285,6 +293,8 @@ for (const { label, a } of baskets) {
   const sc = r.container.querySelector('section[aria-labelledby="cust-scorecard"] .tbl.sc');
   const focus = sc?.querySelector("thead .sc-focus");
   check(sc && focus && focus.dataset.col === "custom" && [...sc.querySelectorAll("thead th")].length === 6, "custom: the Custom tab shows the same scorecard, the Custom column set in bold");
+  check(text(r.container.querySelector("#cust-scorecard")) === text(sc.querySelector("caption .tbl-title")),
+    "caption: on Custom the clipped title is what the section heading prints");
   const v = M.customWeights(a, props.weights);
   const want = scorecardRow(portfolioReturns(a.returns, v.w), a.bench, a.dates, a.prices.dates[0], a.rf);
   const annual = [...sc.querySelector('tr[data-metric="annual"]').children].map(text);
