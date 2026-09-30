@@ -87,7 +87,7 @@
   color: var(--color-ink2);
 }
 
-/* On a phone the what-if panel waits behind this line, below the plates, in the published strip's small print. */
+/* The what-if panel waits behind this line, below the plates, in the published strip's small print, at every width. */
 .band-whatif-fold {
   margin-top: var(--space-4);
 }

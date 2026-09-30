@@ -600,11 +600,14 @@ function rail(over = {}) {
   check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector("aside [name=tickers]"), "desktop: the rail stands in the left column, no chip");
   check(!desk.container.querySelector(".band-published details") && text(desk.container.querySelector(".band-published blockquote") ?? {}) === P.CARD_SENTENCE,
     "desktop: the published sentence is printed open");
+  // Folded on a desktop too: printed open it pushed the tab bar below a 900 px first screen.
   const dPlates = desk.container.querySelector(".band-plates");
-  const dPanel = desk.container.querySelector(".band section.whatif");
-  check(!!dPlates && !!dPanel && !dPanel.closest("details") && !!(dPlates.compareDocumentPosition(dPanel) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
-    !!dPanel.querySelector("input[type=range]"),
-    "desktop: the what-if panel is printed open below the plates");
+  const dFold = desk.container.querySelector(".band details.band-whatif-fold");
+  check(!!dPlates && !!dFold && !dFold.open && !!dFold.querySelector("section.whatif input[type=range]") && !dFold.contains(dPlates) &&
+    !!(dPlates.compareDocumentPosition(dFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
+    text(dFold.querySelector("summary") ?? {}) === "What if one expected return were different?" &&
+    desk.container.querySelectorAll("section.whatif").length === 1,
+    "desktop: the what-if panel folds behind the same closed disclosure below the plates", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
   desk.unmount();
 }
 

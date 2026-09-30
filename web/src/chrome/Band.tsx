@@ -135,16 +135,15 @@ export function PublishedResult() {
   );
 }
 
-// The what-if panel, open on a desktop and folded shut on a phone.
+// The what-if panel, folded shut below the plates at every width. Printed open on a desktop it stood
+// about 350 px tall, which put the tab bar below the first screen of a 1440 x 900 display; folded, the
+// question stays in view as the way in and the tabs stay on the first screen.
 function WhatIfFold({ a }: { a: Analysis }) {
-  const phone = usePhone();
-  return phone ? (
+  return (
     <details className="band-whatif-fold">
       <summary>What if one expected return were different?</summary>
       <WhatIf a={a} />
     </details>
-  ) : (
-    <WhatIf a={a} />
   );
 }
 
