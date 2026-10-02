@@ -11,9 +11,11 @@
 //
 // On a desktop wide enough for both (./custom/layout.ts), the weights and the frontier sit side by side,
 // the sliders on the left and the frontier on the right, so moving a slider moves the custom dot in
-// view; the five figures run full width beneath the pair. That is CSS alone: the markup keeps the order
-// weights, figures, frontier, so the keyboard walks the tab as it always has and every narrower width,
-// a phone included, stacks exactly as before. Only the frontier's height follows the arrangement.
+// view; the five figures run full width above the pair, so a slider's effect on them is in view too. That
+// is CSS alone: the markup keeps the order weights, figures, frontier, so the keyboard walks the tab as it
+// always has and every narrower width, a phone included, stacks exactly as before. Only the frontier's
+// height follows the arrangement. Because the figures and the frontier stand above, beside or below the
+// weights depending on the width, neither says where the weights are when it reports them refused.
 //
 // Each section sits inside its own Boundary, keyed on the weights, so a section that throws leaves one
 // line naming it, the rest keeps rendering, and a change of weights tries it again.
@@ -173,7 +175,7 @@ const Metrics = memo(function Metrics({ a, v, level }: { a: Analysis; v: CustomV
           />
         ))}
       </div>
-      <p className="cust-note">{p ? platesNote(a) : "No figures: the weights above were refused."}</p>
+      <p className="cust-note">{p ? platesNote(a) : "No figures: the weights entered were refused."}</p>
     </section>
   );
 });
@@ -256,8 +258,9 @@ export default function Custom({ analysis: a, settings, level, weights, setWeigh
         <Headline a={a} v={v} />
       </Boundary>
       <Slug>Custom Portfolio Builder</Slug>
-      {/* Weights, figures, frontier: the reading and keyboard order at every width. Custom.css sets the
-          frontier beside the weights on a wide desktop. */}
+      {/* Weights, figures, frontier: the keyboard order at every width, and the reading order below the
+          side-by-side width. On a wide desktop Custom.css runs the figures full width above the pair and
+          sets the frontier beside the weights. */}
       <div className="cust-pair">
         <Boundary name="Custom weights" resetKey={v}>
           <Builder a={a} v={v} weights={weights} setWeights={setWeights} />

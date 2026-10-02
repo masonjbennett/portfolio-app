@@ -194,7 +194,7 @@ function close2(x, y) {
   const short = fixtureAnalysis("cross", { allowShort: true });
   check(M.frontierTitle(short, M.customView(short, byTicker(short, short.tangency.w))).includes(`no mix with weights inside [${MINUS}1, 1] returns`),
     "frontier title: with shorting on, it names the bounds");
-  check(M.frontierTitle(short, M.customView(short, byTicker(short, [-0.2, -0.2]))) === "The frontier with no custom portfolio on it: the weights above were refused",
+  check(M.frontierTitle(short, M.customView(short, byTicker(short, [-0.2, -0.2]))) === "The frontier with no custom portfolio on it: the weights entered were refused",
     "frontier title: refused weights say so");
 }
 

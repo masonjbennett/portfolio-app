@@ -1,10 +1,11 @@
 // The Custom tab's arrangement (src/tabs/Custom.tsx, src/tabs/custom/Custom.css, src/tabs/custom/layout.ts):
-// on a desktop wide enough for both, the weights on the left and the frontier on the right; stacked below
-// that width, a phone included, exactly in the order the sections have always stood.
+// on a desktop wide enough for both, the figures full width above, then the weights on the left and the
+// frontier on the right; stacked below that width, a phone included, exactly in the order the sections
+// have always stood.
 //
 // (a) The stylesheet, read as text (jsdom lays nothing out): the side-by-side rule sits under one
-//     min-width media query whose number is SIDE_BY_SIDE_MIN_PX, the weights in the left area, the
-//     frontier in the right, the figures beneath both; outside that query nothing places, orders or
+//     min-width media query whose number is SIDE_BY_SIDE_MIN_PX, the figures above both, the weights
+//     in the left area, the frontier in the right; outside that query nothing places, orders or
 //     displays the pair, so every narrower width stacks in markup order; the desktop and phone rules
 //     for the editor and the tiles are the ones they were.
 // (b) The markup: weights, figures, frontier inside the pair, in that order, between the builder's
@@ -70,11 +71,11 @@ check(wide.length === 1 && wide[0].cond === L.SIDE_BY_SIDE_QUERY && L.SIDE_BY_SI
   const rs = rules(wide[0]?.body ?? "");
   const pair = pick(rs, ".cust-pair");
   const tracks = (pair["grid-template-columns"] ?? "").match(/minmax\([^)]*\)|[\d.]+fr/g) ?? [];
-  check(pair.display === "grid" && pair["grid-template-areas"] === `"weights frontier" "figures figures"` && tracks.length === 2 &&
+  check(pair.display === "grid" && pair["grid-template-areas"] === `"figures figures" "weights frontier"` && tracks.length === 2 &&
     pick(rs, ".cust-pair > .cust-section--weights")["grid-area"] === "weights" &&
     pick(rs, ".cust-pair > .cust-section--frontier")["grid-area"] === "frontier" &&
     pick(rs, ".cust-pair > .cust-section--figures")["grid-area"] === "figures",
-    "layout: side by side, the weights on the left, the frontier on the right, the figures beneath both", JSON.stringify(rs));
+    "layout: side by side, the figures above both, the weights on the left, the frontier on the right", JSON.stringify(rs));
   check(pick(rs, ".cust-pair .cust-editor")["grid-template-columns"] === "minmax(0, 1fr)",
     "layout: beside the frontier the slider rows run in one column");
 }
@@ -157,6 +158,15 @@ function centre(root, role) {
   check(rs.container.querySelector(".cust .frontier-chart")?.style.height === `${L.SIDE_FRONTIER_HEIGHT}px` && L.SIDE_FRONTIER_HEIGHT < 480,
     "height: beside the weights, the frontier is SIDE_FRONTIER_HEIGHT tall, shorter than stacked", rs.container.querySelector(".cust .frontier-chart")?.style.height);
   rs.unmount();
+
+  // The figures stand above the weights on a wide desktop and below them otherwise, the frontier beside
+  // or below: so with the weights refused, neither may say where the weights are.
+  const zero = Object.fromEntries(a.tickers.map((t) => [t, 0]));
+  const rz = quiet(() => render(h(Custom, tabProps(a, { weights: zero }))));
+  const said = ["section.cust-section--figures > p.cust-note", "section.cust-section--frontier .chart-title"].map((s) => text(rz.container.querySelector(s) ?? rz.container));
+  check(said.every((s) => /refused/.test(s) && !/\b(above|below|beside|left|right)\b/.test(s)),
+    "refused: the figures and the frontier say the weights were refused without saying where they stand", said.join(" | ").slice(0, 300));
+  rz.unmount();
 }
 
 // (d) Moving a native range moves the dot to the new mix's risk and return. The chart's axes are read

@@ -20,11 +20,11 @@ export const SIDE_BY_SIDE_QUERY = `(min-width: ${SIDE_BY_SIDE_MIN_PX}px)`;
 
 /**
  * The frontier's plot height, in px, beside the weights. Shorter than the chart's stacked default so
- * that, with the tab scrolled to the weights, the first slider row and the whole plot are both on a
- * 1280 x 800 screen, the smaller of the two common laptop sizes, with room for a caption that wraps
- * to more lines in the narrower column.
+ * that, with the tab scrolled to the figures above the pair, the five figures, the first slider row
+ * and the whole plot are all on a 1280 x 800 screen, the smaller of the two common laptop sizes, with
+ * shorting on too, whose bounds add a line to the caption above the plot.
  */
-export const SIDE_FRONTIER_HEIGHT = 420;
+export const SIDE_FRONTIER_HEIGHT = 325;
 
 function query(): MediaQueryList | null {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(SIDE_BY_SIDE_QUERY) : null;

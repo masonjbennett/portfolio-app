@@ -261,7 +261,7 @@ const ON_FRONTIER = 5e-5;
  * return is below the GMV's. Literal: every figure in it is printed from the numbers compared.
  */
 export function frontierTitle(a: Analysis, v: CustomView): string {
-  if (!v.custom.ok) return "The frontier with no custom portfolio on it: the weights above were refused";
+  if (!v.custom.ok) return "The frontier with no custom portfolio on it: the weights entered were refused";
   const p = customMetrics(a, v.custom.w);
   const plain = `The custom mix returns ${pct(p.mu)} a year at ${pct(p.sigma)} volatility`;
   if (!a.gmv || !Number.isFinite(p.mu) || !Number.isFinite(p.sigma)) return plain;
