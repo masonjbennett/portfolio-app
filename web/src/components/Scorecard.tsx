@@ -68,11 +68,18 @@ export const BOOK_LINK = "Download Excel, with formulas";
 /** The line beside the button while the book is being built. */
 export const BOOK_BUSY = "Building the workbook…";
 
+/** The line beside the button when no path could build the book. */
+export const BOOK_FAILED = "The workbook with formulas could not be built. Download Excel holds the same figures as values.";
+
 // The workbook of formulas: its builder is imported on the click, so the page's first load never carries it.
 // It renders as a fragment, so it sits in the same row as the CSV and Excel buttons.
 //
 // While a build runs, a second click does nothing, and leaving the tab (this unmounts) cancels it: the worker
 // is ended and no file is saved later.
+//
+// The busy line and the failure line share one live region, on the page from the first render and empty while
+// idle, so a screen reader announces the words put into it: many announce only a change inside a region that
+// already exists, not a region inserted with its text.
 function BookLink({ model, book }: { model: ScoreModel; book: ScoreBookSource }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -112,16 +119,9 @@ function BookLink({ model, book }: { model: ScoreModel; book: ScoreBookSource })
       <button type="button" onClick={save} disabled={busy} aria-busy={busy} aria-label={`${BOOK_LINK}: ${model.title}`}>
         {BOOK_LINK}
       </button>
-      {busy && (
-        <span className="sc-busy" role="status">
-          {BOOK_BUSY}
-        </span>
-      )}
-      {failed && (
-        <span className="tbl-note" role="status">
-          The workbook with formulas could not be built. Download Excel holds the same figures as values.
-        </span>
-      )}
+      <span className={busy ? "sc-status sc-busy" : failed ? "sc-status tbl-note" : "sc-status"} role="status" data-note="book">
+        {busy ? BOOK_BUSY : failed ? BOOK_FAILED : ""}
+      </span>
     </>
   );
 }

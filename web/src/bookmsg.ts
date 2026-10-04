@@ -8,9 +8,11 @@
 // is the page's book cell for cell; test/t-bookjob.mjs holds the two equal.
 //
 // Each field of the model is copied BY NAME, never spread, so a field added to the model later does not
-// ride along unseen: it fails to type-check here until it is copied, and a function that slipped in would
-// fail the suite's check that the request is plain data. The analysis is plain data already (arrays of
-// numbers and strings) and goes as it is.
+// ride along unseen, and a function that slipped in would fail the suite's check that the request is plain
+// data. A required field added later fails to type-check in the copy until it is copied. An optional one would
+// not, so COPIED below lists every field of the three types, optional ones included: a field added to any of
+// them fails to type-check there until it is listed, and the suite holds the request to carrying every field
+// listed. The analysis is plain data already (arrays of numbers and strings) and goes as it is.
 import type { Analysis } from "./types.ts";
 import { SCORE_METRICS, type ScoreCell, type ScoreColumn, type ScoreModel } from "./tabs/optimization/scorecard.ts";
 
@@ -47,6 +49,16 @@ export type BookReply = { kind: "book"; name: string; bytes: ArrayBuffer } | { k
 export interface BookBuild extends BookSource {
   model: ScoreModel;
 }
+
+/**
+ * Every field of the scorecard model, its columns and its cells, the optional ones included, as the request
+ * carries them. Each list must name exactly its type's keys or this does not type-check.
+ */
+export const COPIED = {
+  model: { columns: true, lines: true, title: true, span: true, conventions: true, days: true, seed: true, cut: true, addedDraws: true, addedMissing: true },
+  column: { id: true, label: true, sub: true, ok: true, weights: true },
+  cell: { value: true, se: true },
+} as const satisfies { model: Record<keyof ScoreModel, true>; column: Record<keyof ScoreColumn, true>; cell: Record<keyof ScoreCell, true> };
 
 const cellOf = (c: ScoreCell): ScoreCell => (c.se === undefined ? { value: c.value } : { value: c.value, se: c.se });
 const columnOf = (c: ScoreColumn): ScoreColumn => ({ id: c.id, label: c.label, sub: c.sub, ok: c.ok, weights: c.weights ? [...c.weights] : null });
