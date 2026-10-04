@@ -1,7 +1,9 @@
 // The walk-forward result as published on masonjbennett.com (the project card and its method note), quoted
 // here and never recomputed. Every portfolio was fitted on all prior history, held unchanged for a year, then
-// refitted and rolled forward: six one-year holds. The page's own figures are in-sample, fitted to the window
-// on screen; these are what the same three constructions earned on years they had not seen.
+// refitted and rolled forward: six holds, of which the "year" is 252 trading days, so the refits drift a few
+// days into January and the sixth hold is partial (165 bars, Jan 9 to Sep 4 2026; web/test/oracle/walkforward.py
+// rebuilds the run). The page's own figures are in-sample, fitted to the window on screen; these are what the
+// same three constructions earned on years they had not seen.
 //
 // The figures are STRINGS, written exactly as the site prints them ("0.710" keeps its zero, the negative uses
 // the minus sign U+2212), so a quote can be compared character for character. Nothing here reads the site
@@ -37,5 +39,9 @@ export const PUBLISHED_SETS: readonly PublishedSet[] = [
   { name: "Cross-asset", tickers: ["VTI", "AGG", "GLD", "VNQ", "EFA"], ew: "0.704", gmv: "−0.247", tangency: "0.883" },
 ];
 
-/** The five mega-caps' maximum-Sharpe portfolio, scored on the years it was fitted to. */
+/**
+ * The five mega-caps' maximum-Sharpe portfolio, scored on the years it was fitted to: the whole window,
+ * 2019-01-02 to 2026-09-04, as the app's own page fits it. That window includes the years the walk-forward
+ * held out, so label it as fitted on the whole window, not as any one fold's in-sample figure.
+ */
 export const MEGA_CAP_IN_SAMPLE = "1.107";

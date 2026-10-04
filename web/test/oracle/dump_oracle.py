@@ -32,7 +32,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _slice import load, segment  # noqa: E402
 
 FIX = pathlib.Path(__file__).resolve().parents[1] / "fixtures"
-RF = 0.0389          # the 3-month bill the app's rf fetch filled on Sep 6 2026 (c0fcada)
+RF = 0.0389          # the 3-month bill the app's rf fetch filled on Sep 6 2026 (c0fcada); the published
+                     # walk-forward and the Sep 6 Sensitivity reading predate it: 2.0% (see walkforward.py).
+                     # The literal, not the app's 3.89 / 100.0 (4e-18 away): every fixture carries this
+                     # float as its "rf" and t-parity hands that same float to the port, so both engines
+                     # solve at one rate whichever spelling is used here.
 RF_HIGH = 0.30       # above every asset's mean in `cross`: nothing beats the risk-free rate
 W0 = 10000           # sidebar "Initial Amount ($)" default
 SAMPLE = 50          # long series are compared at every 50th row and the last

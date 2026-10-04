@@ -33,11 +33,15 @@ A grid key is E|A|H|S|R|J|O:
      back365  six calendar years counted back from the last bar: b_k = last bar's date minus k
               years; hold k is the bars in (b_k, b_(k-1)], fitted on every bar on or before b_k
      back252  six holds of 252 bars each, counted back from the last bar
-     fwd252   the first fit is the first 504 daily returns (two 252-day years, 2019 and 2020);
-              then holds of 252 returns each, counted FORWARD, each fitted on every return
-              before it, and the sixth hold runs on to the last bar. The 252-day year drifts a
-              few days against the calendar, so the re-fits land on Jan 3 2022, Jan 4 2023,
-              Jan 5 2024, Jan 7 2025 and Jan 9 2026.
+     fwd252   the first fit is the first 504 daily returns, which are the 505 price bars of
+              2019 and 2020 (2019 had 252 sessions, 2020 had 253); then holds of 252 returns
+              each, counted FORWARD, each fitted on every return before it, and the sixth hold
+              runs on to the last bar. The 252-day year drifts a few days against the calendar,
+              so the re-fits land on Jan 3 2022, Jan 4 2023, Jan 5 2024, Jan 7 2025 and Jan 9
+              2026, and with the Sep 4 last bar the sixth hold is 165 bars. On these prices
+              "the first 504 returns" and "the first hold starts on the first bar of 2021" are
+              the same schedule; on a basket that starts elsewhere they part, and this code
+              takes the bar count.
   H  what "held untouched" means. rebal: the weights are constant, so a day's return is r_t . w,
      the app's own wealth-line convention. drift: bought at the re-fit and left to drift with
      prices until the next re-fit.
@@ -46,7 +50,8 @@ A grid key is E|A|H|S|R|J|O:
      of the six holds' Sharpes, each by that formula. annual: each hold's compounded return R_k,
      then (mean R_k - rf) / std R_k (a partial hold's return as it is).
   R  the risk-free rate, used both inside the tangency objective and in the score. rf389 = 3.89%,
-     what the app's live 3-month bill fetch filled on Sep 6 2026; rf200 = 2%, the app's fallback;
+     what the app's live 3-month bill fetch filled on Sep 6 2026; rf200 = 2%, the app's fallback
+     and, until c0fcada added the live fetch, its hardcoded default;
      rf0 = none; rfhist = FRED's daily DGS3MO, where each fit's tangency uses the last value on or
      before its last bar and the score subtracts each day's rate / 252, carried forward over
      missing days (for `annual`, each hold's mean rate).
@@ -57,14 +62,18 @@ A grid key is E|A|H|S|R|J|O:
      calls given ftol 1e-15 and maxiter 1000, as dump_oracle.py's reference run.
 Equal weight is 1/N under the same H, S, R and J.
 
-    python web/test/oracle/walkforward.py grid <out.json>    every key, three baskets
+    python web/test/oracle/walkforward.py grid <out.json> [--rf-csv saved.csv]
+        every key, three baskets; FRED's DGS3MO CSV is saved beside the output, and --rf-csv
+        reads a saved one instead of fetching
     python web/test/oracle/walkforward.py read <grid.json>   which keys print the published figures
     python web/test/oracle/walkforward.py sensitivity [--end YYYY-MM-DD] [--rf 0.0389] [--tight]
         the Sensitivity tab's five lookback windows on the five mega-caps: each window's weights,
         plus the basket's average pairwise correlation and betas against the S&P 500
     python web/test/oracle/walkforward.py check [--key KEY] [--strict]
         exits 1 unless the nine Sharpes, the 1.107 and the five Apple weights print under the
-        pinned key (or KEY); --strict also requires the 95.3% AGG, which does not reproduce
+        pinned key (or KEY); --strict also requires the 95.3% AGG, which does not reproduce.
+        Prints each figure's distance to its rounding edge and, for a run walkforward.json
+        records, how far each raw value has moved from it
     python web/test/oracle/walkforward.py dump [out.json]
         writes web/test/fixtures/walkforward.json: the pinned run fold by fold, both solvers
 """
@@ -118,7 +127,10 @@ PUBLISHED = {
     "sectors7": {"ew": "0.915", "gmv": "0.450", "tan": "0.661"},
     "cross": {"ew": "0.704", "gmv": "−0.247", "tan": "0.883"},
 }
-IN_SAMPLE = "1.107"      # the mega-cap maximum-Sharpe portfolio, in sample
+# The mega-cap maximum-Sharpe portfolio, in sample: fitted and scored on the whole window, first bar
+# to last, as the app's own page does. That window takes in the years the walk-forward held out, so
+# it is not any one fold's in-sample figure ("is" in a grid cell records those readings too).
+IN_SAMPLE = "1.107"
 AGG_2022 = "95.3%"       # minimum variance's AGG weight going into 2022, cross-asset
 APPLE_SENS = ["41.7%", "3.8%", "6.4%", "21.0%", "44.8%"]   # Sensitivity tab, Sep 6 2026
 
@@ -128,7 +140,10 @@ START = "2019-01-01"
 ANCHORS = ["cal20", "cal21p", "back365", "back252", "fwd252"]
 HOLDS = ["rebal", "drift"]
 SCORES = ["concat", "meanfold", "annual"]
-RATES = {"rf389": 0.0389, "rf200": 0.02, "rf0": 0.0, "rfhist": None}
+# Each rate as the app forms it: the sidebar's percent divided by 100.0. That is not always the
+# literal: 3.89 / 100.0 is 0.038900000000000004, and the solver's stopping point follows the
+# difference by about 1e-8. 2.0 / 100.0 is exactly 0.02.
+RATES = {"rf389": 3.89 / 100.0, "rf200": 2.0 / 100.0, "rf0": 0.0, "rfhist": None}
 CUTS = ["joined", "split"]
 OPTS = ["ship", "tight"]
 DGS3MO = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3MO&cosd=2018-12-01"
@@ -141,8 +156,14 @@ DGS3MO = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3MO&cosd=2018-12
 # the Sensitivity tab's Apple weights and the 1.107); returns computed once on the whole frame; the
 # app's own solver settings. Two of the nine sit close to a rounding edge: the sector ETFs' minimum
 # variance is 0.449504 (4e-6 above the 0.4495 that prints 0.450) and their equal weight 0.914541
-# (4e-5 above 0.9145). The tight solver moves the first to 0.450143, so that match rests on where
-# the shipping SLSQP stops, not on the exact optimum.
+# (4e-5 above 0.9145); so does the Sensitivity tab's two-year Apple weight, 0.038491 (9e-6 below the
+# 0.0385 that would print 3.9%). Four of the nine rest on where the shipping SLSQP stops rather than on the
+# exact optimum: solved exactly (the tight solver, which an active-set solve with its optimality
+# conditions checked confirms to 3e-8), the mega-caps' maximum Sharpe prints 0.660, the sector ETFs'
+# 0.662, and the cross-asset minimum variance and maximum Sharpe -0.248 and 0.884; the Sensitivity
+# tab's two-year Apple weight prints 3.9%. The sector ETFs' minimum variance is not among them:
+# solved exactly it is 0.450143, which prints 0.450 too. Its only risk is the edge, which is why
+# `check` prints each figure's distance to it and holds the raw values to walkforward.json.
 PINNED = "e0904|fwd252|rebal|concat|rf200|joined|ship"
 PINNED_WORDS = (
     "Prices from the first bar on or after 2019-01-01 through Fri 2026-09-04. Daily returns computed "
@@ -178,10 +199,17 @@ def prices_for(set_name, end):
     return df, tickers
 
 
-def fetch_rf_history():
-    """FRED's daily 3-month bill as a decimal, blanks dropped. One series per request."""
+def fetch_rf_text():
+    """FRED's daily 3-month bill as FRED sends it (CSV, percent). One series per request."""
     with urllib.request.urlopen(DGS3MO, timeout=30) as resp:
-        text = resp.read().decode("utf-8")
+        return resp.read().decode("utf-8")
+
+
+def fetch_rf_history(text=None):
+    """FRED's daily 3-month bill as a decimal, blanks dropped: from `text` (a saved copy of
+    FRED's CSV) when given, else fetched live."""
+    if text is None:
+        text = fetch_rf_text()
     s = pd.read_csv(io.StringIO(text), index_col=0, parse_dates=True).iloc[:, 0]
     s = pd.to_numeric(s, errors="coerce").dropna() / 100.0
     assert len(s) > 1000, "the DGS3MO pull came back short"
@@ -286,7 +314,7 @@ class Walk:
             return R @ w                                       # the app's wealth line
         grown = (1.0 + R).cumprod() @ w                        # value of $1 bought at the re-fit
         prev = grown.shift(1)
-        prev.iloc[0] = 1.0
+        prev.iloc[0] = float(np.sum(w))                        # what was bought: sum(w), 1 when the weights sum to 1
         return grown / prev - 1.0
 
     def sharpe_daily(self, r, rkey):
@@ -353,15 +381,35 @@ def key_of(e, a, h, s, r, j, o):
     return "|".join((e, a, h, s, r, j, o))
 
 
-def run_grid(out_path):
-    try:
-        rf_hist = fetch_rf_history()
+def rf_csv_beside(out_path):
+    """Where `grid` keeps the DGS3MO CSV it used: next to its output, so the rfhist cells can be
+    recomputed offline, or after FRED revises a value, with --rf-csv."""
+    p = pathlib.Path(out_path)
+    return p.with_name(p.stem + ".dgs3mo.csv")
+
+
+def run_grid(out_path, rf_csv=None):
+    if rf_csv is not None:
+        # A saved copy was asked for: read it or stop. Falling back to a live fetch here would
+        # mix two vintages of the rate without saying so.
+        text = pathlib.Path(rf_csv).read_text("utf-8")
+        rf_hist = fetch_rf_history(text)
         rates = list(RATES)
-        print(f"DGS3MO: {len(rf_hist)} values, {rf_hist.index[0].date()} .. {rf_hist.index[-1].date()}")
-    except Exception as exc:                       # noqa: BLE001
-        rf_hist = None
-        rates = [r for r in RATES if r != "rfhist"]
-        print(f"DGS3MO could not be fetched ({exc}); rfhist is left out of the grid")
+        print(f"DGS3MO from {rf_csv}: {len(rf_hist)} values, "
+              f"{rf_hist.index[0].date()} .. {rf_hist.index[-1].date()}")
+    else:
+        try:
+            text = fetch_rf_text()
+            rf_hist = fetch_rf_history(text)
+            rates = list(RATES)
+            saved = rf_csv_beside(out_path)
+            saved.write_text(text, "utf-8", newline="")
+            print(f"DGS3MO: {len(rf_hist)} values, {rf_hist.index[0].date()} .. "
+                  f"{rf_hist.index[-1].date()}; FRED's CSV saved to {saved}")
+        except Exception as exc:                       # noqa: BLE001
+            rf_hist = None
+            rates = [r for r in RATES if r != "rfhist"]
+            print(f"DGS3MO could not be fetched ({exc}); rfhist is left out of the grid")
     cells, failures = [], []
     for set_name in SETS:
         for e, end in ENDS.items():
@@ -508,37 +556,92 @@ def pinned_cells(key, rf_hist=None):
     return out
 
 
+RECORD = FIX / "walkforward.json"
+DRIFT_TOL = 1e-7     # how far a raw value may sit from walkforward.json before `check` names it
+
+
+def edge(x):
+    """Signed distance from x to the nearest boundary where its three-decimal print changes (an
+    x.xxx5), positive above it. A Sharpe printed to three decimals and a weight printed as a percent
+    to one decimal turn over at the same boundaries."""
+    return x - (round(x / 1e-3 - 0.5) + 0.5) * 1e-3
+
+
+def recorded(key):
+    """The raw values walkforward.json holds for `key`, or None when it does not record that run.
+    It records the pinned key under both solvers; the Apple weights only under the pinned solver."""
+    if not RECORD.exists():
+        return None
+    rec = json.loads(RECORD.read_text("utf-8"))
+    parts, o = key.split("|"), key.split("|")[6]
+    if rec["key"].split("|")[:6] != parts[:6] or any(o not in v for v in rec["sets"].values()):
+        return None
+    out = {(set_name, name): v for set_name, entry in rec["sets"].items()
+           for name, v in entry[o]["sharpe"].items()}
+    out["in_sample"] = rec["sets"]["megacap5"][o]["in_sample_tangency"]
+    out["agg"] = rec["sets"]["cross"][o]["gmv_agg_into_2022"]
+    if rec["key"] == key:
+        for w in rec["sets"]["megacap5"]["sensitivity_apple"]["windows"]:
+            out[("apple", w["label"])] = w["tangency_aapl"]
+    return out
+
+
 def check(key, strict):
-    """Exit 1 unless every published figure prints under `key`."""
+    """Exit 1 unless every published figure prints under `key`. Beside each figure: its distance to
+    the rounding edge, and, where walkforward.json records the run, how far the raw value has moved
+    from the recorded one (more than DRIFT_TOL is named DRIFT: a solver or library change has moved
+    where the run stops, which can flip a figure that sits near its edge)."""
     e, a, h, s, r, j, o = key.split("|")
     cells = pinned_cells(key)
-    bad = 0
+    rec_raw = recorded(key)
+    bad = drift = 0
 
-    def line(label, raw, shown, target, soft=False):
-        nonlocal bad
+    def line(label, raw, shown, target, soft=False, record_key=None):
+        nonlocal bad, drift
         ok = shown == target
         if not ok and not soft:
             bad += 1
         tag = "ok" if ok else ("KNOWN MISMATCH" if soft else "FAIL")
-        print(f"  {label:28s} raw {raw: .6f}  prints {shown:>7s}  published {target:>7s}  {tag}")
+        vs = ""
+        if rec_raw is not None and record_key in rec_raw:
+            moved = raw - rec_raw[record_key]
+            vs = f"  vs record {moved:+.1e}"
+            if abs(moved) > DRIFT_TOL:
+                drift += 1
+                tag += " DRIFT"
+        print(f"  {label:28s} raw {raw: .6f}  prints {shown:>7s}  published {target:>7s}"
+              f"  edge {edge(raw):+.1e}{vs}  {tag}")
 
     print(f"key {key}")
+    if rec_raw is None:
+        print(f"  ({RECORD.name} does not record this key: raw values are not compared with it)")
     for set_name, pub in PUBLISHED.items():
         rec = cells[set_name][1]
         for name, target in pub.items():
-            line(f"{set_name} {name}", rec[name], printed(rec[name]), target)
+            line(f"{set_name} {name}", rec[name], printed(rec[name]), target,
+                 record_key=(set_name, name))
     full = cells["megacap5"][1]["is"]["full"]
-    line("megacap5 tangency in sample", full, printed(full), IN_SAMPLE)
+    line("megacap5 tangency in sample", full, printed(full), IN_SAMPLE, record_key="in_sample")
     if r != "rfhist":
         _, _, _, rows = sensitivity_windows(ENDS[e], RATES[r], o)
         for row, target in zip(rows, APPLE_SENS):
             x = row["tan"].x[0]
-            line(f"Apple weight, {row['label']}", x, f"{x:.1%}", target)
+            line(f"Apple weight, {row['label']}", x, f"{x:.1%}", target,
+                 record_key=("apple", row["label"]))
+    else:
+        print("  Apple weights skipped: the Sensitivity tab solves at one constant rf, and an "
+              "rfhist key has none")
     agg = cells["cross"][1]["agg2022"]
     # The cross-asset sentence ("held 95.3% AGG going into 2022") does not reproduce under the key
     # that prints the nine Sharpes: the fit through Dec 31 2021 holds 95.08%. It is reported here,
     # and fails the run only under --strict, so this check stays a working gate on the nine.
-    line("cross GMV AGG into 2022", agg, f"{agg:.1%}", AGG_2022, soft=not strict)
+    # The soft line is meant to be temporary: once the Method Note's sentence is corrected, set
+    # AGG_2022 to the new string, make this line hard like the others and delete --strict.
+    line("cross GMV AGG into 2022", agg, f"{agg:.1%}", AGG_2022, soft=not strict,
+         record_key="agg")
+    if drift:
+        print(f"{drift} raw value(s) moved more than {DRIFT_TOL:g} from {RECORD.name}: the run no "
+              "longer stops where the recorded one did. Find out why before re-dumping it.")
     if bad:
         print(f"{bad} published figure(s) do not print")
     elif f"{agg:.1%}" != AGG_2022:
@@ -599,6 +702,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     g = sub.add_parser("grid")
     g.add_argument("out")
+    g.add_argument("--rf-csv", default=None,
+                   help="read DGS3MO from this saved CSV instead of fetching it from FRED")
     r = sub.add_parser("read")
     r.add_argument("grid")
     s = sub.add_parser("sensitivity")
@@ -612,7 +717,7 @@ def main():
     d.add_argument("out", nargs="?", default=str(FIX / "walkforward.json"))
     a = ap.parse_args()
     if a.cmd == "grid":
-        run_grid(a.out)
+        run_grid(a.out, a.rf_csv)
     elif a.cmd == "read":
         read_grid(a.grid)
     elif a.cmd == "sensitivity":
