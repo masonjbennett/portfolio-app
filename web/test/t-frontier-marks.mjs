@@ -43,6 +43,11 @@ const addedFor = (a) =>
 
 // The two baskets, long-only and shorting; the page's chart widths, measured in Chromium on the
 // Optimization tab (the frontier's box at a 1440px window with its scrollbar, and at 375px).
+// jsdom has no layout, so these cannot be derived here: they are the page's, and they go stale when the
+// layout moves. Re-measure after any change to the page's widths, gutters or the frontier's frame: open
+// /?tab=optimization at 1440 x 900 and at 375 x 812 and read
+//   document.querySelector(".frontier-chart").getBoundingClientRect().width
+// at each; put the two numbers here, and the KEYED cases below follow them.
 const BASKETS = [
   ["cross-asset example", (o) => exampleAnalysis(o)],
   ["mega-cap fixture", (o) => fixtureAnalysis("megacap", o)],
@@ -213,6 +218,13 @@ const SHAPE_APART = 0.3;
   check(order.length === 8 && order.lastIndexOf("mark") < order.indexOf("added"), "outlines: the added markers are drawn over the four portfolio markers", order.join(","));
   check(new Set(Object.values(F.ADDED_GLYPH)).size === ADDED_IDS.length && ADDED_IDS.every((id) => F.ADDED_GLYPH[id]),
     "outlines: every construction has an outline, and no two share one");
+  // Which outline marks which construction is a choice a reader learns once and reads on every chart after,
+  // so it is pinned: swapping two of them must fail here, not pass because the set of shapes is the same.
+  const GLYPH_OF = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.cap": "saltire", rp: "triangle-right" };
+  const onChart = added.map((x) => [x.id, root.querySelector(`.frontier-added--${x.id.replace(".", "-")} .frontier-glyph`)?.getAttribute("data-glyph")]);
+  check(JSON.stringify(F.ADDED_GLYPH) === JSON.stringify(GLYPH_OF) && onChart.length === ADDED_IDS.length && onChart.every(([id, g]) => g === GLYPH_OF[id]),
+    "outlines: each construction keeps its own outline (last year an hourglass, shrunk means a wye, capped a saltire, risk parity a right triangle), on the chart too",
+    onChart.map(([id, g]) => `${id}=${g}`).join(" "));
   const strangers = [];
   for (const el of root.querySelectorAll("*")) {
     for (const k of ["fill", "stroke"]) {
