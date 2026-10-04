@@ -8,6 +8,11 @@
 // shapes tangency() and gmv() take); `rf` is the ANNUAL risk-free rate; `T` is the number of daily return
 // rows the window's estimates came from. Every expected return this module RETURNS is ANNUAL and a
 // decimal (0.12 is 12% a year), and every weight is a decimal fraction of the portfolio (0.45 is 45%).
+//
+// The four added constructions (src/lib/constructions.ts) get the same what-ifs through solveAdded(): each
+// is re-solved, the same way it was built, on the moved means, with the covariance held where it was. For
+// those, m, S and T are the construction's OWN window (the last year, for the last-year tangency).
+import { isAddedId, solveAdded, type AddedId } from "./constructions.ts";
 import { gmv, tangency, type Solution, type Tangency } from "./optimize.ts";
 import type { Mat, Vec } from "./num.ts";
 import { TRADING_DAYS } from "./stats.ts";
@@ -51,6 +56,16 @@ export function largestHolding(w: Vec): number {
   let best = -1;
   for (let i = 0; i < w.length; i++) if (best < 0 || w[i] > w[best]) best = i;
   return best;
+}
+
+/**
+ * largestHolding() with ties judged to `tol`: the first asset whose weight is within tol of the largest. A
+ * 25% cap leaves several holdings at exactly the cap, which rounding then separates by 1e-17; this keeps
+ * the documented rule (a tie goes to the first ticker) for the added constructions. -1 for an empty vector.
+ */
+export function largestHoldingTied(w: Vec, tol = 1e-12): number {
+  const top = largestHolding(w);
+  return top < 0 ? top : w.findIndex((x) => x >= w[top] - tol);
 }
 
 /**
@@ -340,6 +355,57 @@ export function cutLargest(
   };
 }
 
+/**
+ * Row 2 for an added construction: the same cut, the largest holding's expected return lowered by one
+ * standard error, then the construction re-solved its own way (the shrunk-mean tangency shrinks the cut
+ * means again; risk parity reads no means, so nothing moves). m, S and T are its own window. Null when the
+ * solve fails before or after the cut.
+ */
+export function cutAdded(id: AddedId, m: Vec, S: Mat, rf: number, allowShort: boolean, T: number): CutRow | null {
+  const base = solveAdded(id, m, S, T, rf, allowShort);
+  if (!base) return null;
+  const from = largestHoldingTied(base.w);
+  const means = m.slice();
+  means[from] = returnBand(m, S, T, from).lo1 / TRADING_DAYS;
+  const after = solveAdded(id, means, S, T, rf, allowShort);
+  if (!after) return null;
+  const to = largestHoldingTied(after.w);
+  return {
+    from,
+    weightBefore: base.w[from],
+    weightAfter: after.w[from],
+    drop: base.w[from] - after.w[from],
+    to,
+    toWeight: after.w[to],
+  };
+}
+
+/**
+ * An added construction re-solved on each of `count` redrawn mean vectors, on the same seed rules as
+ * redraw(): the draws come from drawMeans(m, S, T, count, seed), so the same seed gives the same draws, and
+ * the covariance stays at its in-sample estimate. m, S and T are the construction's OWN window, so the
+ * last-year tangency's means are drawn with T = 252. Risk parity reads no means, so every draw re-solves to
+ * the same weights and the strip has zero width. The strip's largest-holding counts break ties to 1e-12
+ * (largestHoldingTied), as the cut and draw rows do. Null when S has no Cholesky factor.
+ */
+export function addedStrip(
+  id: AddedId,
+  m: Vec,
+  S: Mat,
+  rf: number,
+  allowShort: boolean,
+  T: number,
+  count: number = REDRAWS,
+  seed: number = DEFAULT_SEED,
+): Strip | null {
+  const drawn = drawMeans(m, S, T, count, seed);
+  if (!drawn) return null;
+  const ws = drawn.map((d) => solveAdded(id, d, S, T, rf, allowShort)?.w ?? null);
+  const tied = new Array<number>(m.length).fill(0);
+  for (const w of ws) if (w) tied[largestHoldingTied(w)] += 1;
+  return { ...strip(ws, m.length), largest: tied };
+}
+
 /** Row 3: the 10th to 90th percentile of the largest holding's weight across the redraws. */
 export interface DrawRow {
   /** The largest holding on the window's own estimates. For a fixed portfolio: null, and so are p10 and p90. */
@@ -361,9 +427,13 @@ export function drawSpread(s: Strip, asset: number): DrawRow | null {
  * covariance only (n variances and n(n - 1)/2 covariances); maximum Sharpe reads the n expected returns
  * too. Equal weight and a custom mix estimate nothing.
  */
-export function paramCount(kind: Construction, n: number): number {
+export function paramCount(kind: Construction | AddedId, n: number): number {
   if (kind === "gmv") return (n * (n + 1)) / 2;
   if (kind === "tan") return n + (n * (n + 1)) / 2;
+  // Risk parity reads the covariance only, as minimum variance does; the last-year, shrunk-mean and capped
+  // tangencies read the n means as well. The last-year one's are estimated from 252 rows (Fragility.days).
+  if (kind === "rp") return (n * (n + 1)) / 2;
+  if (kind === "tan.1y" || kind === "tan.bs" || kind === "tan.cap") return n + (n * (n + 1)) / 2;
   return 0;
 }
 
@@ -387,16 +457,36 @@ export interface FragilityInput {
   lookbacks: (Vec | null)[];
   /** The redraws from redraw() on the same inputs, or null when there are none. */
   redraws: Redraws | null;
+  /**
+   * An added construction only: its strip from addedStrip() on the same inputs (its own window), or null.
+   * The four portfolios above read `redraws` and ignore this.
+   */
+  strip?: Strip | null;
 }
 
 /**
  * The four fragility rows for one portfolio. Equal weight and a custom mix are the same weights on
  * every window, every what-if and every draw, so their rows 1-3 are zero by construction and are
  * returned as zero, not computed.
+ *
+ * An added construction is computed on its own window: pass ownWindow(kind, cols)'s m, S and T, its
+ * weights on each lookback window, and its strip. The last-year tangency has no lookback row (it IS one
+ * lookback window), so that row is null; risk parity reads no means, so its cut row re-solves to the same
+ * weights and its strip has zero width, exactly as minimum variance's do.
  */
-export function fragility(kind: Construction, x: FragilityInput): Fragility {
+export function fragility(kind: Construction | AddedId, x: FragilityInput): Fragility {
   const n = x.m.length;
   const days = x.T;
+  if (isAddedId(kind)) {
+    const own = solveAdded(kind, x.m, x.S, x.T, x.rf, x.allowShort);
+    return {
+      lookback: kind === "tan.1y" ? null : lookbackSpread(x.lookbacks),
+      cut: cutAdded(kind, x.m, x.S, x.rf, x.allowShort, x.T),
+      draws: own && x.strip ? drawSpread(x.strip, largestHoldingTied(own.w)) : null,
+      params: paramCount(kind, n),
+      days,
+    };
+  }
   if (kind === "ew" || kind === "custom") {
     return {
       lookback: { asset: null, lo: null, hi: null, spread: 0 },

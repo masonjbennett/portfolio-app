@@ -1,10 +1,14 @@
 // Mutation check for the engine: every mutation below reintroduces a plausible defect, and the suite
 // must FAIL on each one. A mutation the suite survives is an assertion that checks nothing.
 //
-//   node test/_mutate-engine.mjs                          every mutation
-//   node test/_mutate-engine.mjs src/lib/optimize.ts      only that file's mutations
+//   node test/_mutate-engine.mjs                                  every mutation
+//   node test/_mutate-engine.mjs src/lib/optimize.ts              only that file's mutations
+//   node test/_mutate-engine.mjs src/lib/optimize.ts t-constructions
+//                                  only that file's mutations that name that suite (see the fifth field)
 //
-// A file argument that no mutation names is an ERROR (exit 2), so a typo cannot pass as zero survivors.
+// A file argument that no mutation names is an ERROR (exit 2), so a typo cannot pass as zero survivors, and
+// so is a suite argument that none of that file's mutations name. With a suite argument, only that suite is
+// required to be green unmutated, so a file's newer entries can run without its whole-run entries.
 // It refuses to start if the suite is red unmutated, and a `find` that no longer matches is an ERROR
 // (that is how a refactor shows up), never a silent skip. Files are restored after every mutation.
 //
@@ -143,6 +147,30 @@ const M = [
   ["src/lib/monthly.ts", "if (i < r.length && dates[i].slice(0, 4) === dates[from].slice(0, 4)) continue;", "if (i < r.length && dates[i].slice(0, 7) === dates[from].slice(0, 7)) continue;", "a year split at every month", "t-periods"],
   ["src/lib/monthly.ts", "first: dates[from], last: dates[i - 1],", "first: dates[Math.max(0, from - 1)], last: dates[i - 1],", "a year's first date taken from the year before", "t-periods"],
   ["src/lib/monthly.ts", ".months[Number(m.ym.slice(5, 7)) - 1] = m;", ".months[Number(m.ym.slice(5, 7)) % 12] = m;", "the grid's months one column late", "t-periods"],
+  // the scorecard's added constructions (constructions.ts, the capped tangency and risk parity in
+  // optimize.ts, their fragility rows in robust.ts), judged by t-constructions alone
+  ["src/lib/constructions.ts", "  const phi = (n + 2) / (n + 2 + T * dot(d, b));", "  const phi = n / (n + T * dot(d, b));", "shrinkage intensity without the n + 2", "t-constructions"],
+  ["src/lib/constructions.ts", "  const mu0 = dot(a, m) / sum(a);", "  const mu0 = sum(m) / n;", "shrinkage target from equal weights, not the minimum-variance mix", "t-constructions"],
+  ["src/lib/constructions.ts", "  const Sig = S.map((row) => row.map((v) => (v * (T - 1)) / (T - n - 2)));", "  const Sig = S;", "the sample covariance left unadjusted by (T - 1) / (T - n - 2)", "t-constructions"],
+  ["src/lib/constructions.ts", "  return { means: m.map((x) => (1 - phi) * x + phi * mu0), phi, mu0 };", "  return { means: m.map((x) => phi * x + (1 - phi) * mu0), phi, mu0 };", "the intensity applied the wrong way round", "t-constructions"],
+  ["src/lib/constructions.ts", "      const t = shrink && tangency(shrink.means, S, rf, allowShort);", "      const t = shrink && tangency(m, S, rf, allowShort);", "the shrunk means computed and then not used", "t-constructions"],
+  ["src/lib/constructions.ts", "    const { m, S } = windowMoments(cols, YEAR_ROWS);", "    const { m, S } = windowMoments(cols.map((c) => c.slice(0, YEAR_ROWS)), YEAR_ROWS);", "the year taken from the start of the window", "t-constructions"],
+  ["src/lib/constructions.ts", "      if (T <= YEAR_ROWS) return \"window-is-one-year\";", "      if (T < YEAR_ROWS) return \"window-is-one-year\";", "a window of exactly one year offered as a last-year column", "t-constructions"],
+  ["src/lib/constructions.ts", "      return loadVerdict(YEAR_ROWS, n) === \"refuse\" ? \"year-too-thin\" : null;", "      return loadVerdict(T, n) === \"refuse\" ? \"year-too-thin\" : null;", "the thin-year test run on the whole window", "t-constructions"],
+  ["src/lib/constructions.ts", "      return T > n + 2 ? null : \"too-few-rows\";", "      return T >= n + 2 ? null : \"too-few-rows\";", "shrinkage offered at T = n + 2", "t-constructions"],
+  ["src/lib/constructions.ts", "  const Sig = S.map((row) => row.map((v) => (v * (T - 1)) / (T - n - 2)));", "  const Sig = S.map((row) => row.map((v) => (v * (T - 1)) / (T - n - 1)));", "the covariance adjusted by T - n - 1, not T - n - 2", "t-constructions"],
+  ["src/lib/constructions.ts", "      return n >= CAP_MIN_ASSETS ? null : \"too-few-assets\";", "      return n >= 4 ? null : \"too-few-assets\";", "the cap offered at four assets, where it forces equal weight", "t-constructions"],
+  ["src/lib/constructions.ts", "      const t = tangencyCapped(m, S, rf, CAP);", "      const t = tangency(m, S, rf, allowShort);", "the capped column solved without its cap", "t-constructions"],
+  ["src/lib/optimize.ts", "  for (let i = 0; i < n; i++) cons.push({ a: e.map((_, k) => (k === i ? cap - 1 : cap)), b: 0 });", "  for (let i = 0; i < n; i++) cons.push({ a: e.map((_, k) => (k === i ? -1 : 0)), b: -cap });", "the cap as y_i <= 0.25, not 0.25 * 1'y", "t-constructions"],
+  ["src/lib/optimize.ts", "  const cons: { a: Vec; b: number }[] = [{ a: e.map((x) => x / c), b: 1 }, ...boxCons(n, false)];", "  const cons: { a: Vec; b: number }[] = [{ a: e.map((x) => x / c), b: 1 }, ...boxCons(n, true)];", "the capped tangency allows shorts", "t-constructions"],
+  ["src/lib/optimize.ts", "      const w = x.map((xi) => xi / tot);", "      const w = x.map(() => 1 / n);", "risk parity stopping at equal weights", "t-constructions"],
+  ["src/lib/optimize.ts", "    if (x.every((xi, i) => Math.abs((xi * Ax[i]) / v - 1 / n) <= RP_TOL)) {", "    if (true) {", "risk parity stopping at its inverse-volatility start", "t-constructions"],
+  ["src/lib/robust.ts", "  if (kind === \"rp\") return (n * (n + 1)) / 2;", "  if (kind === \"rp\") return n + (n * (n + 1)) / 2;", "risk parity's parameter count including the means", "t-constructions"],
+  ["src/lib/robust.ts", "      lookback: kind === \"tan.1y\" ? null : lookbackSpread(x.lookbacks),", "      lookback: lookbackSpread(x.lookbacks),", "the last-year tangency given a lookback row", "t-constructions"],
+  ["src/lib/robust.ts", "  means[from] = returnBand(m, S, T, from).lo1 / TRADING_DAYS;", "  means[from] = returnBand(m, S, T, from).lo2 / TRADING_DAYS;", "an added column's cut at two standard errors, not one", "t-constructions"],
+  ["src/lib/robust.ts", "  const ws = drawn.map((d) => solveAdded(id, d, S, T, rf, allowShort)?.w ?? null);", "  const ws = drawn.map((d) => tangency(d, S, rf, allowShort)?.w ?? null);", "every added strip re-solves the plain tangency", "t-constructions"],
+  ["src/lib/robust.ts", "      draws: own && x.strip ? drawSpread(x.strip, largestHoldingTied(own.w)) : null,", "      draws: own && x.redraws ? drawSpread(x.redraws.tan, largestHoldingTied(own.w)) : null,", "an added column's draw row read from the tangency's redraws", "t-constructions"],
+  ["src/lib/robust.ts", "  return top < 0 ? top : w.findIndex((x) => x >= w[top] - tol);", "  return top;", "holdings tied at the cap separated by rounding", "t-constructions"],
 ];
 
 const missing = [...new Set(M.map(([, , , , suite]) => suite).filter((s) => s && !existsSync(suitePath(s))))];
@@ -152,13 +180,20 @@ if (missing.length) {
 }
 
 const only = process.argv[2] ? process.argv[2].replace(/\\/g, "/").replace(/^\.\//, "") : null;
-const todo = only ? M.filter(([file]) => file === only) : M;
-if (!todo.length) {
+const suiteOnly = process.argv[3] ? process.argv[3].replace(/\\/g, "/").replace(/^.*\//, "").replace(/\.mjs$/, "") : null;
+const ofFile = only ? M.filter(([file]) => file === only) : M;
+if (!ofFile.length) {
   console.log(`ERROR  no mutation names ${only}; files with mutations: ${[...new Set(M.map(([f]) => f))].join(", ")}`);
   process.exit(2);
 }
-if (run() !== 0) {
-  console.log("The suite is red UNMUTATED; fix that first.");
+const todo = suiteOnly ? ofFile.filter(([, , , , suite]) => suite === suiteOnly) : ofFile;
+if (!todo.length) {
+  const named = [...new Set(ofFile.map(([, , , , suite]) => suite).filter(Boolean))];
+  console.log(`ERROR  no mutation of ${only} names the suite ${suiteOnly}; suites its mutations name: ${named.join(", ") || "none (each is judged by the whole run)"}`);
+  process.exit(2);
+}
+if (run(suiteOnly ?? undefined) !== 0) {
+  console.log(`${suiteOnly ?? "The suite"} is red UNMUTATED; fix that first.`);
   process.exit(2);
 }
 let killed = 0;
@@ -180,5 +215,5 @@ for (const [file, find, replace, why, suite] of todo) {
   }
 }
 for (const s of survivors) console.log(`SURVIVED  ${s}`);
-console.log(`_mutate-engine: ${killed}/${todo.length} mutations killed${only ? ` (${only} only)` : ""}`);
+console.log(`_mutate-engine: ${killed}/${todo.length} mutations killed${only ? ` (${only}${suiteOnly ? `, ${suiteOnly}` : ""} only)` : ""}`);
 process.exit(survivors.length ? 1 : 0);

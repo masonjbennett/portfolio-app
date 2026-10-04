@@ -235,3 +235,94 @@ export function tangency(m: Vec, S: Mat, rf: number, allowShort: boolean): Tange
   if (e.some((x) => x > 0)) return tangencyLongQP(m, S, rf);
   return n <= FACES_UP_TO ? tangencyFaces(m, S, rf) : bestLoneAsset(m, S, rf);
 }
+
+// ---- two more constructions: a capped maximum Sharpe and risk parity ------------------------------
+
+// Long-only maximum Sharpe with no weight above `cap`, whatever the shorting switch. It is the
+// homogenised QP of tangencyLongQP with n more rows, cap * (1'y) - y_i >= 0. Those rows are homogeneous
+// in y, so once w = y / 1'y they read w_i <= cap exactly, at any scale of y.
+//
+// Null when the cap leaves no mix that sums to 1 (cap * n < 1), and when no capped long-only mix earns
+// more than the risk-free rate: the most excess return the capped simplex reaches is found greedily (the
+// cap on the highest excess means first), and when that is not positive the QP has no feasible point, so
+// there is no portfolio to show. At cap * n = 1 the only feasible mix is equal weight.
+export function tangencyCapped(m: Vec, S: Mat, rf: number, cap: number): Tangency | null {
+  const n = m.length;
+  if (!(cap > 0) || cap * n < 1 - 1e-12) return null;
+  const e = m.map((x) => x - rf / TRADING_DAYS);
+  let left = 1;
+  let reach = 0;
+  for (const i of e.map((_, i) => i).sort((a, b) => e[b] - e[a])) {
+    const add = Math.min(cap, left);
+    reach += add * e[i];
+    left -= add;
+  }
+  if (!(reach > 0)) return null;
+  const c = Math.max(...e.map(Math.abs));
+  const cons: { a: Vec; b: number }[] = [{ a: e.map((x) => x / c), b: 1 }, ...boxCons(n, false)];
+  for (let i = 0; i < n; i++) cons.push({ a: e.map((_, k) => (k === i ? cap - 1 : cap)), b: 0 });
+  const y = qp(scaled(S), cons, 1);
+  if (!y) return null;
+  // As in tangencyLongQP: a weight of -1e-18 at an active bound is rounding, not a short.
+  const kept = y.map((v) => Math.max(v, 0));
+  const scale = kept.reduce((a, b) => a + b, 0);
+  if (!(scale > 0)) return null;
+  return sharpeOf(kept.map((v) => v / scale), m, S, rf);
+}
+
+// Risk parity (equal risk contribution): long-only whatever the shorting switch, and from the covariance
+// alone. Like gmv() it never reads the expected returns; `m` only prices the result.
+//
+// Why the minimiser below has equal contributions. With A the scaled covariance, minimise
+//   F(x) = (n / 2) x'Ax - sum_i ln x_i   over x > 0.
+// F is strictly convex there (a convex quadratic plus a strictly convex barrier), so it has exactly one
+// minimiser, and at it the gradient n Ax - 1/x is zero: x_i (Ax)_i = 1/n for every i. Summing over i,
+// x'Ax = 1, so each asset contributes the same 1/n of the portfolio's variance. Dividing x by its sum
+// scales every contribution by the same factor and leaves those shares alone, and the barrier keeps every
+// x_i > 0, so w = x / 1'x is long-only with equal risk contributions. (The 1/n on the barrier in the usual
+// statement, 1/2 x'Ax - (1/n) sum ln x_i, is the same problem divided by n.)
+//
+// Newton's method with a backtracking line search. F is self-concordant (a convex quadratic plus the
+// standard log barrier), so the damped iteration converges from any positive start, and once the Newton
+// decrement is below 1/4 the full step stays inside x > 0 and convergence is quadratic (Boyd and
+// Vandenberghe, Convex Optimization, section 9.6). It stops when every asset's share of the portfolio
+// variance is within RP_TOL of 1/n, and returns null if that has not happened in RP_MAX_STEPS steps.
+export const RP_TOL = 1e-10;
+export const RP_MAX_STEPS = 100;
+
+export function riskParity(m: Vec, S: Mat): Solution | null {
+  const n = S.length;
+  if (!n) return null;
+  const A = scaled(S);
+  const F = (x: Vec) => (n / 2) * dot(x, matVec(A, x)) - x.reduce((s, v) => s + Math.log(v), 0);
+  // Inverse volatility to start, where n x_i^2 A_ii = 1.
+  let x = A.map((row, i) => 1 / Math.sqrt(n * row[i]));
+  if (!x.every((v) => Number.isFinite(v) && v > 0)) return null;
+  for (let step = 0; ; step++) {
+    const Ax = matVec(A, x);
+    const v = dot(x, Ax);
+    if (x.every((xi, i) => Math.abs((xi * Ax[i]) / v - 1 / n) <= RP_TOL)) {
+      const tot = x.reduce((a, b) => a + b, 0);
+      const w = x.map((xi) => xi / tot);
+      return { w, ...perf(w, m, S) };
+    }
+    if (step >= RP_MAX_STEPS) return null;
+    const g = Ax.map((a, i) => n * a - 1 / x[i]);
+    const H = A.map((row, i) => row.map((a, j) => n * a + (i === j ? 1 / (x[i] * x[i]) : 0)));
+    const dx = cholSolve(H, g.map((gi) => -gi));
+    if (!dx) return null;
+    const dec = -dot(g, dx); // the Newton decrement, squared
+    let t = 1;
+    if (dec >= 1 / 16) {
+      const f0 = F(x);
+      for (;;) {
+        const xt = x.map((xi, i) => xi + t * dx[i]);
+        if (xt.every((xi) => xi > 0) && F(xt) <= f0 - 0.25 * t * dec) break;
+        t /= 2;
+        if (t < 1e-12) return null;
+      }
+    }
+    x = x.map((xi, i) => xi + t * dx[i]);
+    if (!x.every((xi) => xi > 0)) return null;
+  }
+}

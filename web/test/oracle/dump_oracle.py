@@ -367,6 +367,124 @@ def load_of(R, h=0.02):
             "se": vec(sig / np.sqrt(years)), "yearsNeeded": vec((sig / h) ** 2)}
 
 
+# -- the added constructions, restated in numpy / scipy ----------------------------------------------
+# Written from their definitions, not from the TypeScript, and by other methods: the shrunk means in closed
+# form through a matrix inverse (the port uses Cholesky solves); every maximum Sharpe ratio by SLSQP on the
+# Sharpe ratio itself, with its analytic gradient, from several starts, then made exact on the bounds SLSQP
+# left active by one linear KKT solve (the port uses Goldfarb-Idnani on a homogenised QP); risk parity by
+# MINPACK's hybrid root finder on the contribution equations x_i (A x)_i = 1/n (the port minimises a
+# log-barrier objective by Newton). t-constructions.mjs holds the port to these.
+CAP = 0.25
+YEAR = 252
+
+
+def bayes_stein(m, S, T):
+    """Jorion (1986) on daily moments: shrink every mean toward the minimum-variance portfolio's mean."""
+    n = len(m)
+    sig_inv = np.linalg.inv(S * (T - 1) / (T - n - 2))
+    one = np.ones(n)
+    mu0 = float(one @ sig_inv @ m / (one @ sig_inv @ one))
+    gap = m - mu0
+    phi = float((n + 2) / ((n + 2) + T * (gap @ sig_inv @ gap)))
+    return phi, mu0, (1 - phi) * m + phi * mu0
+
+
+def max_sharpe(m, S, rf, lo, hi):
+    """The highest Sharpe ratio with lo <= w_i <= hi and sum(w) = 1; None when no such mix earns more than
+    rf. Returns the weights and whether the exact step on the active set was accepted."""
+    n = len(m)
+    e = (m - rf / 252) * 252
+    A = S * 252
+    los, his = np.full(n, float(lo)), np.full(n, float(hi))
+    # The mix with the most excess return the bounds allow: lower bounds first, the rest by excess mean.
+    top = los.copy()
+    left = 1 - top.sum()
+    for i in np.argsort(-e, kind="stable"):
+        add = min(his[i] - los[i], left)
+        top[i] += add
+        left -= add
+    if not top @ e > 0:
+        return None
+
+    def neg(w):
+        return -(e @ w) / np.sqrt(w @ A @ w)
+
+    def neg_grad(w):
+        v = w @ A @ w
+        return -(e / np.sqrt(v) - (e @ w) * (A @ w) / v ** 1.5)
+
+    ew = np.ones(n) / n
+    top_run = None
+    for w0 in (ew, top, 0.5 * (ew + top), 0.25 * ew + 0.75 * top, 0.75 * ew + 0.25 * top):
+        r = scipy.optimize.minimize(neg, w0, jac=neg_grad, method="SLSQP",
+                                    bounds=list(zip(los, his)),
+                                    constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1,
+                                                  "jac": lambda w: np.ones(n)}],
+                                    options={"ftol": 1e-15, "maxiter": 1000})
+        if top_run is None or r.fun < top_run.fun:
+            top_run = r
+    w = np.clip(top_run.x, los, his)
+    # The exact optimum on SLSQP's active set. With y = s w (s > 0) scaled so that e'y = 1, maximising the
+    # Sharpe ratio is minimising y'Ay; the assets SLSQP left at a bound are y_i = bound_i * s, the rest free.
+    at_lo, at_hi = w <= los + 1e-7, w >= his - 1e-7
+    free = ~(at_lo | at_hi)
+    fixed = np.where(at_lo, los, np.where(at_hi, his, 0.0))
+    k = int(free.sum())
+    if k == 0:
+        # Every asset sits at a bound: the optimum is that vertex, exactly, when its weights sum to 1.
+        ok = abs(fixed.sum() - 1) < 1e-12 and -neg(fixed) >= -neg(w) - 1e-12
+        return (fixed, True) if ok else (w, False)
+    P = np.zeros((n, k + 1))
+    P[np.where(free)[0], np.arange(k)] = 1
+    P[:, k] = fixed
+    E = np.vstack([P.T @ e, P.T @ np.ones(n) - np.eye(k + 1)[k]])
+    kkt = np.block([[2 * P.T @ A @ P, E.T], [E, np.zeros((2, 2))]])
+    try:
+        z = np.linalg.solve(kkt, np.concatenate([np.zeros(k + 1), [1.0, 0.0]]))[: k + 1]
+        exact = (P @ z) / z[k]
+        ok = (z[k] > 0 and np.all(exact >= los - 1e-12) and np.all(exact <= his + 1e-12)
+              and abs(exact.sum() - 1) < 1e-12 and np.max(np.abs(exact - w)) < 1e-4
+              and -neg(exact) >= -neg(w) - 1e-12)
+    except np.linalg.LinAlgError:
+        ok = False
+    return (exact, True) if ok else (w, False)
+
+
+def risk_parity(S):
+    """Equal risk contributions, long-only: the positive root of x_i (A x)_i = 1/n, then w = x / sum(x)."""
+    A = S * 252
+    n = len(A)
+    r = scipy.optimize.root(lambda x: x * (A @ x) - 1 / n, 1 / np.sqrt(n * np.diag(A)),
+                            jac=lambda x: np.diag(A @ x) + x[:, None] * A, method="hybr",
+                            options={"xtol": 1e-13})
+    w = r.x / r.x.sum()
+    # xtol 1e-15 is below what hybr can certify and it reports failure there with the same answer.
+    assert r.success and np.all(r.x > 0) and np.max(np.abs(r.fun)) < 1e-14
+    return w, (w * (A @ w)) / (w @ A @ w)
+
+
+def constructions(R, rf):
+    T, n = R.shape
+    m, S = R.mean().values, R.cov().values
+    m1, S1 = R.iloc[-YEAR:].mean().values, R.iloc[-YEAR:].cov().values
+    phi, mu0, shrunk = bayes_stein(m, S, T)
+
+    def solved(x):
+        return None if x is None else {"w": vec(x[0]), "exact": bool(x[1])}
+
+    out = {"T": T, "n": n, "cap": CAP, "bayesStein": {"phi": f(phi), "mu0": f(mu0), "means": vec(shrunk)}}
+    for allow_short in (False, True):
+        lo = -1 if allow_short else 0
+        out["short" if allow_short else "long"] = {
+            "tan1y": solved(max_sharpe(m1, S1, rf, lo, 1)),
+            "tanBs": solved(max_sharpe(shrunk, S, rf, lo, 1)),
+        }
+    out["capped"] = solved(max_sharpe(m, S, rf, 0, CAP)) if n * CAP >= 1 else None
+    w, share = risk_parity(S)
+    out["riskParity"] = {"w": vec(w), "share": vec(share)}
+    return out
+
+
 # -- per set ------------------------------------------------------------------
 def dump(name):
     fx = json.loads((FIX / f"prices-{name}.json").read_text("utf-8"))
@@ -532,6 +650,9 @@ def dump(name):
 
     # Drawdown episodes, returns over fixed stretches, calendar years and the month grid, same series.
     out["periods"] = periods(series, start)
+
+    # The added constructions, last so every key above is written exactly as before.
+    out["constructions"] = constructions(R, RF)
     return out
 
 
