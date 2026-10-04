@@ -89,3 +89,37 @@ try {
   [GC]::Collect()
   [GC]::WaitForPendingFinalizers()
 }
+
+# Excel writes who saved the book (dc:creator, cp:lastModifiedBy) and the folder it was saved in
+# (x15ac:absPath) into the file. The fixture is published with the code, so all three are emptied here, once
+# Excel has let go of the file; t-xlsx fails the run if any comes back. No cell and no cached answer is touched.
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+$stamp = New-Object System.DateTimeOffset(1980, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero)
+$edits = @(
+  @('docProps/core.xml', '<dc:creator>[^<]*</dc:creator>', '<dc:creator></dc:creator>'),
+  @('docProps/core.xml', '<cp:lastModifiedBy>[^<]*</cp:lastModifiedBy>', '<cp:lastModifiedBy></cp:lastModifiedBy>'),
+  @('xl/workbook.xml', '<mc:AlternateContent\b(?:(?!</mc:AlternateContent>).)*?x15ac:absPath(?:(?!</mc:AlternateContent>).)*?</mc:AlternateContent>', '')
+)
+$zip = [System.IO.Compression.ZipFile]::Open($out, [System.IO.Compression.ZipArchiveMode]::Update)
+try {
+  foreach ($e in $edits) {
+    $entry = $zip.GetEntry($e[0])
+    $reader = New-Object System.IO.StreamReader($entry.Open(), $utf8)
+    $xml = $reader.ReadToEnd()
+    $reader.Close()
+    $new = [regex]::Replace($xml, $e[1], $e[2])
+    if ($new -ne $xml) {
+      $entry.Delete()
+      $entry = $zip.CreateEntry($e[0])
+      $entry.LastWriteTime = $stamp
+      $writer = New-Object System.IO.StreamWriter($entry.Open(), $utf8)
+      $writer.Write($new)
+      $writer.Close()
+    }
+  }
+} finally {
+  $zip.Dispose()
+}
+Write-Output 'emptied the author, the last author and the saved-in folder'

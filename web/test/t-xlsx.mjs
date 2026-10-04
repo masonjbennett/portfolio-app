@@ -3,7 +3,7 @@
 // must reproduce each one, and every function it knows must have a case there: a function the oracle never
 // exercised is a function whose answer nobody checked.
 import { check, done } from "./_assert.mjs";
-import { evaluator, formulaCells, fromSheets, functionsIn, KNOWN, numberText, readXlsx, shiftFormula } from "./_xlsx.mjs";
+import { evaluator, formulaCells, fromSheets, functionsIn, KNOWN, numberText, readXlsx, shiftFormula, unzip } from "./_xlsx.mjs";
 
 const ORACLE = new URL("./fixtures/xlsx-oracle.xlsx", import.meta.url);
 const book = readXlsx(ORACLE);
@@ -18,6 +18,21 @@ const agree = (got, want) => {
 
 check(book.names.join("|") === "Cases|Data|Other Data" && cases.length >= 80 && book.formulaWithoutValue.length === 0,
   "oracle: the file reads, with its three sheets, every case, and a cached value for each", `${book.names.join("|")} ${cases.length} ${book.formulaWithoutValue.length}`);
+
+// The fixture is published with the code, so it carries nothing about who saved it or where: Excel writes the
+// author, the last author and the folder it saved into, and xlsx_oracle.ps1 empties all three after saving.
+{
+  const parts = unzip(ORACLE);
+  const core = parts["docProps/core.xml"]?.toString("utf8") ?? "";
+  const wb = parts["xl/workbook.xml"]?.toString("utf8") ?? "";
+  const kept = [
+    /<dc:creator>[^<]+<\/dc:creator>/.test(core) && "author",
+    /<cp:lastModifiedBy>[^<]+<\/cp:lastModifiedBy>/.test(core) && "last author",
+    /absPath/.test(wb) && "saved-in folder",
+    /[A-Z]:\\Users\\/i.test(Object.values(parts).map((b) => b.toString("latin1")).join("")) && "a local path",
+  ].filter(Boolean);
+  check(core.length > 0 && wb.length > 0 && kept.length === 0, "oracle: the file names no author, no last author and no folder it was saved in", kept.join(", "));
+}
 
 const wrong = [];
 for (const x of cases) {
