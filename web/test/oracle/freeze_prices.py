@@ -36,6 +36,9 @@ SETS = {
     "megacap": ("AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA", "^GSPC"),
     "sectors": ("XLK, XLF, XLV, XLE, XLI, XLP, XLY, XLU, XLRE", "^GSPC"),
     "cross": ("VTI, AGG, GLD, VNQ, EFA", "^GSPC"),
+    # The five mega-caps the published walk-forward actually used. They are not the mega-cap
+    # preset above: JPM in place of NVDA, META and TSLA.
+    "megacap5": ("AAPL, MSFT, GOOGL, AMZN, JPM", "^GSPC"),
     # The same assets benchmarked against one of themselves: the app merges VTI into the
     # benchmark column and silently drops it from the portfolio (ledger: benchmark-as-ticker).
     "cross_vti": ("VTI, AGG, GLD, VNQ, EFA", "VTI"),
