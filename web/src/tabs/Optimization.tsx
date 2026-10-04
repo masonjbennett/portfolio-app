@@ -143,7 +143,7 @@ interface AddedMark {
 // The efficient frontier (1592-1656), the tab's hero chart. `added` holds the solved added constructions,
 // the same array while nothing changes, for the frontier to mark.
 const FrontierSection = memo(function FrontierSection({ a, custom, added }: { a: Analysis; custom: Vec | null; added: readonly AddedMark[] }) {
-  const state = useMemo(() => ({ status: "ready" as const, value: frontierData(a, custom) }), [a, custom, added]);
+  const state = useMemo(() => ({ status: "ready" as const, value: frontierData(a, custom, a.frontier, added) }), [a, custom, added]);
   return (
     <section className="opt-section" aria-labelledby="opt-frontier">
       <Slug id="opt-frontier">Efficient Frontier</Slug>

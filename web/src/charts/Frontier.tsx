@@ -17,7 +17,13 @@
 // - The capital allocation line runs as the app's does, from (0, rf) to 1.15 times the frontier's
 //   highest volatility (1607-1609), but the plot is scaled to the points and the line is clipped at
 //   its edge; the app's autorange stretched the whole plot to hold the line's far end.
-import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+//
+// Beyond the app: the Optimization tab can add up to four more constructions to its scorecard, and each
+// one it adds is drawn here too, at the return and volatility its weights had over this window (the
+// same in-sample figures as its scorecard column). Their markers are hollow ink outlines, so they read
+// as one family apart from the four filled portfolio markers, and each has an outline of its own, so
+// none is told apart by colour alone. They are named on the chart like the rest.
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   CartesianGrid,
   ReferenceLine,
@@ -36,6 +42,7 @@ import { usePhone } from "../chrome/usePhone.ts";
 import ChartFrame from "../components/ChartFrame.tsx";
 import { format, MINUS } from "../format.ts";
 import type { Vec } from "../lib/num.ts";
+import { isAddedId, type AddedId } from "../lib/constructions.ts";
 import type { FrontierPoint } from "../lib/optimize.ts";
 import { portfolioPerformance } from "../lib/portfolio.ts";
 import { annualizedStats } from "../lib/stats.ts";
@@ -86,6 +93,26 @@ export interface FrontierBench {
   sigma: number;
 }
 
+/** A construction the scorecard added, as the tab hands it over: its id, its head, and its weights in ticker order. */
+export interface FrontierAddedInput {
+  /** Which construction (an AddedId): sets the marker's outline. */
+  id: string;
+  /** The name drawn beside the point: the scorecard column's head. */
+  label: string;
+  /** Decimal weights summing to 1, in ticker order. */
+  w: Vec;
+}
+
+/** An added construction where it is drawn. */
+export interface FrontierAdded {
+  id: string;
+  label: string;
+  /** Annualized return of its weights over this window. */
+  mu: number;
+  /** Annualized volatility of its weights over this window. */
+  sigma: number;
+}
+
 /** Everything one frontier draws. */
 export interface FrontierData {
   /** The engine's frontier; infeasible points are dropped by the chart and the rest joined in order. */
@@ -98,6 +125,8 @@ export interface FrontierData {
   cal: FrontierCal | null;
   /** The benchmark's point, or null to leave it off. */
   bench: FrontierBench | null;
+  /** The added constructions, in the order given; absent when none is added. */
+  added?: readonly FrontierAdded[];
 }
 
 export interface FrontierProps {
@@ -154,8 +183,15 @@ export function frontierCaption(allowShort: boolean, rf: number, cal: FrontierCa
  * mean x 252 and sample std x sqrt(252) (1636-1637), the marks through portfolio_performance
  * (1760-1762) in the app's drawing order GMV, Tangency, Equal-Weight, Custom (1614-1634), the line
  * when there is a tangency, and the benchmark. `custom` is the normalised custom weights, or null.
+ * `added` is the constructions the scorecard added, each placed through portfolio_performance like the
+ * marks; with none the result is exactly what it was before they existed (no `added` key at all).
  */
-export function frontierData(a: Analysis, custom: Vec | null = null, points: readonly FrontierPoint[] = a.frontier): FrontierData {
+export function frontierData(
+  a: Analysis,
+  custom: Vec | null = null,
+  points: readonly FrontierPoint[] = a.frontier,
+  added: readonly FrontierAddedInput[] = [],
+): FrontierData {
   const perf = (w: Vec) => portfolioPerformance(w, a.m, a.S, a.rf);
   const marks: FrontierMark[] = [];
   if (a.gmv) marks.push({ label: "GMV", role: "gmv", mu: a.gmv.mu, sigma: a.gmv.sigma });
@@ -166,7 +202,7 @@ export function frontierData(a: Analysis, custom: Vec | null = null, points: rea
     const p = perf(custom);
     marks.push({ label: "Custom", role: "custom", mu: p.mu, sigma: p.sigma });
   }
-  return {
+  const data: FrontierData = {
     points,
     assets: a.tickers.map((ticker, i) => {
       const s = annualizedStats(a.returns[i], a.rf);
@@ -176,6 +212,13 @@ export function frontierData(a: Analysis, custom: Vec | null = null, points: rea
     cal: a.tangency ? { rf: a.rf, tangency: { mu: a.tangency.mu, sigma: a.tangency.sigma } } : null,
     bench: { label: a.benchLabel, mu: a.benchStats.mu, sigma: a.benchStats.sigma },
   };
+  if (added.length) {
+    data.added = added.map((x) => {
+      const p = perf(x.w);
+      return { id: x.id, label: x.label, mu: p.mu, sigma: p.sigma };
+    });
+  }
+  return data;
 }
 
 // ---- sizing and direct labels (shared with the wealth chart) ------------------------------------
@@ -250,6 +293,8 @@ export interface PlacedLabel {
   width: number;
   /** Drawn with a hairline back to its point; when absent, a name more than half a line off its point gets one. */
   leader?: boolean;
+  /** From placeLabels: false when no spot was free and the name overlaps something. */
+  clear?: boolean;
 }
 
 // d3's symbols, which Recharts' <Symbols> draws, sized by AREA in px squared: how far each reaches from
@@ -519,7 +564,7 @@ export function placeLabels(
     const x = got.anchor === "start" ? got.box.lo : got.box.hi;
     return {
       key: it.key, text: it.text, color: it.color, x, y: (got.box.top + got.box.bot) / 2, px: got.pt.px, py: got.pt.py,
-      anchor: got.anchor, width: textWidth(it.text), leader: got.leader !== null,
+      anchor: got.anchor, width: textWidth(it.text), leader: got.leader !== null, clear: got.clear,
     };
   });
 }
@@ -553,6 +598,8 @@ interface Plot {
   marks: FrontierMark[];
   bench: FrontierBench | null;
   cal: CalSegment | null;
+  /** Each with the id checked to be a construction this chart has a marker for. */
+  added: (FrontierAdded & { id: AddedId })[];
 }
 
 const finite = (x: number) => Number.isFinite(x);
@@ -569,10 +616,16 @@ function checked(state: LoadState<FrontierData>): LoadState<Plot> {
     ...d.assets.map((a): [string, number, number] => [a.ticker, a.mu, a.sigma]),
     ...d.marks.map((m): [string, number, number] => [m.label, m.mu, m.sigma]),
     ...(d.bench ? [[d.bench.label, d.bench.mu, d.bench.sigma] as [string, number, number]] : []),
+    ...(d.added ?? []).map((x): [string, number, number] => [x.label, x.mu, x.sigma]),
     ...(d.cal ? [["capital allocation line", d.cal.tangency.mu, d.cal.tangency.sigma] as [string, number, number], ["risk-free rate", d.cal.rf, 0] as [string, number, number]] : []),
   ];
   const bad = named.find(([, mu, sigma]) => !finite(mu) || !finite(sigma));
   if (bad) return { status: "error", name: `the ${bad[0]} point`, message: "Its return or volatility is not a finite number." };
+  const added: Plot["added"] = [];
+  for (const x of d.added ?? []) {
+    if (!isAddedId(x.id)) return { status: "error", name: `the ${x.label} point`, message: "It names no construction this chart has a marker for." };
+    added.push({ ...x, id: x.id });
+  }
   const sigMax = Math.max(...line.map((p) => p.sigma));
   return {
     status: "ready",
@@ -582,6 +635,7 @@ function checked(state: LoadState<FrontierData>): LoadState<Plot> {
       marks: d.marks.filter((m) => d.cal || m.role !== "tangency"),
       bench: d.bench,
       cal: d.cal ? calSegment(d.cal, sigMax) : null,
+      added,
     },
   };
 }
@@ -603,6 +657,91 @@ function marker(type: SymbolKind, size: number, color: string, opacity = 1) {
   return (p: { cx?: number; cy?: number }): ReactNode => (
     <Symbols cx={p.cx} cy={p.cy} type={type} size={size} fill={color} fillOpacity={opacity} stroke={c.paper} strokeWidth={1.5} />
   );
+}
+
+// The added constructions' outlines. None repeats a shape above (circle, plus, diamond, star, square,
+// upward triangle), and each is hollow where those are filled: an hourglass for the last-year tangency,
+// a Y for the shrunk-means tangency, an X for the capped tangency and a triangle pointing right for
+// risk parity. (A hexagon was tried and dropped, its outline too near the assets' circle at this size;
+// so was a triangle pointing down, too near the Y, which points the same three ways.)
+// An ink outline with nothing inside it: drawn over the four portfolio markers, so a construction that
+// lands on one (the shrunk-means tangency can sit on the tangency itself) leaves both in view. The fill
+// is there, at no opacity, only so the inside takes the pointer for the tooltip. Round joins, so the
+// outline reaches exactly half its width past each corner, which is what glyphExtent counts.
+export type Glyph = "hourglass" | "wye" | "saltire" | "triangle-right";
+export const ADDED_GLYPH: Record<AddedId, Glyph> = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.cap": "saltire", rp: "triangle-right" };
+export const GLYPH_STROKE = 1.5;
+const deg = Math.PI / 180;
+
+// A regular polygon of circumradius r, its first corner at angle `from` (degrees, clockwise from
+// pointing right, as SVG's y runs down).
+const polygon = (sides: number, r: number, from: number): Pt[] =>
+  Array.from({ length: sides }, (_, k) => {
+    const t = (from + (360 / sides) * k) * deg;
+    return { x: r * Math.cos(t), y: r * Math.sin(t) };
+  });
+
+// Arms of half-width `half` and length `len` from the centre, at the angles given (ascending, evenly
+// spaced): each arm's two outer corners, then the corner where it meets the next arm's side, which lies
+// on the bisector at half / sin(half the spacing).
+function arms(angles: readonly number[], half: number, len: number): Pt[] {
+  const spacing = 360 / angles.length;
+  const reach = Math.hypot(len, half);
+  const spread = Math.atan2(half, len) / deg;
+  const inner = half / Math.sin((spacing / 2) * deg);
+  const at = (r: number, a: number) => ({ x: r * Math.cos(a * deg), y: r * Math.sin(a * deg) });
+  return angles.flatMap((a) => [at(reach, a - spread), at(reach, a + spread), at(inner, a + spacing / 2)]);
+}
+
+/** The corners of an added construction's outline, about its centre, in px. */
+export function glyphPoints(kind: Glyph): Pt[] {
+  switch (kind) {
+    case "triangle-right":
+      return polygon(3, 8.5, 0);
+    case "hourglass":
+      // Two triangles meeting at a narrow waist, flat across the top and the bottom.
+      return [{ x: -6, y: -7.5 }, { x: 6, y: -7.5 }, { x: 1.2, y: 0 }, { x: 6, y: 7.5 }, { x: -6, y: 7.5 }, { x: -1.2, y: 0 }];
+    case "wye":
+      return arms([-150, -30, 90], 2.4, 8);
+    case "saltire":
+      return arms([45, 135, 225, 315], 2.2, 8);
+  }
+}
+
+/** The outline as an SVG path about its centre. */
+export function glyphPath(kind: Glyph): string {
+  const r = (v: number) => Number(v.toFixed(3));
+  return glyphPoints(kind).map((q, k) => `${k ? "L" : "M"}${r(q.x)},${r(q.y)}`).join("") + "Z";
+}
+
+/** How far an added construction's marker reaches from its centre, its outline included. */
+export function glyphExtent(kind: Glyph, stroke = GLYPH_STROKE): Extent {
+  const pts = glyphPoints(kind);
+  const s = stroke / 2;
+  return {
+    left: -Math.min(...pts.map((q) => q.x)) + s,
+    right: Math.max(...pts.map((q) => q.x)) + s,
+    up: -Math.min(...pts.map((q) => q.y)) + s,
+    down: Math.max(...pts.map((q) => q.y)) + s,
+  };
+}
+
+function glyph(kind: Glyph) {
+  const d = glyphPath(kind);
+  return (p: { cx?: number; cy?: number }): ReactNode =>
+    p.cx === undefined || p.cy === undefined ? null : (
+      <path
+        className="frontier-glyph"
+        data-glyph={kind}
+        transform={`translate(${p.cx}, ${p.cy})`}
+        d={d}
+        fill={c.paper}
+        fillOpacity={0}
+        stroke={c.ink}
+        strokeWidth={GLYPH_STROKE}
+        strokeLinejoin="round"
+      />
+    );
 }
 
 // The frontier line's points take hover without being seen.
@@ -654,7 +793,16 @@ interface LabelItem {
 // to the same pixel: the placement, the costly part, is worked out again only when the names or the
 // geometry change. Both axes are linear, so two values each pin a scale down; with the plot area and
 // the y domain they make the geometry's key.
-function FrontierLabels({ items, cal, line }: { items: LabelItem[]; cal: CalSegment | null; line: readonly Datum[] }) {
+//
+// The added constructions' names are all set on the chart or none is. Where setting them leaves some
+// name with no free spot, and leaving them off frees one, they are left off, their markers still kept
+// clear of the other names, and `onUnnamed` hands their keys up for the key line under the chart.
+function FrontierLabels({ items, cal, line, onUnnamed }: {
+  items: LabelItem[];
+  cal: CalSegment | null;
+  line: readonly Datum[];
+  onUnnamed: (keys: readonly string[]) => void;
+}) {
   const xs = useXAxisScale();
   const ys = useYAxisScale();
   const yDomain = useYAxisDomain();
@@ -664,19 +812,32 @@ function FrontierLabels({ items, cal, line }: { items: LabelItem[]; cal: CalSegm
       ? [xs(0), xs(1), ys(0), ys(1), plot.x, plot.y, plot.width, plot.height, ...(Array.isArray(yDomain) ? yDomain : [])].join(",")
       : null;
   const placed = useMemo(
-    () => (xs && ys && plot ? placeAll(items, cal, line, xs, ys, yDomain, plot) : null),
+    () => {
+      if (!(xs && ys && plot)) return null;
+      const named = placeAll(items, cal, line, xs, ys, yDomain, plot);
+      const added = items.filter((it) => it.key.startsWith(ADDED_KEY)).map((it) => it.key);
+      const blocked = (ls: readonly PlacedLabel[]) => ls.filter((l) => l.clear === false).length;
+      if (!added.length || !blocked(named)) return { labels: named, unnamed: NONE };
+      const quiet = placeAll(items, cal, line, xs, ys, yDomain, plot, new Set(added));
+      return blocked(quiet) < blocked(named) ? { labels: quiet, unnamed: added } : { labels: named, unnamed: NONE };
+    },
     // The scales, domain and area by what they map (`geometry`), not by identity.
     [items, cal, line, geometry],
   );
+  const unnamed = placed?.unnamed ?? NONE;
+  useLayoutEffect(() => onUnnamed(unnamed), [unnamed, onUnnamed]);
   if (!placed) return null;
   return (
     <g className="frontier-labels">
-      {placed.map((l) => (
+      {placed.labels.map((l) => (
         <LabelText key={l.key} l={l} />
       ))}
     </g>
   );
 }
+
+const NONE: readonly string[] = [];
+const ADDED_KEY = "added-";
 
 function placeAll(
   items: LabelItem[],
@@ -686,6 +847,8 @@ function placeAll(
   ys: NonNullable<ReturnType<typeof useYAxisScale>>,
   yDomain: ReturnType<typeof useYAxisDomain>,
   plot: NonNullable<ReturnType<typeof usePlotArea>>,
+  // Items whose markers are kept clear of but whose names are not set.
+  unnamed: ReadonlySet<string> = new Set(),
 ): PlacedLabel[] {
   const all = [...items];
   if (cal) {
@@ -714,7 +877,7 @@ function placeAll(
   const calEnd = all.find((it) => it.key === "cal");
   if (cal && calEnd) drawn.push([px(cal.x0, cal.y0), px(calEnd.sigma, calEnd.mu)]);
   const lines = drawn.map((ln) => ln.filter((q) => finite(q.x) && finite(q.y))).filter((ln) => ln.length > 1);
-  return placeLabels(at, plot, markers, lines);
+  return placeLabels(unnamed.size ? at.filter((it) => !unnamed.has(it.key)) : at, plot, markers, lines);
 }
 
 const MARGIN = { top: 12, right: 16, bottom: 30, left: 4 };
@@ -725,28 +888,32 @@ const FALLBACK_WIDTH = 720;
 // asset here would share a colour with a portfolio mark or the frontier line. The chromatic tokens are kept
 // for those; the benchmark (an ink cross) and the CAL (a dashed ink2 line) share the neutral family, not the shape.
 const ASSET = tokens.color.ink2;
+// The added constructions' outlines and names: ink, the darkest token, so a hollow outline still reads.
+const ADDED_INK = tokens.color.ink;
 
 // Everything the drawing needs that follows from the plot alone: the axes' ticks and the names to place.
 // Built once per plot, so a render of the chart for any other reason hands the label layer the same list.
 function layout(plot: Plot) {
-  const { line, assets, marks, bench, cal } = plot;
+  const { line, assets, marks, bench, cal, added } = plot;
 
   // Scaled to the points and the line's start at rf; the line is clipped where it leaves the plot.
-  const sig = [...line.map((p) => p.sigma), ...assets.map((a) => a.sigma), ...marks.map((m) => m.sigma), ...(bench ? [bench.sigma] : [])];
-  const mu = [...line.map((p) => p.mu), ...assets.map((a) => a.mu), ...marks.map((m) => m.mu), ...(bench ? [bench.mu] : []), ...(cal ? [cal.y0] : [])];
+  const sig = [...line.map((p) => p.sigma), ...assets.map((a) => a.sigma), ...marks.map((m) => m.sigma), ...(bench ? [bench.sigma] : []), ...added.map((x) => x.sigma)];
+  const mu = [...line.map((p) => p.mu), ...assets.map((a) => a.mu), ...marks.map((m) => m.mu), ...(bench ? [bench.mu] : []), ...(cal ? [cal.y0] : []), ...added.map((x) => x.mu)];
   const xTicks = niceTicks(0, Math.max(...sig, cal ? cal.x1 : 0));
   const yLo = Math.min(...mu);
   const yHi = Math.max(...mu);
   const pad = (yHi - yLo) * 0.04;
   const yTicks = niceTicks(yLo - pad, yHi + pad);
 
-  // Placed in this order, so the marked portfolios get first choice of spot, then the benchmark, the
-  // assets and the line's own name; the capital allocation line's name comes last (FrontierLabels).
+  // Placed in this order, so the marked portfolios get first choice of spot, then the added
+  // constructions, the benchmark, the assets and the line's own name; the capital allocation line's
+  // name comes last (FrontierLabels).
   const labels: LabelItem[] = [
     ...marks.map((m) => ({
       key: `mark-${m.role}`, text: m.label, color: ROLE[m.role], sigma: m.sigma, mu: m.mu,
       own: symbolExtent(MARKER[m.role].type, MARKER[m.role].size),
     })),
+    ...added.map((x) => ({ key: `${ADDED_KEY}${x.id}`, text: x.label, color: ADDED_INK, sigma: x.sigma, mu: x.mu, own: glyphExtent(ADDED_GLYPH[x.id]) })),
     ...(bench ? [{ key: "bench", text: bench.label, color: ROLE.bench, sigma: bench.sigma, mu: bench.mu, own: symbolExtent(BENCH_MARKER.type, BENCH_MARKER.size) }] : []),
     ...assets.map((a) => ({ key: `asset-${a.ticker}`, text: a.ticker, color: ASSET, sigma: a.sigma, mu: a.mu, own: symbolExtent(ASSET_MARKER.type, ASSET_MARKER.size) })),
     {
@@ -764,88 +931,126 @@ const axisTitle = { fill: chartTheme.axis.fill, fontFamily: tokens.font.sans, fo
 // leaves the frontier's inputs alone, an explanation level or an amount, does not redraw it.
 const FrontierPlot = memo(function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
   const [ref, width] = useBoxWidth(FALLBACK_WIDTH);
-  const { line, assets, marks, bench, cal } = plot;
+  const { line, assets, marks, bench, cal, added } = plot;
   const { xTicks, yTicks, labels } = useMemo(() => layout(plot), [plot]);
+  // The added constructions left unnamed on the chart at this width (FrontierLabels), for the key line.
+  const [unnamed, setUnnamed] = useState<readonly string[]>(NONE);
+  const onUnnamed = useCallback((keys: readonly string[]) => setUnnamed((was) => (was.join() === keys.join() ? was : keys)), []);
+  const keyed = added.filter((x) => unnamed.includes(`${ADDED_KEY}${x.id}`));
 
   return (
-    <div ref={ref} className="frontier-chart" style={{ width: "100%", height }}>
-      <ScatterChart width={width} height={height} margin={MARGIN}>
-        <CartesianGrid {...gridProps} />
-        <XAxis
-          type="number"
-          dataKey="sigma"
-          name="Volatility"
-          domain={[xTicks[0], xTicks[xTicks.length - 1]]}
-          ticks={xTicks}
-          tickFormatter={pctTick}
-          {...axisProps}
-          label={{ value: "Annualized volatility", position: "insideBottom", offset: -18, ...axisTitle }}
-        />
-        <YAxis
-          type="number"
-          dataKey="mu"
-          name="Return"
-          domain={[yTicks[0], yTicks[yTicks.length - 1]]}
-          ticks={yTicks}
-          tickFormatter={pctTick}
-          width={60}
-          {...axisProps}
-          label={{ value: "Annualized return", angle: -90, position: "insideLeft", offset: 12, ...axisTitle }}
-        />
-        <Tooltip {...frontierTooltip} content={PointTip} />
-        {cal ? (
-          <ReferenceLine
-            className="frontier-cal"
-            segment={[{ x: cal.x0, y: cal.y0 }, { x: cal.x1, y: cal.y1 }]}
-            stroke={ROLE.cal}
-            strokeDasharray={DASH.cal}
-            strokeWidth={1.5}
-            ifOverflow="hidden"
+    <>
+      <div ref={ref} className="frontier-chart" style={{ width: "100%", height }}>
+        <ScatterChart width={width} height={height} margin={MARGIN}>
+          <CartesianGrid {...gridProps} />
+          <XAxis
+            type="number"
+            dataKey="sigma"
+            name="Volatility"
+            domain={[xTicks[0], xTicks[xTicks.length - 1]]}
+            ticks={xTicks}
+            tickFormatter={pctTick}
+            {...axisProps}
+            label={{ value: "Annualized volatility", position: "insideBottom", offset: -18, ...axisTitle }}
           />
-        ) : null}
-        <Scatter
-          className="frontier-line"
-          name="Efficient frontier"
-          data={line}
-          line={{ stroke: ROLE.frontier, strokeWidth: 3 }}
-          lineJointType="linear"
-          shape={hitTarget}
-          isAnimationActive={false}
-        />
-        {assets.map((a) => (
+          <YAxis
+            type="number"
+            dataKey="mu"
+            name="Return"
+            domain={[yTicks[0], yTicks[yTicks.length - 1]]}
+            ticks={yTicks}
+            tickFormatter={pctTick}
+            width={60}
+            {...axisProps}
+            label={{ value: "Annualized return", angle: -90, position: "insideLeft", offset: 12, ...axisTitle }}
+          />
+          <Tooltip {...frontierTooltip} content={PointTip} />
+          {cal ? (
+            <ReferenceLine
+              className="frontier-cal"
+              segment={[{ x: cal.x0, y: cal.y0 }, { x: cal.x1, y: cal.y1 }]}
+              stroke={ROLE.cal}
+              strokeDasharray={DASH.cal}
+              strokeWidth={1.5}
+              ifOverflow="hidden"
+            />
+          ) : null}
           <Scatter
-            key={a.ticker}
-            className="frontier-asset"
-            name={a.ticker}
-            data={[{ sigma: a.sigma, mu: a.mu, name: a.ticker }]}
-            shape={marker(ASSET_MARKER.type, ASSET_MARKER.size, ASSET, 0.8)}
+            className="frontier-line"
+            name="Efficient frontier"
+            data={line}
+            line={{ stroke: ROLE.frontier, strokeWidth: 3 }}
+            lineJointType="linear"
+            shape={hitTarget}
             isAnimationActive={false}
           />
-        ))}
-        {bench ? (
-          <Scatter
-            className="frontier-bench"
-            name={bench.label}
-            data={[{ sigma: bench.sigma, mu: bench.mu, name: bench.label }]}
-            shape={marker(BENCH_MARKER.type, BENCH_MARKER.size, ROLE.bench)}
-            isAnimationActive={false}
-          />
-        ) : null}
-        {marks.map((m) => (
-          <Scatter
-            key={m.role}
-            className={`frontier-mark frontier-mark--${m.role}`}
-            name={m.label}
-            data={[{ sigma: m.sigma, mu: m.mu, name: m.label }]}
-            shape={marker(MARKER[m.role].type, MARKER[m.role].size, ROLE[m.role])}
-            isAnimationActive={false}
-          />
-        ))}
-        <FrontierLabels items={labels} cal={cal} line={line} />
-      </ScatterChart>
-    </div>
+          {assets.map((a) => (
+            <Scatter
+              key={a.ticker}
+              className="frontier-asset"
+              name={a.ticker}
+              data={[{ sigma: a.sigma, mu: a.mu, name: a.ticker }]}
+              shape={marker(ASSET_MARKER.type, ASSET_MARKER.size, ASSET, 0.8)}
+              isAnimationActive={false}
+            />
+          ))}
+          {bench ? (
+            <Scatter
+              className="frontier-bench"
+              name={bench.label}
+              data={[{ sigma: bench.sigma, mu: bench.mu, name: bench.label }]}
+              shape={marker(BENCH_MARKER.type, BENCH_MARKER.size, ROLE.bench)}
+              isAnimationActive={false}
+            />
+          ) : null}
+          {marks.map((m) => (
+            <Scatter
+              key={m.role}
+              className={`frontier-mark frontier-mark--${m.role}`}
+              name={m.label}
+              data={[{ sigma: m.sigma, mu: m.mu, name: m.label }]}
+              shape={marker(MARKER[m.role].type, MARKER[m.role].size, ROLE[m.role])}
+              isAnimationActive={false}
+            />
+          ))}
+          {added.map((x) => (
+            <Scatter
+              key={x.id}
+              className={`frontier-added frontier-added--${x.id.replace(".", "-")}`}
+              name={x.label}
+              data={[{ sigma: x.sigma, mu: x.mu, name: x.label }]}
+              shape={glyph(ADDED_GLYPH[x.id])}
+              isAnimationActive={false}
+            />
+          ))}
+          <FrontierLabels items={labels} cal={cal} line={line} onUnnamed={onUnnamed} />
+        </ScatterChart>
+      </div>
+      {keyed.length ? <FrontierKey added={keyed} /> : null}
+    </>
   );
 });
+
+// One line under the chart naming each added construction's outline, for a width where their names
+// could not all be set on the plot. Each entry keeps its outline beside its name, so it wraps whole.
+function FrontierKey({ added }: { added: readonly { id: AddedId; label: string }[] }) {
+  return (
+    <p className="frontier-key" style={KEY_STYLE}>
+      {added.map((x) => (
+        <span key={x.id} className="frontier-key-item" data-glyph={ADDED_GLYPH[x.id]} style={KEY_ITEM}>
+          <svg width={20} height={20} viewBox="-10 -10 20 20" aria-hidden="true" focusable="false" style={KEY_GLYPH}>
+            <path d={glyphPath(ADDED_GLYPH[x.id])} fill="none" stroke={c.ink} strokeWidth={GLYPH_STROKE} strokeLinejoin="round" />
+          </svg>
+          {x.label}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+const KEY_STYLE = { margin: `${tokens.space[2]} 0 0`, color: c.ink2, fontFamily: tokens.font.sans, fontSize: 12, lineHeight: "20px" } as const;
+const KEY_ITEM = { display: "inline-block", whiteSpace: "nowrap", marginRight: tokens.space[4] } as const;
+const KEY_GLYPH = { verticalAlign: "middle", marginRight: tokens.space[1] } as const;
 
 export default function Frontier({ title, state, allowShort, rf, height }: FrontierProps) {
   const phone = usePhone();
