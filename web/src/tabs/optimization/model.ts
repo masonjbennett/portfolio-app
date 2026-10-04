@@ -22,6 +22,7 @@
 import { format, MINUS } from "../../format.ts";
 import {
   ADDED_IDS,
+  bayesStein,
   CAP,
   CAP_MIN_ASSETS,
   ownWindow,
@@ -35,7 +36,7 @@ import {
 } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
 import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, windowMoments, windows, type Custom, type Row } from "../../lib/portfolio.ts";
-import { maxDrawdown, returnShare, sharpeSE, wealth } from "../../lib/stats.ts";
+import { maxDrawdown, returnShare, sharpeSE, TRADING_DAYS, wealth } from "../../lib/stats.ts";
 import type { Role } from "../../charts/theme.ts";
 import type { Analysis, Column, CustomWeights, FormatId, LoadState, TableRow, TipKey } from "../../types.ts";
 import { FITTED } from "../caption.ts";
@@ -112,8 +113,12 @@ export function addedSub(id: AddedId, allowShort: boolean): string {
   return allowShort && (id === "tan.cap" || id === "rp") ? `${base}, long only` : base;
 }
 
-/** An added construction that found no weights keeps its column, labelled, as a failed GMV does. */
-export const addedFailedLabel = (id: AddedId) => `${ADDED_LABEL[id]} (failed)`;
+/**
+ * An added construction that found no weights keeps its column, labelled, as a failed GMV does. The label
+ * says "no weights", not "failed": for the tangencies the usual cause is the window itself (nothing they may
+ * hold earns more than the rate), not the solver, and addedMissing() says which.
+ */
+export const addedMissingLabel = (id: AddedId) => `${ADDED_LABEL[id]} (no weights)`;
 
 /** One added construction on one analysis: why the basket cannot have it, its own window, its solution. */
 export interface AddedFit {
@@ -149,6 +154,64 @@ export function addedFit(a: Analysis, id: AddedId): AddedFit {
     const sol = own ? solveAdded(id, own.m, own.S, own.T, a.rf, a.allowShort) : null;
     return { id, reason, own, sol };
   });
+}
+
+/** The constructions solved so far on analysis `a`. A construction is solved only once its column is added. */
+export function addedSolvedOn(a: Analysis): AddedId[] {
+  return [...(FITS.get(a)?.keys() ?? [])];
+}
+
+// The most excess return a mix of weights in [lo, hi] summing to 1 can reach: every weight at lo, then what
+// is left of the 1 handed out from the highest excess return down, at most hi - lo to each. A maximum-Sharpe
+// mix inside those bounds exists exactly when this is above zero.
+function reach(excess: Vec, lo: number, hi: number): number {
+  let left = 1 - lo * excess.length;
+  let out = lo * excess.reduce((s, x) => s + x, 0);
+  for (const x of [...excess].sort((p, q) => q - p)) {
+    const add = Math.min(hi - lo, Math.max(left, 0));
+    out += add * x;
+    left -= add;
+  }
+  return out;
+}
+
+/**
+ * Why an added construction on offer found no weights, as a clause with no capital and no full stop, so the
+ * page and the formula book can each set it in a sentence of their own. When the bounds it may hold leave no
+ * mix above the risk-free rate, the clause says so with the rate; otherwise it says only that the solve found
+ * none, which is all the engine reports.
+ */
+export function addedMissing(a: Analysis, id: AddedId): string {
+  const rate = `the ${format(a.rf, "pct2")} risk-free rate`;
+  const own = addedFit(a, id).own;
+  const where = id === "tan.1y" ? `the window's last ${YEAR_ROWS} daily returns` : "this window";
+  const generic = `the solve found no weights on ${where}`;
+  if (!own) return generic;
+  const daily = a.rf / TRADING_DAYS;
+  if (id === "tan.cap") {
+    return reach(own.m.map((x) => x - daily), 0, CAP) > 0
+      ? generic
+      : `no long-only mix holding at most ${Math.round(CAP * 100)}% of each asset earns more than ${rate} on this window`;
+  }
+  if (id === "rp") return generic;
+  // The two tangencies the shorting switch reaches. Long-only they always find a mix (the least negative
+  // one), so only a failed solve leaves them empty; with shorting on, the box can leave none above the rate.
+  let means = own.m;
+  if (id === "tan.bs") {
+    const shrink = bayesStein(own.m, own.S, own.T);
+    if (!shrink) return `the shrinkage cannot be estimated: the covariance matrix of ${where} has no Cholesky factor`;
+    means = shrink.means;
+  }
+  if (!a.allowShort) return generic;
+  const on = id === "tan.bs" ? "the shrunk means" : where;
+  return reach(means.map((x) => x - daily), -1, 1) > 0
+    ? generic
+    : `no mix with every weight between ${MINUS}100% and 100% earns more than ${rate} on ${on}`;
+}
+
+/** The page's sentence for an added column with no weights: its head, then addedMissing(). */
+export function addedMissingWords(a: Analysis, id: AddedId): string {
+  return `${ADDED_LABEL[id]} has no weights: ${addedMissing(a, id)}.`;
 }
 
 /**
@@ -321,7 +384,7 @@ function tableState(t: TableData, name: string): LoadState<TableData> {
 /**
  * The weights table (1535): a row per ticker in the entered order, columns GMV, Tangency, Equal-Weight
  * in the app's order, then each added construction the page shows, in the fixed order. A failed
- * portfolio keeps its column, labelled failed, with no figures.
+ * portfolio keeps its column, labelled failed, with no figures; an added one with no weights is labelled so.
  */
 export function weightTable(a: Analysis, added: readonly AddedId[] = []): LoadState<TableData> {
   const order: PortId[] = ["gmv", "tangency", "ew"];
@@ -330,7 +393,7 @@ export function weightTable(a: Analysis, added: readonly AddedId[] = []): LoadSt
   const columns: Column[] = [
     { key: "asset", label: "Asset", format: "text", first: true },
     ...order.map((id, k): Column => ({ key: id, label: ws[k] ? PORT_LABEL[id] : failedLabel(id), format: "pct2" })),
-    ...extra.map(({ id, w }): Column => ({ key: id, label: w ? ADDED_LABEL[id] : addedFailedLabel(id), format: "pct2" })),
+    ...extra.map(({ id, w }): Column => ({ key: id, label: w ? ADDED_LABEL[id] : addedMissingLabel(id), format: "pct2" })),
   ];
   const rows = a.tickers.map((t, i) => {
     const row: TableRow = { asset: t };

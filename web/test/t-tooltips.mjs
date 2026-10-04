@@ -212,4 +212,22 @@ check(/\.tip-mark:focus-visible \+ \.tip-text/.test(css) && /\.tip\[data-open\] 
     "score-tips: the Sharpe ± text says the fitted mixes' error understates their uncertainty", seText("finance"));
 }
 
+// The added columns' tips quote the engine's cap, its fewest assets and its year from the constants the page
+// reads, never as typed text: each says the constant's value, and the source of those entries holds none of
+// those values as a literal, so changing a constant cannot leave a tip saying the old one.
+{
+  const { SCORE_TIPS } = await import("../src/content/tooltips.ts");
+  const { CAP, CAP_MIN_ASSETS, YEAR_ROWS } = await import("../src/lib/constructions.ts");
+  const pct = `${Math.round(CAP * 100)}%`;
+  const capped = SCORE_TIPS.col_capped;
+  const year = SCORE_TIPS.col_last_year;
+  const says = capped.plain.includes(pct) && capped.finance.includes(pct) && capped.finance.includes(`at least ${CAP_MIN_ASSETS} assets`) &&
+    capped.formula.includes(`≤ ${CAP};`) && year.finance.includes(`last ${YEAR_ROWS} daily returns`) && year.formula.includes(`those ${YEAR_ROWS} days`);
+  const src = read("src/content/tooltips.ts");
+  const block = src.slice(src.indexOf("  col_last_year: {"), src.indexOf("  col_parity: {"));
+  const typed = [pct, String(CAP), String(YEAR_ROWS), "₂₅₂", "five assets"].filter((s) => block.includes(s));
+  check(says && block.length > 500 && typed.length === 0,
+    "score-tips: the added columns' tips read the cap, the fewest assets and the year from the engine's constants", `says ${says}; typed ${typed.join(", ")}`);
+}
+
 done("t-tooltips");

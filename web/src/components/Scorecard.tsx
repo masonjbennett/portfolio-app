@@ -163,6 +163,12 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
           {full ? "Show the short view" : "Show every row"}
         </button>
       </div>
+      {/* An added column of dashes says why first, before the notes on the rows. */}
+      {model.addedMissing.map((s) => (
+        <p key={s} className="sc-note" data-note="added-missing">
+          {s}
+        </p>
+      ))}
       <p className="sc-note">
         The fragility rows are in-sample what-ifs on these prices, not a forecast. Equal weight and a typed mix hold the same weights
         whatever the window or the draw, so their first three fragility rows are zero. The parameters row counts the estimates each set

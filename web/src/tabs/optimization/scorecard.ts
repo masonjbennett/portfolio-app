@@ -18,7 +18,7 @@
 // between Custom and the benchmark, always in the same order. They are in-sample like the tangency column,
 // set side by side for comparison; nothing here orders, marks or counts them against one another.
 import { format } from "../../format.ts";
-import { ADDED_IDS, isAddedId, YEAR_ROWS, type AddedId } from "../../lib/constructions.ts";
+import { ADDED_IDS, CAP, isAddedId, YEAR_ROWS, type AddedId } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
 import { portfolioReturns, type Custom } from "../../lib/portfolio.ts";
 import { fragility, REDRAWS, type Construction, type Fragility, type Redraws, type Strip } from "../../lib/robust.ts";
@@ -28,7 +28,18 @@ import type { Analysis, CellFormat, Column, FormatId, TableRow, TipKey } from ".
 import { FITTED, tableSpan } from "../caption.ts";
 import { isEqualWeight } from "../custom/model.ts";
 import { fitWindows } from "../sensitivity/model.ts";
-import { ADDED_LABEL, addedFailedLabel, addedFit, addedLookbacks, addedSub, failedLabel, PORT_LABEL, shownAdded, weightsOf } from "./model.ts";
+import {
+  ADDED_LABEL,
+  addedFit,
+  addedLookbacks,
+  addedMissingLabel,
+  addedMissingWords,
+  addedSub,
+  failedLabel,
+  PORT_LABEL,
+  shownAdded,
+  weightsOf,
+} from "./model.ts";
 
 // ---- columns -----------------------------------------------------------------------------------------
 
@@ -199,6 +210,8 @@ export interface ScoreModel {
   cut: string | null;
   /** Why the draw row is still a dash for an added column (its redraws pending or failed), or null. */
   addedDraws: string | null;
+  /** One sentence per shown added column that found no weights, saying why its cells are dashes. */
+  addedMissing: string[];
 }
 
 /** The redraws the fragility group reads: ready (possibly none, when the covariance has no factor), or pending. */
@@ -233,7 +246,7 @@ export function scoreColumns(a: Analysis, c: Custom, added: readonly AddedId[] =
   return scoreColIds(added).map((id): ScoreColumn => {
     if (id === "bench") return { id, label: a.benchLabel, sub: null, ok: true, weights: null };
     const w = columnWeights(a, c, id);
-    if (isAddedId(id)) return { id, label: w ? ADDED_LABEL[id] : addedFailedLabel(id), sub: w ? addedSub(id, a.allowShort) : null, ok: w !== null, weights: w };
+    if (isAddedId(id)) return { id, label: w ? ADDED_LABEL[id] : addedMissingLabel(id), sub: w ? addedSub(id, a.allowShort) : null, ok: w !== null, weights: w };
     // Untyped tickers default to 1/n, so on a first visit the typed mix IS equal weight; the head says so.
     if (id === "custom") return { id, label: w ? "Custom" : "Custom (not shown)", sub: w && isEqualWeight(w) ? CUSTOM_EQUAL : null, ok: w !== null, weights: w };
     const fitted = id === "gmv" || id === "tangency";
@@ -247,10 +260,40 @@ function lookbacks(fits: ReturnType<typeof fitWindows>, id: "gmv" | "tangency"):
   return fits.value.map((f) => (id === "gmv" ? (f.gmv?.w ?? null) : (f.tan?.w ?? null)));
 }
 
+// An added column's fragility rows, kept per analysis, construction and strip. The scorecard is computed
+// again each time one construction's redraws land, and the other columns' inputs have not moved, so their
+// rows are read back here instead of re-solving the construction and its cut. A few strips per construction
+// at most (pending, then one per redraw set), so the oldest is dropped past STRIPS_KEPT.
+const ADDED_FRAG = new WeakMap<Analysis, Map<AddedId, Map<Strip | null, Fragility | null>>>();
+const STRIPS_KEPT = 4;
+
+/** fragility() for added construction `id` on analysis `a` with `strip`, solved once per strip. */
+export function addedFragility(a: Analysis, id: AddedId, strip: Strip | null): Fragility | null {
+  let per = ADDED_FRAG.get(a);
+  if (!per) {
+    per = new Map();
+    ADDED_FRAG.set(a, per);
+  }
+  let byStrip = per.get(id);
+  if (!byStrip) {
+    byStrip = new Map();
+    per.set(id, byStrip);
+  }
+  if (byStrip.has(strip)) return byStrip.get(strip) ?? null;
+  const own = addedFit(a, id).own;
+  const frag = own
+    ? fragility(id, { m: own.m, S: own.S, rf: a.rf, allowShort: a.allowShort, T: own.T, lookbacks: addedLookbacks(a, id), redraws: null, strip })
+    : null;
+  if (byStrip.size >= STRIPS_KEPT) byStrip.delete(byStrip.keys().next().value as Strip | null);
+  byStrip.set(strip, frag);
+  return frag;
+}
+
 /**
  * Every column's figures: scorecardRow over its daily returns, fragility() over its construction. An added
  * construction's fragility rows are the engine's on its own window's moments, its lookback weights from
- * addedLookbacks(), and its draw row from its own redraws in `draws` (a dash until they are solved).
+ * addedLookbacks(), and its draw row from its own redraws in `draws` (a dash until they are solved), through
+ * addedFragility().
  */
 export function columnFigures(a: Analysis, c: Custom, redraws: Redraws | null, added: readonly AddedId[] = [], draws: AddedDraws = NO_DRAWS): ColFigures[] {
   const start = a.prices.dates[0] ?? null;
@@ -263,21 +306,8 @@ export function columnFigures(a: Analysis, c: Custom, redraws: Redraws | null, a
     if (!w) return { row: null, frag: null };
     const row = scorecardRow(portfolioReturns(a.returns, w), a.bench, a.dates, start, a.rf);
     if (isAddedId(id)) {
-      const own = addedFit(a, id).own;
       const d = draws[id];
-      const frag = own
-        ? fragility(id, {
-            m: own.m,
-            S: own.S,
-            rf: a.rf,
-            allowShort: a.allowShort,
-            T: own.T,
-            lookbacks: addedLookbacks(a, id),
-            redraws: null,
-            strip: d && d.status === "ready" ? d.value : null,
-          })
-        : null;
-      return { row, frag };
+      return { row, frag: addedFragility(a, id, d && d.status === "ready" ? d.value : null) };
     }
     const kind = CONSTRUCTION[id];
     const frag = fragility(kind, {
@@ -304,29 +334,73 @@ export function scoreConventions(rf: number): string {
   );
 }
 
+/** How close two weight vectors must be, every weight, for the caption to call one column close to another: one percentage point. */
+export const CLOSE_WEIGHTS = 0.01;
+
+// What a long-only tangency that earned no more than the rate holds, in words: one asset alone (the usual answer, the one
+// whose own Sharpe ratio is least negative), or, failing that, the mix the solve returned.
+function heldInstead(a: Analysis, w: readonly number[]): string {
+  const held = w.map((x, i) => (x > 1e-9 ? i : -1)).filter((i) => i >= 0);
+  return held.length === 1
+    ? `${a.tickers[held[0]]} alone, the asset whose own Sharpe ratio is least negative there`
+    : "the long-only mix whose Sharpe ratio is least negative there";
+}
+
 /**
  * What the caption adds for the added columns shown: the last-year column's fixed window, the shrinkage
- * the engine applied (read from its answer, never typed), and why risk parity's what-if rows are zero.
- * Null when none of them is shown.
+ * the engine applied (read from its answer, never typed), why risk parity's what-if rows are zero, and,
+ * when the window makes them so, why a capped column's what-if rows can read zero, why the shrunk-mean
+ * column sits close to Tangency's, and that a long-only tangency which earned no more than the rate holds one asset.
+ * Every one of those is read from the engine's answer on this window. Null when none applies.
  */
 export function addedConventions(a: Analysis, added: readonly AddedId[]): string | null {
   const out: string[] = [];
   const T = a.dates.length;
-  if (added.includes("tan.1y") && addedFit(a, "tan.1y").sol) {
+  const rate = `the ${format(a.rf, "pct2")} risk-free rate`;
+  const y1 = added.includes("tan.1y") ? addedFit(a, "tan.1y").sol : null;
+  if (y1) {
     out.push(
       `${ADDED_LABEL["tan.1y"]} has its weights solved on the window's last ${YEAR_ROWS} daily returns, from ${format(a.dates[T - YEAR_ROWS], "date")}, ` +
         `and held over the whole window like every other column; its window is fixed, so its lookback row is a dash and its other fragility rows read those ${YEAR_ROWS} days.`,
     );
+    if (y1.beatsRf === false) out.push(`On those days no long-only mix earned more than ${rate}, so it holds ${heldInstead(a, y1.w)}.`);
   }
-  const shrink = added.includes("tan.bs") ? addedFit(a, "tan.bs").sol?.shrink : null;
-  if (shrink) {
+  const bs = added.includes("tan.bs") ? addedFit(a, "tan.bs").sol : null;
+  const shrink = bs?.shrink;
+  if (bs && shrink) {
     out.push(
       `${ADDED_LABEL["tan.bs"]} moves each asset's expected return ${format(shrink.phi, "pct1")} of the way toward the mean return of the ` +
         `minimum-variance portfolio with no weight bounds, ${format(shrink.mu0 * TRADING_DAYS, "pct2")} a year, before solving (the Bayes-Stein estimator, Jorion 1986).`,
     );
+    if (bs.beatsRf === false) out.push(`On the shrunk means no long-only mix earns more than ${rate}, so it holds ${heldInstead(a, bs.w)}.`);
+    // Each shrunk excess return is (1 - phi) times the sample one plus one amount common to every asset,
+    // phi (mu0 - rf). A maximum-Sharpe mix does not move when every excess return is scaled alike, so only
+    // that common amount can move the weights; when it is small the column sits close to Tangency's, which
+    // is said, with the amount, only when the weights show it.
+    const tw = a.tangency?.w;
+    if (bs.beatsRf !== false && tw && tw.every((x, i) => Math.abs(x - bs.w[i]) < CLOSE_WEIGHTS)) {
+      const common = shrink.phi * (shrink.mu0 * TRADING_DAYS - a.rf);
+      out.push(
+        `On this window each of its weights is within ${Math.round(CLOSE_WEIGHTS * 100)} percentage point of Tangency's: shrinking scales every ` +
+          `excess return by the same factor, which leaves the maximum-Sharpe weights where they were, and adds one amount common to every ` +
+          `asset, the intensity times the target's excess over the rate, here ${format(common, "pct2")} a year; only that amount moves them.`,
+      );
+    }
+  }
+  const cap = added.includes("tan.cap") ? addedFit(a, "tan.cap").sol : null;
+  if (cap && Math.max(...cap.w) >= CAP - 1e-9) {
+    out.push(
+      `${ADDED_LABEL["tan.cap"]} holds its largest asset at the ${Math.round(CAP * 100)}% cap; its cut and redraw rows follow that one weight, ` +
+        `so they can read zero while its other weights move.`,
+    );
   }
   if (added.includes("rp") && addedFit(a, "rp").sol) out.push(`${ADDED_LABEL.rp} reads no expected returns, so its cut and redraw rows are zero.`);
   return out.length ? out.join(" ") : null;
+}
+
+/** One sentence per shown added column with no weights, saying why its cells are dashes. */
+export function addedMissingNotes(a: Analysis, added: readonly AddedId[]): string[] {
+  return added.filter((id) => !addedFit(a, id).sol).map((id) => addedMissingWords(a, id));
 }
 
 /** Why an added column's draw row is still a dash, or null when every shown one has its redraws. */
@@ -371,6 +445,7 @@ export function scorecard(a: Analysis, c: Custom, redraws: RedrawState, added: r
     seed: value ? value.seed : null,
     cut: cutWords(a, columns, figs),
     addedDraws: addedDrawNote(a, shown, draws),
+    addedMissing: addedMissingNotes(a, shown),
   };
 }
 

@@ -22,7 +22,8 @@ const { FITTED } = await import("../src/tabs/caption.ts");
 const { customWeights } = await import("../src/tabs/optimization/model.ts");
 const { exampleAnalysis, fixtureAnalysis } = await import("./_analysis.mjs");
 const { ADDED_IDS, CAP, isAddedId, YEAR_ROWS } = await import("../src/lib/constructions.ts");
-const { ADDED_LABEL } = await import("../src/tabs/optimization/model.ts");
+const { ADDED_LABEL, addedMissingLabel } = await import("../src/tabs/optimization/model.ts");
+const { format } = await import("../src/format.ts");
 
 const excel = json(FIXTURE);
 const page = (model, metricId, k, se) => {
@@ -268,11 +269,26 @@ for (const [name, make] of [["example", () => exampleAnalysis()], ["megacap", ()
   check(named.every((s) => notes.Weights.includes(s)) && /does not re-optimise/.test(notes.Weights) &&
     notes["In-sample"].startsWith("Every figure is in-sample") && notes["In-sample"].includes(`last ${YEAR_ROWS} daily returns`),
     tag("added columns: the Notes name each one with its sub-line as entered values, and the last-year column's window"), `${notes.Weights} | ${notes["In-sample"]}`);
-  const gone = { ...model, columns: model.columns.map((col) => (col.id === "tan.cap" || col.id === "rp" ? { ...col, ok: false, weights: null } : col)) };
-  const why = Object.fromEntries(W.bookNotes(a, gone, null))["Not shown"] ?? "";
-  const capWhy = `${ADDED_LABEL["tan.cap"]}: No long-only mix holding at most ${Math.round(CAP * 100)}% of each asset earns more than the risk-free rate`;
-  const rpWhy = `${ADDED_LABEL.rp}: The solve found no weights on this window, so the page shows none.`;
-  check(why.includes(capWhy) && why.includes(rpWhy), tag("added columns: a capped tangency or risk parity with no weights says why, and never blames the shorting switch"), why);
+  // The capped tangency really finds none at a rate no mix reaches; risk parity's solve does not fail on these
+  // prices, so its column is emptied by hand to read the words for a failed solve. Each reason is the page's own.
+  const hiRate = name === "megacap" ? fixtureAnalysis("megacap", { rf: 1 }) : exampleAnalysis({ rf: 1, allowShort: a.allowShort });
+  const hiModel = SC.scorecard(hiRate, customWeights(hiRate, {}), { status: "ready", value: null }, ADDED_IDS);
+  const gone = { ...hiModel, columns: hiModel.columns.map((col) => (col.id === "rp" ? { ...col, label: addedMissingLabel("rp"), ok: false, weights: null } : col)) };
+  const why = Object.fromEntries(W.bookNotes(hiRate, gone, null))["Not shown"] ?? "";
+  const capWhy = `${addedMissingLabel("tan.cap")}: No long-only mix holding at most ${Math.round(CAP * 100)}% of each asset earns more than the ${format(hiRate.rf, "pct2")} risk-free rate on this window, so the page shows none.`;
+  const rpWhy = `${addedMissingLabel("rp")}: The solve found no weights on this window, so the page shows none.`;
+  const pageCap = hiModel.addedMissing.find((s) => s.startsWith(ADDED_LABEL["tan.cap"])) ?? "";
+  check(why.includes(capWhy) && why.includes(rpWhy) && pageCap.endsWith(`${capWhy.slice(`${addedMissingLabel("tan.cap")}: N`.length, -", so the page shows none.".length)}.`),
+    tag("added columns: a capped tangency or risk parity with no weights says why, in the page's words, and never blames the shorting switch"), `${why} | ${pageCap}`);
+  // The Shorting line names the two constructions the switch does not reach, while it is on.
+  const longOnly = `${ADDED_LABEL["tan.cap"]} and ${ADDED_LABEL.rp} are long-only whatever this switch says.`;
+  check(a.allowShort ? notes.Shorting.endsWith(longOnly) : !notes.Shorting.includes("long-only"),
+    tag("added columns: with shorting on, the Shorting note says the capped tangency and risk parity stay long-only"), notes.Shorting);
+  // The note on how each row is computed says the Beta cell reads the raw returns, and it does: SLOPE over two plain ranges.
+  const betaRow = W.BOOK_ROWS.indexOf("beta");
+  const betaF = S.Scorecard[`D${3 + betaRow}`]?.f ?? "";
+  check(betaRow >= 0 && /^(_xlfn\.)?SLOPE\([^()+*/-]+,[^()+*/-]+\)$/.test(betaF) && notes["How each row is computed"].includes("the Beta cell reads the raw returns"),
+    tag("notes: the Beta cell is SLOPE over the raw returns, and the note says so"), betaF);
 }
 
 // The book loads on the click: nothing imports it statically, and the scorecard imports it dynamically.

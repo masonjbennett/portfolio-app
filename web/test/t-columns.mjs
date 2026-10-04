@@ -18,7 +18,7 @@ const SC = await import("../src/tabs/optimization/scorecard.ts");
 const M = await import("../src/tabs/optimization/model.ts");
 const { customWeights } = M;
 const { FITTED } = await import("../src/tabs/caption.ts");
-const { DASH, format } = await import("../src/format.ts");
+const { DASH, format, MINUS } = await import("../src/format.ts");
 const { SCORE_TIPS, tipText } = await import("../src/content/tooltips.ts");
 const { ADD_COLUMN } = await import("../src/components/AddColumns.tsx");
 const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
@@ -69,7 +69,7 @@ for (const [name, make] of SETS) {
       const col = model.columns[k];
       const e = want[id];
       if (!e.sol) {
-        if (col.ok || col.weights !== null || col.label !== M.addedFailedLabel(id)) off.push(`${id}: the engine found no weights, the column says ${col.label}`);
+        if (col.ok || col.weights !== null || col.label !== M.addedMissingLabel(id)) off.push(`${id}: the engine found no weights, the column says ${col.label}`);
         continue;
       }
       if (!(col.ok && col.weights.every((x, i) => x === e.sol.w[i]) && col.label === M.ADDED_LABEL[id])) off.push(`${id}: weights or head`);
@@ -212,6 +212,9 @@ function frontierAdded(root) {
     "row: four toggle buttons with aria-pressed, never a switch, all off and offered on the example", buttons().map((b) => text(b)).join(" | "));
   check(join(heads()) === join(SC.SCORE_COL_IDS) && root.querySelector(".addcol-note") === null && frontierAdded(root)?.length === 0,
     "default: the scorecard opens with its default columns, no reason line, and the frontier is handed no marks");
+  // Offering the four buttons reads the basket's size only: nothing is solved for a column nobody added.
+  check(M.addedSolvedOn(a).length === 0 && root.querySelectorAll('[data-note="added-missing"]').length === 0,
+    "default: no construction is solved until its column is added", join(M.addedSolvedOn(a)));
   const marks0 = frontierAdded(root);
 
   // Clicked out of order, the columns land in the fixed order, and the link's ask is in that order too.
@@ -316,6 +319,104 @@ function frontierAdded(root) {
   const heads = [...r.container.querySelectorAll(".sc thead th[data-col]")].map((x) => x.getAttribute("data-col"));
   check(join(heads) === join(["ew", "gmv", "tangency", "custom", "rp", "bench"]), "link: a construction the basket cannot have is ignored for that basket", join(heads));
   r.unmount();
+}
+
+// ---- 4. what the window does to an added column ----------------------------------------------------------
+// At a 100% rate nothing earns more than the rate: the capped tangency finds no weights, and with shorting on
+// neither do the last-year and shrunk-mean tangencies, while long-only those two hold one asset each. Each
+// sentence is held to the engine's own answer on the same analysis.
+{
+  const long = exampleAnalysis({ rf: 1 });
+  const short = exampleAnalysis({ rf: 1, allowShort: true });
+  const empty = (a) => ids.filter((id) => !engine(a, id).sol);
+  check(join(empty(long)) === "tan.cap" && join(empty(short)) === "tan.1y,tan.bs,tan.cap",
+    "no weights: at a rate no mix reaches, the engine finds none for the capped tangency, and with shorting on for the other two tangencies too",
+    `${join(empty(long))} | ${join(empty(short))}`);
+  for (const [tag, a] of [["long-only", long], ["shorting", short]]) {
+    const m = SC.scorecard(a, customWeights(a, {}), READY, ids);
+    const gone = empty(a);
+    const rate = format(a.rf, "pct2");
+    const lineOk = m.addedMissing.length === gone.length && gone.every((id, k) => {
+      const s = m.addedMissing[k];
+      const col = m.columns.find((x) => x.id === id);
+      return s === M.addedMissingWords(a, id) && s.startsWith(`${M.ADDED_LABEL[id]} has no weights: no `) && s.includes(`${rate} risk-free rate`) &&
+        col.label === M.addedMissingLabel(id) && !col.label.includes("failed");
+    });
+    check(lineOk, `no weights (${tag}): each column with none says so in its head, and one line names the bound and the rate that left it empty`, m.addedMissing.join(" | "));
+    const cap = m.addedMissing.find((s) => s.startsWith(M.ADDED_LABEL["tan.cap"])) ?? "";
+    const tans = m.addedMissing.filter((s) => !s.startsWith(M.ADDED_LABEL["tan.cap"]));
+    check(cap.includes("long-only") && cap.includes(`at most ${Math.round(C.CAP * 100)}% of each asset`) && !cap.includes(`${MINUS}100%`) &&
+      tans.length === (a.allowShort ? 2 : 0) && tans.every((s) => s.includes(`between ${MINUS}100% and 100%`)),
+      `no weights (${tag}): the capped line names the cap and never the shorting bounds; the others name the bounds the switch set`, m.addedMissing.join(" | "));
+  }
+  // On the page: one line per empty column under the scorecard, its button still offered and pressed so it can be taken off.
+  const props = tabProps(short);
+  const r = render(h(Optimization, { ...props, settings: { ...props.settings, cols: [...ids] } }));
+  await flush();
+  const lines = [...r.container.querySelectorAll('[aria-labelledby="opt-scorecard"] [data-note="added-missing"]')].map((x) => text(x));
+  const want = SC.scorecard(short, customWeights(short, {}), READY, ids).addedMissing;
+  const pressed = [...r.container.querySelectorAll(".addcol-btn")].filter((b) => b.getAttribute("aria-pressed") === "true" && !b.disabled).length;
+  check(lines.length === 3 && join(lines) === join(want) && pressed === 4,
+    "no weights (page): the scorecard prints each empty column's line, and its button stays offered and pressed", lines.join(" | "));
+  r.unmount();
+
+  // Long-only, a tangency that earned no more than the rate holds one asset; the caption names it, read from the engine's weights.
+  const conv = SC.addedConventions(long, ids) ?? "";
+  const lone = ["tan.1y", "tan.bs"].map((id) => {
+    const w = engine(long, id).sol.w;
+    const held = w.flatMap((x, i) => (x > 1e-9 ? [long.tickers[i]] : []));
+    return { id, beats: engine(long, id).sol.beatsRf, held };
+  });
+  check(lone.every((x) => x.beats === false && x.held.length === 1 && conv.includes(`holds ${x.held[0]} alone`)) &&
+    (conv.match(/least negative/g) ?? []).length === 2 && !/least negative/.test(SC.addedConventions(exampleAnalysis(), ids) ?? ""),
+    "one asset: a long-only tangency that earned no more than the rate is said to hold its one asset, and only then",
+    lone.map((x) => `${x.id} ${x.beats} ${x.held.join()}`).join("; "));
+}
+
+// The capped column's what-if rows follow its largest weight; when that weight sits at the cap the caption says
+// they can read zero. On six rotations of one return series every mean and variance is the same, so the capped
+// tangency spreads near 1/6 each and the cap does not bind: no sentence.
+{
+  const a = exampleAnalysis();
+  const capW = engine(a, "tan.cap").sol.w;
+  const atCap = (s) => (s ?? "").includes(`${M.ADDED_LABEL["tan.cap"]} holds its largest asset at the ${Math.round(C.CAP * 100)}% cap`);
+  const base = a.returns[0];
+  const T = base.length;
+  const spread = { ...a, tickers: ["A", "B", "C", "D", "E", "F"], returns: [0, 1, 2, 3, 4, 5].map((k) => base.map((_, t) => base[(t + k * 97) % T])), rf: 0, allowShort: false };
+  const spreadW = M.addedFit(spread, "tan.cap").sol?.w;
+  check(Math.max(...capW) >= C.CAP - 1e-9 && atCap(SC.addedConventions(a, ["tan.cap"])) && !atCap(SC.addedConventions(a, ["rp"])) &&
+    spreadW && Math.max(...spreadW) < C.CAP - 1e-6 && !atCap(SC.addedConventions(spread, ["tan.cap"])),
+    "cap: the caption says the what-if rows follow a weight held at the cap when the engine's largest weight is at the cap, and not otherwise",
+    `${Math.max(...capW)} ${spreadW ? Math.max(...spreadW) : "none"}`);
+}
+
+// The shrunk-mean column beside Tangency's: when every weight is within a point, the caption says why, with the
+// one amount the shrinkage adds to every asset, phi times the target's excess over the rate, from the engine.
+{
+  const near = exampleAnalysis();
+  const far = fixtureAnalysis("megacap");
+  const within = (a) => {
+    const w = engine(a, "tan.bs").sol.w;
+    return a.tangency.w.every((x, i) => Math.abs(x - w[i]) < SC.CLOSE_WEIGHTS);
+  };
+  const said = (a) => (SC.addedConventions(a, ["tan.bs"]) ?? "").includes("percentage point of Tangency's");
+  const sh = engine(near, "tan.bs").sol.shrink;
+  const amount = format(sh.phi * (sh.mu0 * TRADING_DAYS - near.rf), "pct2");
+  check(within(near) && said(near) && SC.addedConventions(near, ["tan.bs"]).includes(`here ${amount} a year`) && !within(far) && !said(far),
+    "shrunk means: the caption says the column sits close to Tangency's, with the amount that moves it, exactly when the engine's weights do", amount);
+}
+
+// The scorecard is computed again each time one construction's redraws land: a column whose strip has not
+// changed reads its fragility rows back, the same object, instead of solving them again, and they are the
+// engine's own.
+{
+  const a = exampleAnalysis();
+  const strip = engine(a, "tan.bs").strip;
+  const once = SC.addedFragility(a, "tan.bs", strip);
+  const own = M.addedFit(a, "tan.bs").own;
+  const direct = R.fragility("tan.bs", { m: own.m, S: own.S, rf: a.rf, allowShort: a.allowShort, T: own.T, lookbacks: M.addedLookbacks(a, "tan.bs"), redraws: null, strip });
+  check(once === SC.addedFragility(a, "tan.bs", strip) && JSON.stringify(once) === JSON.stringify(direct) && SC.addedFragility(a, "tan.bs", null) !== once,
+    "solved once: an added column's fragility rows are read back while its strip is unchanged, and equal the engine's");
 }
 
 done("t-columns");

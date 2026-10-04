@@ -28,7 +28,7 @@ import SegControl from "../components/SegControl.tsx";
 import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import { format, MINUS } from "../format.ts";
-import { ADDED_IDS, type AddedId } from "../lib/constructions.ts";
+import { ADDED_IDS, unavailable, type AddedId } from "../lib/constructions.ts";
 import type { Vec } from "../lib/num.ts";
 import type { Custom } from "../lib/portfolio.ts";
 import type { Analysis, Level, LoadState, TabProps } from "../types.ts";
@@ -259,8 +259,10 @@ const ScorecardSection = memo(function ScorecardSection({
 }) {
   const model = useMemo(() => scorecard(a, c, redraws, shown, draws), [a, c, redraws, shown, draws]);
   const book = useMemo(() => ({ analysis: a, amount, refused: c.ok ? null : c.reason }), [a, amount, c]);
+  // Whether a button is offered reads the basket's size only; a construction is solved once its column is added.
   const options = useMemo(
-    () => ADDED_IDS.map((id) => ({ id, label: ADDED_LABEL[id], on: chosen.includes(id), offered: addedFit(a, id).reason === null })),
+    () =>
+      ADDED_IDS.map((id) => ({ id, label: ADDED_LABEL[id], on: chosen.includes(id), offered: unavailable(id, a.dates.length, a.tickers.length) === null })),
     [a, chosen],
   );
   const note = useMemo(() => unavailableNote(a), [a]);

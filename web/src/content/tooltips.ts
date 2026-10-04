@@ -16,9 +16,15 @@
 // plate never had, so that tip gains one closing line (NOTES, below) saying what the ± measures and
 // what it leaves out. The app's text before it is unchanged.
 import type { Level, TipKey } from "../types.ts";
+import { CAP, CAP_MIN_ASSETS, YEAR_ROWS } from "../lib/constructions.ts";
 import TIPS from "./tooltips.json" with { type: "json" };
 
 type Texts = Record<Level, string>;
+
+// The added columns' tips quote the engine's own cap and year, so a changed constant changes the words too.
+const CAP_PCT = `${Math.round(CAP * 100)}%`;
+const SUBSCRIPT = "₀₁₂₃₄₅₆₇₈₉";
+const YEAR_SUB = String(YEAR_ROWS).replace(/\d/g, (d) => SUBSCRIPT[Number(d)]);
 
 // The app's text, exactly as dumped. Keyed loosely so an unknown key reads as missing, as in 586.
 export const ORACLE_TIPS: Readonly<Record<string, Texts>> = TIPS;
@@ -231,8 +237,8 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   // are in-sample; none says how it compares with another column.
   col_last_year: {
     plain: "The maximum-Sharpe mix chosen from the last year of prices only, then held at those weights over the whole window. Its figures are in-sample: the weights were picked with hindsight from part of these same prices.",
-    finance: "The tangency portfolio solved on the means and covariance of the window's last 252 daily returns, at the page's risk-free rate and within the shorting switch's bounds, then held at fixed weights, rebalanced daily. Every figure in its column is in-sample.",
-    formula: "max (w′μ₂₅₂ − r_f) / √(w′Σ₂₅₂ w) subject to Σwᵢ = 1, with μ₂₅₂ and Σ₂₅₂ from the last 252 daily returns; parameters n + n(n + 1)/2, from those 252 days.",
+    finance: `The tangency portfolio solved on the means and covariance of the window's last ${YEAR_ROWS} daily returns, at the page's risk-free rate and within the shorting switch's bounds, then held at fixed weights, rebalanced daily. Every figure in its column is in-sample.`,
+    formula: `max (w′μ${YEAR_SUB} − r_f) / √(w′Σ${YEAR_SUB} w) subject to Σwᵢ = 1, with μ${YEAR_SUB} and Σ${YEAR_SUB} from the last ${YEAR_ROWS} daily returns; parameters n + n(n + 1)/2, from those ${YEAR_ROWS} days.`,
   },
   col_shrunk: {
     plain: "The maximum-Sharpe mix after every asset's average return has been pulled part of the way toward one shared figure, which narrows the gaps between them before the weights are chosen. How far they are pulled is worked out from the data; its figures are in-sample.",
@@ -240,9 +246,9 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     formula: "μ̂ = (1 − φ) m + φ μ₀ 1, with μ₀ = 1′Σ⁻¹m / 1′Σ⁻¹1, φ = (n + 2) / ((n + 2) + T (m − μ₀1)′Σ⁻¹(m − μ₀1)) and Σ = S (T − 1) / (T − n − 2); then the tangency on μ̂ and S.",
   },
   col_capped: {
-    plain: "The maximum-Sharpe mix with no short positions and no asset above 25% of the money. Its weights were chosen on this window's prices, so its figures are in-sample.",
-    finance: "Long-only tangency with an upper bound of 25% on every weight, solved on the window's means and covariance at the page's risk-free rate. It needs at least five assets, and the shorting switch does not reach it. In-sample.",
-    formula: "max (w′μ − r_f) / √(w′Σw) subject to Σwᵢ = 1 and 0 ≤ wᵢ ≤ 0.25; parameters n + n(n + 1)/2.",
+    plain: `The maximum-Sharpe mix with no short positions and no asset above ${CAP_PCT} of the money. Its weights were chosen on this window's prices, so its figures are in-sample.`,
+    finance: `Long-only tangency with an upper bound of ${CAP_PCT} on every weight, solved on the window's means and covariance at the page's risk-free rate. It needs at least ${CAP_MIN_ASSETS} assets, and the shorting switch does not reach it. In-sample.`,
+    formula: `max (w′μ − r_f) / √(w′Σw) subject to Σwᵢ = 1 and 0 ≤ wᵢ ≤ ${CAP}; parameters n + n(n + 1)/2.`,
   },
   col_parity: {
     plain: "A mix in which every asset adds the same share of the portfolio's day-to-day swings, so a calmer asset holds more money and a jumpier one less. It ignores average returns, but its weights come from this window's prices, so its figures are in-sample.",

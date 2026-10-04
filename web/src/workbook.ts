@@ -37,8 +37,8 @@ import { TRADING_DAYS } from "./lib/stats.ts";
 import { DEFAULT_AMOUNT } from "./state/defaults.ts";
 import type { Analysis, RfSource } from "./types.ts";
 import { FITTED } from "./tabs/caption.ts";
-import { CAP, isAddedId, YEAR_ROWS } from "./lib/constructions.ts";
-import { ADDED_LABEL, addedSub, CUSTOM_REFUSAL } from "./tabs/optimization/model.ts";
+import { isAddedId, YEAR_ROWS } from "./lib/constructions.ts";
+import { ADDED_LABEL, addedMissing, addedSub, CUSTOM_REFUSAL } from "./tabs/optimization/model.ts";
 import { SCORE_GROUPS, SCORE_METRICS, type ScoreColumn, type ScoreMetric, type ScoreModel } from "./tabs/optimization/scorecard.ts";
 
 /** The saved file's name, without its extension. */
@@ -228,12 +228,13 @@ function returnsSheet(L: Layout): BookSheet {
 /** Why a portfolio column has no weights, in words. */
 function missingReason(col: ScoreColumn, a: Analysis, reason: string | null): string {
   if (col.id === "custom") return reason ?? "Custom is not shown on the page.";
+  // An added column's reason is the page's own sentence (model.ts), so the book and the page cannot differ.
   // The capped tangency and risk parity never short, so the switch is no part of why they found nothing.
-  if (col.id === "tan.cap")
-    return `No long-only mix holding at most ${Math.round(CAP * 100)}% of each asset earns more than the risk-free rate on this window, so the page shows none.`;
-  if (col.id === "rp") return "The solve found no weights on this window, so the page shows none.";
-  const where = col.id === "tan.1y" ? "the last year of this window" : "this window";
-  return `The solve found no weights on ${where}${a.allowShort ? "" : " without shorting"}, so the page shows none.`;
+  if (isAddedId(col.id)) {
+    const why = addedMissing(a, col.id);
+    return `${why.charAt(0).toUpperCase()}${why.slice(1)}, so the page shows none.`;
+  }
+  return `The solve found no weights on this window${a.allowShort ? "" : " without shorting"}, so the page shows none.`;
 }
 
 /** The sub-line under a head: the page's own, or why the column is empty. */
@@ -481,6 +482,11 @@ export function bookNotes(a: Analysis, model: ScoreModel, reason: string | null)
   // commas, so the list is set off with semicolons.
   const added = model.columns.flatMap((c) => (isAddedId(c.id) && c.ok ? [`${ADDED_LABEL[c.id]} (${addedSub(c.id, a.allowShort)})`] : []));
   const lastYear = model.columns.some((c) => c.id === "tan.1y" && c.ok);
+  // The capped tangency and risk parity never short, so with the switch on the Shorting line names them.
+  const longOnly = model.columns.filter((c) => c.id === "tan.cap" || c.id === "rp").map((c) => ADDED_LABEL[c.id as "tan.cap" | "rp"]);
+  const shorting = a.allowShort
+    ? `On: the solved weights may run from -100% to 100%.${longOnly.length ? ` ${longOnly.join(" and ")} ${longOnly.length > 1 ? "are" : "is"} long-only whatever this switch says.` : ""}`
+    : "Off: the solved weights run from 0% to 100%.";
   const lines: [string, string][] = [
     ["What this is", "The scorecard on the Optimization tab, rebuilt as formulas over the daily closes so every figure can be traced back to the prices. Each formula cell is saved with the value the page computed, at full precision, so the book shows the page's figures even before Excel recalculates."],
     ["Basket", a.tickers.join(", ")],
@@ -491,7 +497,7 @@ export function bookNotes(a: Analysis, model: ScoreModel, reason: string | null)
       `Daily closes adjusted for splits and dividends, from Yahoo Finance, ${format(a.prices.dates[0], "date")} to ${format(a.asOf, "date")} (${a.prices.dates.length.toLocaleString("en-US")} closes, ${a.dates.length.toLocaleString("en-US")} daily returns), pulled ${a.pulledAt.slice(0, 10)}. The Prices sheet holds them as the page cleaned them.`,
     ],
     ["Risk-free rate", `${format(a.rf, "pct2")} a year, ${RATE_FROM[a.rfSource]}. It is the input on the Weights sheet.`],
-    ["Shorting", a.allowShort ? "On: the solved weights may run from -100% to 100%." : "Off: the solved weights run from 0% to 100%."],
+    ["Shorting", shorting],
     [
       "Weights",
       `Equal-Weight is =1/n. ${solved.length ? `${solved.join(" and ")} ${solved.length > 1 ? "are" : "is"} the page's solution on this window (${FITTED}), entered as values: ` : "Solved weights would be the page's solution on this window, entered as values: "}the book does not re-optimise.${added.length ? ` The columns added on the page are solved by it too and entered as values: ${added.join("; ")}.` : ""} Change the risk-free rate and every figure moves; the weights do not. Custom is the mix typed on the Custom tab, also as values.`,
@@ -503,7 +509,7 @@ export function bookNotes(a: Analysis, model: ScoreModel, reason: string | null)
     ["Conventions", model.conventions],
     [
       "How each row is computed",
-      `${TRADING_DAYS} trading days a year. Returns are simple daily returns, and a portfolio's daily return is its weights times that day's returns, so the weights are held fixed and rebalanced every day. Volatility, tracking error and the Sharpe use sample standard deviations (n - 1). Downside deviation averages the squared shortfall below the daily risk-free rate over every day, zeros included. Beta and alpha regress the daily excess return on the benchmark's. VaR is the 5th percentile of daily returns, interpolated as PERCENTILE.INC does; expected shortfall is the mean of the days at or below it. The Sharpe's standard error uses SKEW and KURT, the sample skew and excess kurtosis.`,
+      `${TRADING_DAYS} trading days a year. Returns are simple daily returns, and a portfolio's daily return is its weights times that day's returns, so the weights are held fixed and rebalanced every day. Volatility, tracking error and the Sharpe use sample standard deviations (n - 1). Downside deviation averages the squared shortfall below the daily risk-free rate over every day, zeros included. Beta and alpha regress the daily excess return on the benchmark's; subtracting the same daily rate from both does not move the slope, so the Beta cell reads the raw returns, and the Alpha cell subtracts the rate itself. VaR is the 5th percentile of daily returns, interpolated as PERCENTILE.INC does; expected shortfall is the mean of the days at or below it. The Sharpe's standard error uses SKEW and KURT, the sample skew and excess kurtosis.`,
     ],
     [
       "Left out",
