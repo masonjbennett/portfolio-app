@@ -419,4 +419,39 @@ function frontierAdded(root) {
     "solved once: an added column's fragility rows are read back while its strip is unchanged, and equal the engine's");
 }
 
+// The page's redraw note speaks only for the columns those redraws fill, GMV and Tangency. An added column with
+// weights fills its draw cell from its own redraws, so with one shown, "the redraw row is empty" would be false of
+// a row holding its figure: the note names the columns it covers. With no added column it reads as it always has.
+{
+  const { default: Scorecard } = await import("../src/components/Scorecard.tsx");
+  const a = exampleAnalysis();
+  const c = customWeights(a, {});
+  const FAILED = { status: "error", message: "The solver stopped." };
+  const filled = Object.fromEntries(ids.map((id) => [id, { status: "ready", value: engine(a, id).strip }]));
+  const withAdded = SC.scorecard(a, c, FAILED, ids, filled);
+  const alone = SC.scorecard(a, c, FAILED);
+  const notes = (cols) => [FAILED, { status: "pending" }, READY].map((r) => SC.drawRowNote(r, cols));
+  const both = `${M.PORT_LABEL.gmv} and ${M.PORT_LABEL.tangency}`;
+  const draws = withAdded.lines.find((l) => l.metric.id === "draws").cells;
+  const filledAdded = withAdded.columns.every((col, k) => !C.isAddedId(col.id) || (col.ok && draws[k].value !== null));
+  const baseEmpty = withAdded.columns.every((col, k) => (col.id !== "gmv" && col.id !== "tangency") || draws[k].value === null);
+  check(filledAdded && baseEmpty && JSON.stringify(notes(withAdded.columns)) === JSON.stringify([
+    `The redraw row is empty for ${both}: the redraws failed. The solver stopped.`,
+    `The redraw row fills in for ${both} once the ${R.REDRAWS} redraws are solved.`,
+    `The redraw row is empty for ${both}: the covariance matrix has no Cholesky factor, so no means could be drawn.`,
+  ]), "redraw note: with an added column filled from its own redraws, the page's note names the columns its redraws fill",
+  `${filledAdded} ${baseEmpty} ${JSON.stringify(notes(withAdded.columns))}`);
+  check(JSON.stringify(notes(alone.columns)) === JSON.stringify([
+    "The redraw row is empty: the redraws failed. The solver stopped.",
+    `The redraw row fills in once the ${R.REDRAWS} redraws are solved.`,
+    "The redraw row is empty: the covariance matrix has no Cholesky factor, so no means could be drawn.",
+  ]) && JSON.stringify(notes([])) === JSON.stringify(notes(alone.columns)),
+  "redraw note: with no added column the note reads as it always has", JSON.stringify(notes(alone.columns)));
+  const r = render(h(Scorecard, { model: withAdded, redraws: FAILED, level: "plain", allowShort: false, filename: "scorecard" }));
+  const said = [...r.container.querySelectorAll(".sc-note")].map((x) => text(x));
+  check(said.includes(`The redraw row is empty for ${both}: the redraws failed. The solver stopped.`) && !said.some((x) => x.startsWith("The redraw row is empty:")),
+    "redraw note: on the page, the scorecard's note names GMV and Tangency when an added column's draw cell is filled", said.join(" | "));
+  r.unmount();
+}
+
 done("t-columns");

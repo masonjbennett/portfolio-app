@@ -131,7 +131,7 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
   const lines = visibleLines(model, full);
   const sheet = useMemo(() => scoreSheet(model), [model]);
   const width = model.columns.length + 1;
-  const pending = drawRowNote(redraws);
+  const pending = drawRowNote(redraws, model.columns);
   const colClass = (id: ScoreColId) => ["num", id === "bench" ? "sc-bench" : "", focus === id ? "sc-focus" : ""].filter(Boolean).join(" ");
   const added = model.columns.flatMap((c) => (isAddedId(c.id) ? [{ label: c.label, tip: ADDED_TIP[c.id] }] : []));
   const lastYear = model.columns.some((c) => c.id === "tan.1y" && c.ok);

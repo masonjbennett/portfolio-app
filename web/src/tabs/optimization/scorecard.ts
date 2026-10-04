@@ -70,7 +70,11 @@ export interface ScoreColumn<Id extends ScoreColId = ScoreColId> {
   id: Id;
   /** The head as the page and the downloads print it. */
   label: string;
-  /** The sub-line under the head: "weights chosen on this window" for a solved GMV or Tangency. */
+  /**
+   * The sub-line under the head: "weights chosen on this window" for every column solved on this window (GMV,
+   * Tangency and the added constructions, addedSub() adding "long only" where the switch allows shorting),
+   * LAST_YEAR for the last-year one, CUSTOM_EQUAL for a typed mix that is equal weight, and otherwise null.
+   */
   sub: string | null;
   /** False for a failed solve or a refused custom mix: its cells are all dashes. */
   ok: boolean;
@@ -536,10 +540,20 @@ export function sheetNotes(m: ScoreModel): [string, string][] {
   ];
 }
 
-/** A note on the fragility group, or null: why the draw row is still a dash for the solved portfolios. */
-export function drawRowNote(redraws: RedrawState): string | null {
-  if (redraws.status === "pending") return `The redraw row fills in once the ${REDRAWS} redraws are solved.`;
-  if (redraws.status === "error") return `The redraw row is empty: the redraws failed. ${redraws.message}`;
-  if (redraws.value === null) return "The redraw row is empty: the covariance matrix has no Cholesky factor, so no means could be drawn.";
+/**
+ * A note on the fragility group, or null: why the draw row is still a dash for the solved portfolios. These
+ * redraws fill only GMV's and Tangency's draw cells; an added column with weights fills its own from its own
+ * redraws (addedDrawNote speaks for it). So once `columns` shows such a column, the note names the columns it
+ * speaks for, and says nothing when neither of them was solved: "the redraw row is empty" would be false of a
+ * row with an added column's figure in it.
+ */
+export function drawRowNote(redraws: RedrawState, columns: readonly ScoreColumn[] = []): string | null {
+  const ownDraws = columns.some((c) => isAddedId(c.id) && c.ok);
+  const covered = columns.filter((c) => (c.id === "gmv" || c.id === "tangency") && c.ok).map((c) => c.label);
+  if (ownDraws && !covered.length) return null;
+  const which = ownDraws ? ` for ${covered.join(" and ")}` : "";
+  if (redraws.status === "pending") return `The redraw row fills in${which} once the ${REDRAWS} redraws are solved.`;
+  if (redraws.status === "error") return `The redraw row is empty${which}: the redraws failed. ${redraws.message}`;
+  if (redraws.value === null) return `The redraw row is empty${which}: the covariance matrix has no Cholesky factor, so no means could be drawn.`;
   return null;
 }
