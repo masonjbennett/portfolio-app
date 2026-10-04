@@ -41,6 +41,12 @@ check(!Object.hasOwn(noEnd, "end") && !Object.hasOwn(noEnd, "rf") && noEnd.ticke
   "round trip: today and the live rate are remembered as themselves, not frozen", JSON.stringify(noEnd));
 saveSettings({ ...full, amount: 123457 });
 check(!/123457|amount/.test(mem.getItem(SETTINGS_KEY)), "settings: the stored settings never carry the amount", mem.getItem(SETTINGS_KEY));
+// The scorecard's added columns travel with the custom weights, in a link, and neither is remembered here.
+saveSettings({ ...full, cols: ["tan.1y", "rp"] });
+check(!/cols/.test(mem.getItem(SETTINGS_KEY)) && !Object.hasOwn(loadSettings(), "cols"), "settings: the added columns are never written to this browser", mem.getItem(SETTINGS_KEY));
+mem.m.set(SETTINGS_KEY, "?tickers=VTI,AGG,GLD&cols=tan.bs,rp");
+check(!Object.hasOwn(loadSettings(), "cols") && loadSettings().tickers?.length === 3, "settings: added columns found in storage (an edited value) are not read", JSON.stringify(loadSettings()));
+saveSettings(full);
 savePrefs({ level: "finance", amount: 30000, extra: "x" });
 check(eq(Object.keys(JSON.parse(mem.getItem(PREFS_KEY))).sort(), ["amount", "level"]), "prefs: only the level and the amount are written");
 

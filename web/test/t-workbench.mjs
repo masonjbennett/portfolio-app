@@ -189,6 +189,15 @@ const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
 check(prefs.amount === 98765 && prefs.level === "formula" && !/98765/.test(localStorage.getItem(SETTINGS_KEY)),
   "storage: the amount and level are remembered in this browser, the amount only in the prefs", JSON.stringify(prefs));
 
+// The scorecard's added columns: into the link, in the fixed order, never into storage; the analysis is not rebuilt.
+await act(async () => {
+  wb.setSettings({ cols: ["rp", "tan.1y"] });
+  await sleep(0);
+});
+await later();
+check(location.search.includes("cols=tan.1y,rp") && !/cols/.test(localStorage.getItem(SETTINGS_KEY) ?? "") && ready() === a && priceCalls().length === n0,
+  "columns: added columns reach the link in the fixed order and not this browser's storage, with no fetch and the same analysis", location.search);
+
 // ---- the window moves: the rate is asked for again from an earlier start, never a later one -----------------
 {
   const n = rfCalls().length;
@@ -472,6 +481,21 @@ check(bits(wb.settings.tickers, ["XLK", "XLF", "XLV"]) && wb.settings.start === 
   JSON.stringify({ ...wb.settings, tab: wb.tab, level: wb.level }));
 check(wb.analysis.status === "loading", "no example yet: loading, not an empty result");
 v2.unmount();
+
+// Added columns come from the link only: a stored value is not read, and a link without cols= opens none.
+fresh("?tab=optimization&cols=rp,bogus,tan.1y,rp");
+localStorage.setItem(SETTINGS_KEY, "?tickers=AAPL,MSFT,JPM&cols=tan.bs");
+const v5 = render(h(Probe));
+await settle();
+const linked = JSON.stringify(wb.settings.cols);
+v5.unmount();
+fresh("?tab=optimization");
+localStorage.setItem(SETTINGS_KEY, "?tickers=AAPL,MSFT,JPM&cols=tan.bs");
+const v6 = render(h(Probe));
+await settle();
+check(linked === '["tan.1y","rp"]' && JSON.stringify(wb.settings.cols) === "[]",
+  "columns: the link's known ids open in the fixed order; a stored list is never read, so no link means the default table", `${linked} / ${JSON.stringify(wb.settings.cols)}`);
+v6.unmount();
 
 // A live answer that lands before the example is not overwritten by it.
 fresh();

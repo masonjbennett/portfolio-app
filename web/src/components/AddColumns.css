@@ -1,0 +1,68 @@
+/* The scorecard's "Add a column" row: pill toggles on a hairline, wrapping onto as many lines as the width
+   needs, so the row never pushes the page sideways. Every colour is a token. */
+.addcol {
+  margin: 0 0 var(--space-3);
+  min-width: 0;
+}
+
+.addcol-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.addcol-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+.addcol-btn {
+  max-width: 100%;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-ink2);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: normal;
+  text-align: left;
+}
+
+.addcol-btn:hover:not(:disabled) {
+  border-color: var(--color-teal);
+}
+
+.addcol-btn[aria-pressed="true"] {
+  color: var(--color-ink);
+  font-weight: 600;
+  border-color: var(--color-teal);
+  box-shadow: inset 0 0 0 1px var(--color-teal);
+}
+
+.addcol-btn:disabled {
+  color: var(--color-ink2);
+  border-style: dashed;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.addcol-btn:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+.addcol-note {
+  margin: var(--space-2) 0 0;
+  max-width: 72ch;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-ink2);
+}

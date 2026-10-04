@@ -21,6 +21,8 @@ const { scorecardRow } = await import("../src/lib/stats.ts");
 const { FITTED } = await import("../src/tabs/caption.ts");
 const { customWeights } = await import("../src/tabs/optimization/model.ts");
 const { exampleAnalysis, fixtureAnalysis } = await import("./_analysis.mjs");
+const { ADDED_IDS, CAP, isAddedId, YEAR_ROWS } = await import("../src/lib/constructions.ts");
+const { ADDED_LABEL } = await import("../src/tabs/optimization/model.ts");
 
 const excel = json(FIXTURE);
 const page = (model, metricId, k, se) => {
@@ -214,6 +216,63 @@ for (const set of SETS) {
   const off = model.columns.map((col, k) => ({ col, k })).filter(({ k }) => !close(evs.value("Scorecard", `${String.fromCharCode(68 + k)}${esRow}`), page(model, "es", k, false)));
   check(onADay && off.length === 0, "tail: where the 5th percentile is a day's own return, the shortfall counts that day, as the page does",
     `${T} days, on a day ${onADay}, off ${off.map((x) => x.col.id).join()}`);
+}
+
+// The constructions a reader can add to the scorecard: each one shown is in the book, its weights entered as the
+// page's values under its own head and sub-line, and every figure of its column, cached and evaluated, is the
+// page's. Held on the example and the mega-cap fixture, and on the example with shorting on.
+for (const [name, make] of [["example", () => exampleAnalysis()], ["megacap", () => fixtureAnalysis("megacap")], ["example, shorting on", () => exampleAnalysis({ allowShort: true })]]) {
+  const tag = (s) => `${s} (${name})`;
+  const a = make();
+  const c = customWeights(a, {});
+  const model = SC.scorecard(a, c, { status: "ready", value: null }, ADDED_IDS);
+  const book = fromSheets(W.scoreBook({ analysis: a, model, refused: c.ok ? null : c.reason }));
+  const ev = evaluator(book);
+  const S = book.sheets;
+  const added = model.columns.map((col, k) => ({ col, k, L: String.fromCharCode(68 + k) })).filter((x) => isAddedId(x.col.id));
+  const labels = W.BOOK_ROWS.map((_, i) => S.Scorecard[`B${3 + i}`]?.v);
+  const bad = [];
+  let figures = 0;
+  for (const { col, k, L } of added) {
+    if (S.Scorecard[`${L}1`]?.v !== col.label) bad.push(`${col.id}: head ${S.Scorecard[`${L}1`]?.v}`);
+    labels.forEach((label, i) => {
+      const se = label === W.SE_LABEL;
+      const metric = SC.SCORE_METRICS.find((m) => m.label === (se ? "Sharpe" : label));
+      const want = page(model, metric.id, k, se);
+      const cell = S.Scorecard[`${L}${3 + i}`];
+      if (!finite(want)) {
+        if (cell?.v !== W.NOT_DEFINED) bad.push(`${col.id}/${label}: the page prints a dash, the book ${JSON.stringify(cell)}`);
+        return;
+      }
+      figures += 1;
+      const got = cell?.f !== undefined ? ev.value("Scorecard", `${L}${3 + i}`) : undefined;
+      if (!(close(cell.v, want) && close(got, want))) bad.push(`${col.id}/${label}: page ${want}, cached ${cell?.v}, formula ${got}`);
+    });
+  }
+  check(added.length === ADDED_IDS.length && added.every((x) => x.col.ok) && figures >= added.length * 15 && bad.length === 0,
+    tag("added columns: each is in the book under the page's head, and every figure, cached and evaluated, is the page's"), `${figures} figures; ${bad.slice(0, 3).join("; ")}`);
+  const wcols = model.columns.filter((col) => col.id !== "bench").map((col, j) => ({ col, L: String.fromCharCode(66 + j) })).filter((x) => isAddedId(x.col.id));
+  const wbad = wcols.filter(({ col, L }) => !(S.Weights[`${L}1`]?.v === col.label && S.Weights[`${L}2`]?.v === `${col.sub}, as values` &&
+    a.tickers.every((_, i) => S.Weights[`${L}${3 + i}`]?.f === undefined && S.Weights[`${L}${3 + i}`]?.v === col.weights[i])));
+  check(wcols.length === ADDED_IDS.length && wbad.length === 0, tag("added columns: their weights are the page's, entered as values, under the page's head and sub-line"), wbad.map((x) => x.col.id).join());
+  const cells = formulaCells(book);
+  const drift = cells.filter((x) => !close(ev.value(x.sheet, x.addr), x.cell.v));
+  const words = Object.values(S).flatMap((s) => Object.values(s)).filter((x) => x.t === "s").map((x) => x.v).join("\n").replace(/Best month/g, "");
+  check(drift.length === 0 && !/\b(best|optimal|winner|wins|beats?|outperform\w*|race|contender)\b/i.test(words),
+    tag("added columns: every formula cell of the wider book still evaluates to its cached value, and no ranking word appears"), drift.slice(0, 2).map((x) => `${x.sheet}!${x.addr}`).join());
+  // What the Notes say about them: each named with its own sub-line among the weights entered as values, the
+  // last-year column's shorter window said where the book says what is in-sample, and a capped tangency or
+  // risk parity that found nothing given its own reason, which is never the shorting switch.
+  const notes = Object.fromEntries(W.bookNotes(a, model, null));
+  const named = added.map(({ col }) => `${col.label} (${col.sub})`);
+  check(named.every((s) => notes.Weights.includes(s)) && /does not re-optimise/.test(notes.Weights) &&
+    notes["In-sample"].startsWith("Every figure is in-sample") && notes["In-sample"].includes(`last ${YEAR_ROWS} daily returns`),
+    tag("added columns: the Notes name each one with its sub-line as entered values, and the last-year column's window"), `${notes.Weights} | ${notes["In-sample"]}`);
+  const gone = { ...model, columns: model.columns.map((col) => (col.id === "tan.cap" || col.id === "rp" ? { ...col, ok: false, weights: null } : col)) };
+  const why = Object.fromEntries(W.bookNotes(a, gone, null))["Not shown"] ?? "";
+  const capWhy = `${ADDED_LABEL["tan.cap"]}: No long-only mix holding at most ${Math.round(CAP * 100)}% of each asset earns more than the risk-free rate`;
+  const rpWhy = `${ADDED_LABEL.rp}: The solve found no weights on this window, so the page shows none.`;
+  check(why.includes(capWhy) && why.includes(rpWhy), tag("added columns: a capped tangency or risk parity with no weights says why, and never blames the shorting switch"), why);
 }
 
 // The book loads on the click: nothing imports it statically, and the scorecard imports it dynamically.

@@ -1,5 +1,6 @@
-// The share link: settings (never the dollar amount), custom weights and the tab, as a query
-// string. The app has no share link at all; its sidebar starts over on every visit (645-805).
+// The share link: settings (never the dollar amount, but the scorecard's added columns), custom weights
+// and the tab, as a query string. The app has no share link at all; its sidebar starts over on every
+// visit (645-805).
 //
 // Encoding picks each field BY NAME, never by spreading the object it is given, so an amount
 // passed in by mistake has no way into the string. Decoding trusts nothing: a link is typed,
@@ -8,18 +9,20 @@
 // Nothing here throws.
 import { SYMBOL } from "../data/prices.ts";
 import { MAX_TICKERS, parseTickers } from "../lib/clean.ts";
+import { ADDED_IDS, type AddedId } from "../lib/constructions.ts";
 import { BENCHMARKS } from "./defaults.ts";
 import { TAB_IDS } from "../types.ts";
 import type { CustomWeights, ShareSettings, ShareState, TabId } from "../types.ts";
 
 // Query keys. Short, because people read and paste the link.
-const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", w: "w", tab: "tab" };
+const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", cols: "cols", w: "w", tab: "tab" };
 
 // The app does not validate ticker characters (1007); a URL is hostile input, so a symbol is held
 // to the pattern the price endpoint accepts (Yahoo's alphabet: BRK-B, ^GSPC, EURUSD=X), and a link
 // can never carry a ticker the endpoint would refuse.
-// Longer than any honest value (ten tickers, ten weights); a longer one is not parsed at all.
-const MAX_PARAM = 400;
+// Longer than any honest value (ten tickers, ten weights, all four added columns); a longer one is not
+// parsed at all.
+export const MAX_PARAM = 400;
 // The rate field has no bounds in the app (717). A link gets a sane one: -100% to 100%.
 const MAX_RF = 1;
 // The widest slider bounds the app offers, shorting on (1716-1719).
@@ -40,6 +43,9 @@ export function encodeShare(state: ShareState): string {
   if (typeof s.rf === "number" && Number.isFinite(s.rf)) put(K.rf, String(s.rf));
   if (s.benchmark) put(K.bench, s.benchmark);
   if (typeof s.allowShort === "boolean") put(K.short, s.allowShort ? "1" : "0");
+  // Only the added constructions, each once, in the fixed order whatever order they were clicked in.
+  const cols = Array.isArray(s.cols) ? ADDED_IDS.filter((id) => s.cols?.includes(id)) : [];
+  if (cols.length) put(K.cols, cols.join(","));
   const w = state.weights ? Object.entries(state.weights).filter(([t, v]) => SYMBOL.test(t) && Number.isFinite(v)) : [];
   if (w.length) put(K.w, w.map(([t, v]) => `${t}:${v}`).join(","));
   if (state.tab) put(K.tab, state.tab);
@@ -83,6 +89,14 @@ function weights(v: string): CustomWeights | null {
   return out;
 }
 
+// "tan.1y,rp". Known ids are kept once each, in the fixed order; anything else is dropped, so a mangled
+// list still opens the columns it names correctly. None known is the same as none at all.
+function columns(v: string): AddedId[] | null {
+  const named = v.split(",").map((x) => x.trim());
+  const kept = ADDED_IDS.filter((id) => named.includes(id));
+  return kept.length ? kept : null;
+}
+
 // Reads a query string (location.search, with or without its "?"). Anything malformed is left
 // out, never guessed.
 export function decodeShare(search: string): ShareState {
@@ -112,6 +126,9 @@ export function decodeShare(search: string): ShareState {
     if (b !== null && BENCHMARKS.some((x) => x.symbol === b)) settings.benchmark = b;
     const sh = get(K.short);
     if (sh === "1" || sh === "0") settings.allowShort = sh === "1";
+    const cv = get(K.cols);
+    const cols = cv === null ? null : columns(cv);
+    if (cols) settings.cols = cols;
     const wv = get(K.w);
     w = wv === null ? null : weights(wv);
     const tb = get(K.tab);

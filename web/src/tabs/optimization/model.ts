@@ -20,11 +20,25 @@
 //   shorting, a weight pushed outside the bounds) are refused and named; the app divides by any
 //   non-zero total (1582-1586).
 import { format, MINUS } from "../../format.ts";
+import {
+  ADDED_IDS,
+  CAP,
+  CAP_MIN_ASSETS,
+  ownWindow,
+  solveAdded,
+  unavailable,
+  YEAR_ROWS,
+  type AddedId,
+  type AddedSolution,
+  type Moments,
+  type Unavailable,
+} from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
-import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, type Custom, type Row } from "../../lib/portfolio.ts";
+import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, windowMoments, windows, type Custom, type Row } from "../../lib/portfolio.ts";
 import { maxDrawdown, returnShare, sharpeSE, wealth } from "../../lib/stats.ts";
 import type { Role } from "../../charts/theme.ts";
 import type { Analysis, Column, CustomWeights, FormatId, LoadState, TableRow, TipKey } from "../../types.ts";
+import { FITTED } from "../caption.ts";
 
 // ---- the three portfolios (1470-1502) --------------------------------------------------------------
 
@@ -70,6 +84,127 @@ export function portRow(a: Analysis, w: Vec, includeStart = true): Row {
 export function finiteSE(a: Analysis, w: Vec): number | null {
   const se = sharpeSE(portfolioReturns(a.returns, w), a.rf);
   return Number.isFinite(se) ? se : null;
+}
+
+// ---- the added constructions ------------------------------------------------------------------------
+// Four more ways to build a portfolio from the same prices, which the reader can add to the scorecard and
+// the weights table one at a time. Each is solved by the engine (src/lib/constructions.ts) on its own
+// window's moments, once per analysis, and every one is in-sample: its weights are chosen on the prices
+// its figures are then computed on, exactly as the tangency column's are.
+
+/** Each added construction's head: the words on its button, the column and the downloads. */
+export const ADDED_LABEL: Readonly<Record<AddedId, string>> = {
+  "tan.1y": "Tangency, last year",
+  "tan.bs": "Tangency, shrunk means",
+  "tan.cap": `Tangency, at most ${Math.round(CAP * 100)}% each`,
+  rp: "Risk parity",
+};
+
+/** The sub-line under the last-year construction's head: its weights saw only the window's last year. */
+export const LAST_YEAR = "weights chosen on the last year of this window";
+
+/**
+ * The sub-line under an added head. The capped tangency and risk parity hold no short position whatever
+ * the switch says, so while shorting is on their sub-line says so.
+ */
+export function addedSub(id: AddedId, allowShort: boolean): string {
+  const base = id === "tan.1y" ? LAST_YEAR : FITTED;
+  return allowShort && (id === "tan.cap" || id === "rp") ? `${base}, long only` : base;
+}
+
+/** An added construction that found no weights keeps its column, labelled, as a failed GMV does. */
+export const addedFailedLabel = (id: AddedId) => `${ADDED_LABEL[id]} (failed)`;
+
+/** One added construction on one analysis: why the basket cannot have it, its own window, its solution. */
+export interface AddedFit {
+  id: AddedId;
+  /** Why this basket and window cannot have it (its button is disabled), or null. */
+  reason: Unavailable | null;
+  /** The moments it is solved on: the last year's for the last-year tangency, the whole window's otherwise. */
+  own: Moments | null;
+  /** Its weights and figures, or null: not on offer, or the solve found none. */
+  sol: AddedSolution | null;
+}
+
+// An analysis never changes once built (a new rate or switch builds a new one), so a construction is
+// solved once per analysis, however often its column is toggled or the scorecard recomputed.
+const FITS = new WeakMap<Analysis, Map<AddedId, AddedFit>>();
+const LOOKBACKS = new WeakMap<Analysis, Map<AddedId, (Vec | null)[]>>();
+
+function cached<T>(store: WeakMap<Analysis, Map<AddedId, T>>, a: Analysis, id: AddedId, make: () => T): T {
+  let per = store.get(a);
+  if (!per) {
+    per = new Map();
+    store.set(a, per);
+  }
+  if (!per.has(id)) per.set(id, make());
+  return per.get(id) as T;
+}
+
+/** Construction `id` on analysis `a`, solved the engine's way on its own window. */
+export function addedFit(a: Analysis, id: AddedId): AddedFit {
+  return cached(FITS, a, id, () => {
+    const reason = unavailable(id, a.dates.length, a.tickers.length);
+    const own = reason ? null : ownWindow(id, a.returns);
+    const sol = own ? solveAdded(id, own.m, own.S, own.T, a.rf, a.allowShort) : null;
+    return { id, reason, own, sol };
+  });
+}
+
+/**
+ * Construction `id` re-solved on each lookback window the Sensitivity tab uses (windows(), each ending on
+ * the last day), for the scorecard's lookback row; null where a window's solve found nothing. The
+ * last-year tangency IS one of those windows, so it has none ([]), and neither does a window too short to
+ * split.
+ */
+export function addedLookbacks(a: Analysis, id: AddedId): (Vec | null)[] {
+  return cached(LOOKBACKS, a, id, () => {
+    if (id === "tan.1y" || addedFit(a, id).reason) return [];
+    const ws = windows(a.dates.length);
+    if (ws.length < 2) return [];
+    return ws.map(({ lb }) => {
+      const { m, S } = windowMoments(a.returns, lb);
+      return solveAdded(id, m, S, lb, a.rf, a.allowShort)?.w ?? null;
+    });
+  });
+}
+
+/** The added constructions the page shows: those chosen that this basket and window can have, in the fixed order. */
+export function shownAdded(a: Analysis, chosen: readonly AddedId[]): AddedId[] {
+  return ADDED_IDS.filter((id) => chosen.includes(id) && unavailable(id, a.dates.length, a.tickers.length) === null);
+}
+
+/** Why a construction cannot be added on this basket and window, in plain words. */
+export function unavailableWords(id: AddedId, reason: Unavailable, a: Analysis): string {
+  const T = a.dates.length.toLocaleString("en-US");
+  const n = a.tickers.length;
+  const label = ADDED_LABEL[id];
+  switch (reason) {
+    case "window-is-one-year":
+      return `${label} needs more than a year of prices: this window has ${T} daily returns, and a year is ${YEAR_ROWS}.`;
+    case "year-too-thin":
+      return `${label} is off: the last year's ${YEAR_ROWS} daily returns are too few to estimate ${n} assets' covariance.`;
+    case "too-few-rows":
+      return `${label} needs more than ${n + 2} daily returns for ${n} assets; this window has ${T}.`;
+    case "too-few-assets":
+      return n === CAP_MIN_ASSETS - 1
+        ? `${label} needs at least ${CAP_MIN_ASSETS} assets: with ${n}, the cap leaves equal weight as the only mix.`
+        : `${label} needs at least ${CAP_MIN_ASSETS} assets: with ${n}, no mix keeps every weight at ${Math.round(CAP * 100)}% or less.`;
+  }
+}
+
+/** The line under the column buttons: why each construction this basket cannot have is off, or null. */
+export function unavailableNote(a: Analysis): string | null {
+  const parts = ADDED_IDS.map((id) => {
+    const why = unavailable(id, a.dates.length, a.tickers.length);
+    return why ? unavailableWords(id, why, a) : null;
+  }).filter((x): x is string => x !== null);
+  return parts.length ? parts.join(" ") : null;
+}
+
+/** The heads in a table that name a solved added construction, each with its sub-line. */
+export function addedSubs(a: Analysis, shown: readonly AddedId[]): Record<string, string> {
+  return Object.fromEntries(shown.filter((id) => addedFit(a, id).sol).map((id) => [ADDED_LABEL[id], addedSub(id, a.allowShort)]));
 }
 
 // ---- the tiles (1504-1530) --------------------------------------------------------------------------
@@ -185,18 +320,22 @@ function tableState(t: TableData, name: string): LoadState<TableData> {
 
 /**
  * The weights table (1535): a row per ticker in the entered order, columns GMV, Tangency, Equal-Weight
- * in the app's order. A failed portfolio keeps its column, labelled failed, with no figures.
+ * in the app's order, then each added construction the page shows, in the fixed order. A failed
+ * portfolio keeps its column, labelled failed, with no figures.
  */
-export function weightTable(a: Analysis): LoadState<TableData> {
+export function weightTable(a: Analysis, added: readonly AddedId[] = []): LoadState<TableData> {
   const order: PortId[] = ["gmv", "tangency", "ew"];
   const ws = order.map((id) => weightsOf(a, id));
+  const extra = ADDED_IDS.filter((id) => added.includes(id)).map((id) => ({ id, w: addedFit(a, id).sol?.w ?? null }));
   const columns: Column[] = [
     { key: "asset", label: "Asset", format: "text", first: true },
     ...order.map((id, k): Column => ({ key: id, label: ws[k] ? PORT_LABEL[id] : failedLabel(id), format: "pct2" })),
+    ...extra.map(({ id, w }): Column => ({ key: id, label: w ? ADDED_LABEL[id] : addedFailedLabel(id), format: "pct2" })),
   ];
   const rows = a.tickers.map((t, i) => {
     const row: TableRow = { asset: t };
     order.forEach((id, k) => (row[id] = ws[k] ? (ws[k] as Vec)[i] : null));
+    for (const { id, w } of extra) row[id] = w ? w[i] : null;
     return row;
   });
   return tableState({ columns, rows }, "the weights table");

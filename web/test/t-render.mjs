@@ -203,6 +203,24 @@ function pickLevel(root) {
   check(o.changed.size > 0 && o.changed.size < now.length, "Optimization, weight: some charts show the custom mix and change, some do not", names(o, o.changed));
   check(kinds(o, o.changed).has("frontier") && kinds(o, o.changed).has("wealth"), "Optimization, weight: the frontier and the wealth chart are among those that show it");
   check(same(o.drew, o.changed), "Optimization, weight: exactly the charts that show the custom mix render again", `drew ${names(o, o.drew)}; changed ${names(o, o.changed)}`);
+
+  // Adding a scorecard column re-renders the scorecard and the weights table, and draws no chart but the
+  // frontier, which is handed the construction to mark. The wealth chart and the bar charts stay put.
+  before = now;
+  const col = record(() => root.querySelector('.addcol-btn[data-col="rp"]').click());
+  o = outcome(before, (now = chartsOn(root)), col);
+  check(root.querySelector('.sc th[data-col="rp"]') !== null && col.components.has("Scorecard") && col.components.has("Table") && col.components.has("AddColumns"),
+    "Optimization, add a column: the column is on, and the scorecard and the weights table render again", list(col.components));
+  check([...kinds(o, o.drew)].every((k) => k === "frontier") && !col.components.has("Growth") && !col.components.has("WeightChart"),
+    "Optimization, add a column: neither the wealth chart nor any bar chart renders again", names(o, o.drew));
+  await act(async () => {
+    for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0));
+  });
+  now = chartsOn(root);
+  before = now;
+  const lv2 = record(() => pickLevel(root).off.click());
+  o = outcome(before, (now = chartsOn(root)), lv2);
+  check(lv2.components.has("Tip") && o.drew.size === 0, "Optimization, explanation level with a column added: no chart renders again, the frontier included", names(o, o.drew));
   unmount();
 }
 

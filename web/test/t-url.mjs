@@ -2,8 +2,9 @@
 // amount never enters the string; and a hostile or mangled link decodes field by field, dropping
 // what does not parse, never throwing.
 import { check, done } from "./_assert.mjs";
-import { decodeShare, encodeShare } from "../src/state/url.ts";
+import { decodeShare, encodeShare, MAX_PARAM } from "../src/state/url.ts";
 import { DEFAULT_SETTINGS } from "../src/state/defaults.ts";
+import { ADDED_IDS } from "../src/lib/constructions.ts";
 
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const has = (o, k) => Object.hasOwn(o, k);
@@ -25,8 +26,38 @@ const s2 = encodeShare({ settings: { ...full, end: null, rf: null }, weights: nu
 const d2 = decodeShare(s2);
 check(!/[?&](end|rf)=/.test(s2) && !has(d2.settings, "end") && !has(d2.settings, "rf"), "encode: end and rf are written only when set", s2);
 check(d2.weights === null && d2.tab === null && !/[?&](w|tab)=/.test(s2), "encode: no weights and no tab write nothing");
-check(encodeShare({ settings: {}, weights: null, tab: null }) === "" && eq(decodeShare(""), { settings: {}, weights: null, tab: null }),
+check(encodeShare({ settings: {}, weights: null, tab: null }) === "" && eq(decodeShare(""), { settings: {}, weights: null, tab: null }) && encodeShare({ settings: DEFAULT_SETTINGS, weights: null, tab: null }).indexOf("cols") === -1,
   "empty: nothing to carry is the empty string, and it decodes to nothing");
+
+// ---- the scorecard's added columns ---------------------------------------------------------------------------
+// Carried as cols=, the engine's ids only, each once, in the fixed order; anything else in the list is dropped.
+const s5 = encodeShare({ settings: { ...full, cols: ["rp", "tan.1y"] }, weights: null, tab: "optimization" });
+check(s5.includes("cols=tan.1y,rp") && JSON.stringify(decodeShare(s5).settings.cols) === '["tan.1y","rp"]',
+  "cols: the added columns round-trip, written in the fixed order whatever order they were added in", s5);
+check(!/cols=/.test(encodeShare({ settings: { ...full, cols: [] }, weights: null, tab: null })) && !has(decodeShare(s2).settings, "cols") && !has(d1.settings, "cols"),
+  "cols: none added writes nothing, and a link without cols= opens the default table");
+const colsCases = [
+  ["?cols=rp,rp,tan.1y,rp", '["tan.1y","rp"]'],
+  ["?cols=tan.cap,bogus,tan.2y,RP,rp", '["tan.cap","rp"]'],
+  ["?cols=%20rp%20,tan.bs", '["tan.bs","rp"]'],
+  ["?cols=tan.bs&cols=rp", '["tan.bs"]'],
+];
+for (const [q, want] of colsCases) check(JSON.stringify(decodeShare(q).settings.cols) === want, `cols: ${q} keeps the known ids once each, in order`, JSON.stringify(decodeShare(q).settings.cols));
+for (const q of ["?cols=", "?cols=bogus", "?cols=__proto__,constructor", "?cols=,,,", "?cols=ew,gmv,tangency,custom,bench", `?cols=${"rp,".repeat(150)}rp`]) {
+  check(!has(decodeShare(q).settings, "cols"), `cols: ${q.slice(0, 40)} adds no column`, JSON.stringify(decodeShare(q).settings));
+}
+// The longest honest link: ten tickers, ten weights at full precision, every field, all four columns. Each value
+// fits under the length guard, and one character past the guard is not read at all.
+const ten = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "JPM", "XLRE"];
+const longW = Object.fromEntries(ten.map((t, i) => [t, -(i + 1) / 10.000000000000002 / 3]));
+const longest = encodeShare({ settings: { tickers: ten, start: "2019-01-01", end: "2026-09-26", rf: -0.012345678901234567, benchmark: "^GSPC", allowShort: true, cols: [...ADDED_IDS] }, weights: longW, tab: "optimization" });
+const back = decodeShare(longest);
+const values = new URLSearchParams(longest).values();
+check(back.settings.tickers?.length === 10 && Object.keys(back.weights ?? {}).length === 10 && JSON.stringify(back.settings.cols) === JSON.stringify(ADDED_IDS) &&
+  [...values].every((v) => v.length <= MAX_PARAM),
+  "guard: the longest honest link, all four columns included, decodes whole, every value under the length guard", `${longest.length} chars`);
+const over = `?cols=${"tan.1y,".repeat(Math.ceil(MAX_PARAM / 7))}rp`;
+check(over.length - 6 > MAX_PARAM && !has(decodeShare(over).settings, "cols"), "guard: a cols value past the length guard is not read at all", `${over.length - 6} chars`);
 
 // ---- the amount never travels ----------------------------------------------------------------------------
 const s3 = encodeShare({ settings: { ...full, amount: 123457 }, weights: { VTI: 0.5 }, tab: "custom" });

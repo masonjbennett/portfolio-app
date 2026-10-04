@@ -42,12 +42,12 @@ export const SETS = [
 const READY = { status: "ready", value: null };
 
 /**
- * The scorecard model for a set, with the added columns named. None exist yet: once scorecard() can add a
- * column, pass `added` to it here; until then naming one is an error, so the fixture never claims a column
- * the book did not carry.
+ * The scorecard model for a set, with the added columns named. scorecard() builds every one the basket can
+ * have; a named column it could not build is an error, so the fixture never claims a column the book did not
+ * carry.
  */
 export function modelFor(a, c, added = []) {
-  const model = scorecard(a, c, READY);
+  const model = scorecard(a, c, READY, added);
   for (const id of added) if (!model.columns.some((x) => x.id === id)) throw new Error(`the scorecard has no column "${id}": hand it to scorecard() in modelFor first`);
   return model;
 }

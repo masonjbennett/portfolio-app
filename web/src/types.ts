@@ -3,6 +3,7 @@
 // never redefined. Line numbers cite portfolio_app.py.
 import type { ReactNode } from "react";
 import type { CleanError, CleanEvent, Frame, RequestError } from "./lib/clean.ts";
+import type { AddedId } from "./lib/constructions.ts";
 import type { Mat, Vec } from "./lib/num.ts";
 import type { FrontierPoint, Solution, Tangency } from "./lib/optimize.ts";
 import type { AnnualStats } from "./lib/stats.ts";
@@ -43,6 +44,12 @@ export interface Settings {
   allowShort: boolean;
   /** Starting dollar amount for the wealth charts (724-725). localStorage only, NEVER the URL. */
   amount: number;
+  /**
+   * The constructions added to the Optimization tab's scorecard, by the engine's ids, in the fixed order
+   * (src/lib/constructions.ts ADDED_IDS); empty shows the default table. URL only, never localStorage:
+   * the custom weights are not remembered in this browser either, so the two travel together, in a link.
+   */
+  cols: AddedId[];
 }
 
 /** The settings a share link may carry: all of them but the dollar amount. */

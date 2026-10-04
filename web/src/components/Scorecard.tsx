@@ -13,14 +13,17 @@
 // screen reader.
 //
 // Each row's label carries its explanation: an info mark where the tooltip component takes the key, and
-// every visible row's text at the chosen level under "What each row means", which works on touch too.
+// every visible row's text at the chosen level under "What each row means", which works on touch too. The
+// head of each column the reader added carries its own mark, and its text joins that list.
 //
 // Handed `book`, the download row offers a third file: the same figures as a workbook of formulas over the
 // closes (src/workbook.ts). That code loads on the click, never with the page, and SheetJS with it.
 import { useMemo, useState } from "react";
 import { downloadBook } from "../download.ts";
 import { tipText } from "../content/tooltips.ts";
+import { isAddedId, YEAR_ROWS } from "../lib/constructions.ts";
 import {
+  ADDED_TIP,
   cellText,
   drawRowNote,
   SCORE_GROUPS,
@@ -101,6 +104,8 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
   const width = model.columns.length + 1;
   const pending = drawRowNote(redraws);
   const colClass = (id: ScoreColId) => ["num", id === "bench" ? "sc-bench" : "", focus === id ? "sc-focus" : ""].filter(Boolean).join(" ");
+  const added = model.columns.flatMap((c) => (isAddedId(c.id) ? [{ label: c.label, tip: ADDED_TIP[c.id] }] : []));
+  const lastYear = model.columns.some((c) => c.id === "tan.1y" && c.ok);
 
   return (
     <div className="tbl sc" data-view={full ? "full" : "short"}>
@@ -119,6 +124,7 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
               {model.columns.map((c) => (
                 <th key={c.id} scope="col" className={colClass(c.id)} data-col={c.id}>
                   {c.label}
+                  {isAddedId(c.id) ? <Tip tip={ADDED_TIP[c.id]} level={level} allowShort={allowShort} /> : null}
                   {c.sub ? <span className="tbl-sub">{c.sub}</span> : null}
                 </th>
               ))}
@@ -160,13 +166,19 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
       <p className="sc-note">
         The fragility rows are in-sample what-ifs on these prices, not a forecast. Equal weight and a typed mix hold the same weights
         whatever the window or the draw, so their first three fragility rows are zero. The parameters row counts the estimates each set
-        of weights rests on, all from {model.days.toLocaleString("en-US")} daily returns.
+        of weights rests on, all from {model.days.toLocaleString("en-US")} daily returns
+        {lastYear ? `, the last-year column's from the last ${YEAR_ROWS}` : ""}.
         {model.seed !== null ? ` The redraw row uses seed ${model.seed}.` : ""}
       </p>
       {model.cut ? <p className="sc-note sc-cut">{model.cut}</p> : null}
       {pending ? (
         <p className="sc-note" role="status">
           {pending}
+        </p>
+      ) : null}
+      {model.addedDraws ? (
+        <p className="sc-note" role="status" data-note="added-draws">
+          {model.addedDraws}
         </p>
       ) : null}
       <details className="sc-defs">
@@ -176,6 +188,12 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
             <div key={l.metric.id}>
               <dt>{l.metric.label}</dt>
               <dd>{tipText(l.metric.tip, level, allowShort)}</dd>
+            </div>
+          ))}
+          {added.map((x) => (
+            <div key={x.tip} data-col-def={x.tip}>
+              <dt>{x.label}</dt>
+              <dd>{tipText(x.tip, level, allowShort)}</dd>
             </div>
           ))}
         </dl>

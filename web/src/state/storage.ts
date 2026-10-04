@@ -65,10 +65,13 @@ export function savePrefs(prefs: Prefs): void {
 }
 
 // The last settings, stored as a share query string so a stored value passes the same defensive
-// decoder a pasted link does. Never the amount (that is Prefs) and never a tab.
+// decoder a pasted link does. Never the amount (that is Prefs), never a tab, and never the scorecard's
+// added columns: the custom weights are not remembered here, and the columns travel with them, in a link.
 export function loadSettings(): Partial<ShareSettings> {
   const raw = read(SETTINGS_KEY);
-  return typeof raw === "string" ? decodeShare(raw).settings : {};
+  if (typeof raw !== "string") return {};
+  const { cols: _cols, ...settings } = decodeShare(raw).settings;
+  return settings;
 }
 
 export function saveSettings(settings: ShareSettings): void {

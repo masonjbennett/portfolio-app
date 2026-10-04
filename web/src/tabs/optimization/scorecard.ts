@@ -13,26 +13,50 @@
 // - Max drawdown, the longest drawdown and Calmar count from the amount invested, as the plates do.
 // - The fragility rows are in-sample what-ifs on these prices. Equal weight and a typed mix hold the same
 //   weights whatever the window or the draw, so their first three rows are zero, and the zero is printed.
+//
+// The reader may add up to four more constructions (src/lib/constructions.ts), each a column of its own
+// between Custom and the benchmark, always in the same order. They are in-sample like the tangency column,
+// set side by side for comparison; nothing here orders, marks or counts them against one another.
 import { format } from "../../format.ts";
+import { ADDED_IDS, isAddedId, YEAR_ROWS, type AddedId } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
 import { portfolioReturns, type Custom } from "../../lib/portfolio.ts";
-import { fragility, REDRAWS, type Construction, type Fragility, type Redraws } from "../../lib/robust.ts";
-import { scorecardRow, type ScoreRow } from "../../lib/stats.ts";
+import { fragility, REDRAWS, type Construction, type Fragility, type Redraws, type Strip } from "../../lib/robust.ts";
+import { scorecardRow, TRADING_DAYS, type ScoreRow } from "../../lib/stats.ts";
 import type { ScoreTipKey } from "../../content/tooltips.ts";
 import type { Analysis, CellFormat, Column, FormatId, TableRow, TipKey } from "../../types.ts";
 import { FITTED, tableSpan } from "../caption.ts";
 import { isEqualWeight } from "../custom/model.ts";
 import { fitWindows } from "../sensitivity/model.ts";
-import { failedLabel, PORT_LABEL, weightsOf } from "./model.ts";
+import { ADDED_LABEL, addedFailedLabel, addedFit, addedLookbacks, addedSub, failedLabel, PORT_LABEL, shownAdded, weightsOf } from "./model.ts";
 
 // ---- columns -----------------------------------------------------------------------------------------
 
-/** The columns in order: the three solved or fixed portfolios, the typed mix, then the benchmark. */
-export type ScoreColId = "ew" | "gmv" | "tangency" | "custom" | "bench";
-export const SCORE_COL_IDS: readonly ScoreColId[] = ["ew", "gmv", "tangency", "custom", "bench"];
+type BaseColId = "ew" | "gmv" | "tangency" | "custom";
 
-export interface ScoreColumn {
-  id: ScoreColId;
+/**
+ * The columns: the three solved or fixed portfolios, the typed mix, any added constructions, then the
+ * benchmark. SCORE_COL_IDS is the default table, the one every page opens with.
+ */
+export type DefaultColId = BaseColId | "bench";
+export type ScoreColId = DefaultColId | AddedId;
+export const SCORE_COL_IDS: readonly DefaultColId[] = ["ew", "gmv", "tangency", "custom", "bench"];
+
+/** The columns in order with added constructions: after Custom and before the benchmark, in ADDED_IDS order whatever order they come in. */
+export function scoreColIds(added: readonly AddedId[] = []): ScoreColId[] {
+  return ["ew", "gmv", "tangency", "custom", ...ADDED_IDS.filter((id) => added.includes(id)), "bench"];
+}
+
+/** The explanation behind each added head's info mark. */
+export const ADDED_TIP: Readonly<Record<AddedId, ScoreTipKey>> = {
+  "tan.1y": "col_last_year",
+  "tan.bs": "col_shrunk",
+  "tan.cap": "col_capped",
+  rp: "col_parity",
+};
+
+export interface ScoreColumn<Id extends ScoreColId = ScoreColId> {
+  id: Id;
   /** The head as the page and the downloads print it. */
   label: string;
   /** The sub-line under the head: "weights chosen on this window" for a solved GMV or Tangency. */
@@ -47,7 +71,7 @@ export interface ScoreColumn {
   weights: Vec | null;
 }
 
-const CONSTRUCTION: Readonly<Record<Exclude<ScoreColId, "bench">, Construction>> = { ew: "ew", gmv: "gmv", tangency: "tan", custom: "custom" };
+const CONSTRUCTION: Readonly<Record<BaseColId, Construction>> = { ew: "ew", gmv: "gmv", tangency: "tan", custom: "custom" };
 
 // ---- rows ---------------------------------------------------------------------------------------------
 
@@ -173,26 +197,43 @@ export interface ScoreModel {
   seed: number | null;
   /** What the cut row's re-solve did to each solved portfolio, in words, or null when none was cut. */
   cut: string | null;
+  /** Why the draw row is still a dash for an added column (its redraws pending or failed), or null. */
+  addedDraws: string | null;
 }
 
 /** The redraws the fragility group reads: ready (possibly none, when the covariance has no factor), or pending. */
 export type RedrawState = { status: "pending" } | { status: "ready"; value: Redraws | null } | { status: "error"; message: string };
 
+/** One added construction's redraws (addedStrip on its own window), as a state: solved after paint, as the others are. */
+export type StripState = { status: "pending" } | { status: "ready"; value: Strip | null } | { status: "error"; message: string };
+
+/** The added columns' redraws on hand, by construction; one that is missing counts as pending. */
+export type AddedDraws = Partial<Readonly<Record<AddedId, StripState>>>;
+
+const NO_DRAWS: AddedDraws = {};
+
 /** The weights behind a column, or null (a failed solve, a refused mix, or the benchmark). */
 function columnWeights(a: Analysis, c: Custom, id: ScoreColId): Vec | null {
   if (id === "bench") return null;
   if (id === "custom") return c.ok ? c.w : null;
+  if (isAddedId(id)) return addedFit(a, id).sol?.w ?? null;
   return weightsOf(a, id);
 }
 
 /** The sub-line under Custom's head when its weights are all 1/n: why its column repeats Equal-Weight's. */
 export const CUSTOM_EQUAL = "equal weights, so it matches Equal-Weight";
 
-/** The columns' heads: a failed solve and a refused mix keep their column, labelled. */
-export function scoreColumns(a: Analysis, c: Custom): ScoreColumn[] {
-  return SCORE_COL_IDS.map((id): ScoreColumn => {
+/**
+ * The columns' heads: a failed solve and a refused mix keep their column, labelled. `added` are the
+ * constructions to show (shownAdded() has already dropped any this basket cannot have).
+ */
+export function scoreColumns(a: Analysis, c: Custom): ScoreColumn<DefaultColId>[];
+export function scoreColumns(a: Analysis, c: Custom, added: readonly AddedId[]): ScoreColumn[];
+export function scoreColumns(a: Analysis, c: Custom, added: readonly AddedId[] = []): ScoreColumn[] {
+  return scoreColIds(added).map((id): ScoreColumn => {
     if (id === "bench") return { id, label: a.benchLabel, sub: null, ok: true, weights: null };
     const w = columnWeights(a, c, id);
+    if (isAddedId(id)) return { id, label: w ? ADDED_LABEL[id] : addedFailedLabel(id), sub: w ? addedSub(id, a.allowShort) : null, ok: w !== null, weights: w };
     // Untyped tickers default to 1/n, so on a first visit the typed mix IS equal weight; the head says so.
     if (id === "custom") return { id, label: w ? "Custom" : "Custom (not shown)", sub: w && isEqualWeight(w) ? CUSTOM_EQUAL : null, ok: w !== null, weights: w };
     const fitted = id === "gmv" || id === "tangency";
@@ -206,17 +247,38 @@ function lookbacks(fits: ReturnType<typeof fitWindows>, id: "gmv" | "tangency"):
   return fits.value.map((f) => (id === "gmv" ? (f.gmv?.w ?? null) : (f.tan?.w ?? null)));
 }
 
-/** Every column's figures: scorecardRow over its daily returns, fragility() over its construction. */
-export function columnFigures(a: Analysis, c: Custom, redraws: Redraws | null): ColFigures[] {
+/**
+ * Every column's figures: scorecardRow over its daily returns, fragility() over its construction. An added
+ * construction's fragility rows are the engine's on its own window's moments, its lookback weights from
+ * addedLookbacks(), and its draw row from its own redraws in `draws` (a dash until they are solved).
+ */
+export function columnFigures(a: Analysis, c: Custom, redraws: Redraws | null, added: readonly AddedId[] = [], draws: AddedDraws = NO_DRAWS): ColFigures[] {
   const start = a.prices.dates[0] ?? null;
   const T = a.dates.length;
   // The lookback windows are solved once and read by both optimised columns.
   const fits = fitWindows(a);
-  return SCORE_COL_IDS.map((id): ColFigures => {
+  return scoreColIds(added).map((id): ColFigures => {
     if (id === "bench") return { row: scorecardRow(a.bench, a.bench, a.dates, start, a.rf), frag: null };
     const w = columnWeights(a, c, id);
     if (!w) return { row: null, frag: null };
     const row = scorecardRow(portfolioReturns(a.returns, w), a.bench, a.dates, start, a.rf);
+    if (isAddedId(id)) {
+      const own = addedFit(a, id).own;
+      const d = draws[id];
+      const frag = own
+        ? fragility(id, {
+            m: own.m,
+            S: own.S,
+            rf: a.rf,
+            allowShort: a.allowShort,
+            T: own.T,
+            lookbacks: addedLookbacks(a, id),
+            redraws: null,
+            strip: d && d.status === "ready" ? d.value : null,
+          })
+        : null;
+      return { row, frag };
+    }
     const kind = CONSTRUCTION[id];
     const frag = fragility(kind, {
       m: a.m,
@@ -243,13 +305,56 @@ export function scoreConventions(rf: number): string {
 }
 
 /**
+ * What the caption adds for the added columns shown: the last-year column's fixed window, the shrinkage
+ * the engine applied (read from its answer, never typed), and why risk parity's what-if rows are zero.
+ * Null when none of them is shown.
+ */
+export function addedConventions(a: Analysis, added: readonly AddedId[]): string | null {
+  const out: string[] = [];
+  const T = a.dates.length;
+  if (added.includes("tan.1y") && addedFit(a, "tan.1y").sol) {
+    out.push(
+      `${ADDED_LABEL["tan.1y"]} has its weights solved on the window's last ${YEAR_ROWS} daily returns, from ${format(a.dates[T - YEAR_ROWS], "date")}, ` +
+        `and held over the whole window like every other column; its window is fixed, so its lookback row is a dash and its other fragility rows read those ${YEAR_ROWS} days.`,
+    );
+  }
+  const shrink = added.includes("tan.bs") ? addedFit(a, "tan.bs").sol?.shrink : null;
+  if (shrink) {
+    out.push(
+      `${ADDED_LABEL["tan.bs"]} moves each asset's expected return ${format(shrink.phi, "pct1")} of the way toward the mean return of the ` +
+        `minimum-variance portfolio with no weight bounds, ${format(shrink.mu0 * TRADING_DAYS, "pct2")} a year, before solving (the Bayes-Stein estimator, Jorion 1986).`,
+    );
+  }
+  if (added.includes("rp") && addedFit(a, "rp").sol) out.push(`${ADDED_LABEL.rp} reads no expected returns, so its cut and redraw rows are zero.`);
+  return out.length ? out.join(" ") : null;
+}
+
+/** Why an added column's draw row is still a dash, or null when every shown one has its redraws. */
+export function addedDrawNote(a: Analysis, added: readonly AddedId[], draws: AddedDraws): string | null {
+  const solved = added.filter((id) => addedFit(a, id).sol);
+  const waiting = solved.filter((id) => (draws[id]?.status ?? "pending") === "pending").map((id) => ADDED_LABEL[id]);
+  const parts: string[] = [];
+  if (waiting.length) parts.push(`The redraw row fills in for ${waiting.join("; ")} once ${waiting.length === 1 ? "its" : "their"} ${REDRAWS} redraws are solved.`);
+  for (const id of solved) {
+    const d = draws[id];
+    if (d?.status === "error") parts.push(`The redraw row is empty for ${ADDED_LABEL[id]}: its redraws failed. ${d.message}`);
+    else if (d?.status === "ready" && d.value === null) parts.push(`The redraw row is empty for ${ADDED_LABEL[id]}: its covariance matrix has no Cholesky factor, so no means could be drawn.`);
+  }
+  return parts.length ? parts.join(" ") : null;
+}
+
+/**
  * The scorecard for an analysis, a custom mix and the redraws on hand. `redraws` pending or failed
  * leaves the draw row a dash for the two solved portfolios; equal weight and a typed mix still read zero.
+ * `added` are the constructions the reader added (any this basket cannot have are dropped), and `draws`
+ * their own redraws on the same seed.
  */
-export function scorecard(a: Analysis, c: Custom, redraws: RedrawState): ScoreModel {
+export function scorecard(a: Analysis, c: Custom, redraws: RedrawState, added: readonly AddedId[] = [], draws: AddedDraws = NO_DRAWS): ScoreModel {
   const value = redraws.status === "ready" ? redraws.value : null;
-  const columns = scoreColumns(a, c);
-  const figs = columnFigures(a, c, value);
+  const shown = shownAdded(a, added);
+  const columns = scoreColumns(a, c, shown);
+  const figs = columnFigures(a, c, value, shown, draws);
+  const extra = addedConventions(a, shown);
   const lines = SCORE_METRICS.map(
     (metric): ScoreLine => ({
       metric,
@@ -261,10 +366,11 @@ export function scorecard(a: Analysis, c: Custom, redraws: RedrawState): ScoreMo
     lines,
     title: "Scorecard",
     span: tableSpan(a.dates[0], a.asOf),
-    conventions: scoreConventions(a.rf),
+    conventions: extra ? `${scoreConventions(a.rf)} ${extra}` : scoreConventions(a.rf),
     days: a.dates.length,
     seed: value ? value.seed : null,
     cut: cutWords(a, columns, figs),
+    addedDraws: addedDrawNote(a, shown, draws),
   };
 }
 

@@ -89,4 +89,6 @@ export const DEFAULT_SETTINGS: Settings = {
   benchmark: DEFAULT_BENCHMARK,
   allowShort: DEFAULT_ALLOW_SHORT,
   amount: DEFAULT_AMOUNT,
+  // The scorecard opens with its default columns; a construction is added by a click or by a link.
+  cols: [],
 };

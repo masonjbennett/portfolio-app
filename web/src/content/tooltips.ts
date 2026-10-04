@@ -125,7 +125,11 @@ export type ScoreTipKey =
   | "frag_lookback"
   | "frag_cut"
   | "frag_draws"
-  | "frag_params";
+  | "frag_params"
+  | "col_last_year"
+  | "col_shrunk"
+  | "col_capped"
+  | "col_parity";
 
 export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   annual_return: {
@@ -223,6 +227,28 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     finance: "Minimum variance reads the covariance matrix; maximum Sharpe reads it and the expected returns. Compare with the days of data they rest on.",
     formula: "GMV: n(n + 1)/2; tangency: n + n(n + 1)/2; fixed weights: 0.",
   },
+  // The heads of the columns a reader can add. Each says what the construction is and that its figures
+  // are in-sample; none says how it compares with another column.
+  col_last_year: {
+    plain: "The maximum-Sharpe mix chosen from the last year of prices only, then held at those weights over the whole window. Its figures are in-sample: the weights were picked with hindsight from part of these same prices.",
+    finance: "The tangency portfolio solved on the means and covariance of the window's last 252 daily returns, at the page's risk-free rate and within the shorting switch's bounds, then held at fixed weights, rebalanced daily. Every figure in its column is in-sample.",
+    formula: "max (w′μ₂₅₂ − r_f) / √(w′Σ₂₅₂ w) subject to Σwᵢ = 1, with μ₂₅₂ and Σ₂₅₂ from the last 252 daily returns; parameters n + n(n + 1)/2, from those 252 days.",
+  },
+  col_shrunk: {
+    plain: "The maximum-Sharpe mix after every asset's average return has been pulled part of the way toward one shared figure, which narrows the gaps between them before the weights are chosen. How far they are pulled is worked out from the data; its figures are in-sample.",
+    finance: "Tangency on Bayes-Stein shrunk means (Jorion, 1986, Journal of Financial and Quantitative Analysis): each sample mean moves toward the mean return of the minimum-variance portfolio with no weight bounds, by an intensity estimated from the window; the covariance is the sample one. In-sample.",
+    formula: "μ̂ = (1 − φ) m + φ μ₀ 1, with μ₀ = 1′Σ⁻¹m / 1′Σ⁻¹1, φ = (n + 2) / ((n + 2) + T (m − μ₀1)′Σ⁻¹(m − μ₀1)) and Σ = S (T − 1) / (T − n − 2); then the tangency on μ̂ and S.",
+  },
+  col_capped: {
+    plain: "The maximum-Sharpe mix with no short positions and no asset above 25% of the money. Its weights were chosen on this window's prices, so its figures are in-sample.",
+    finance: "Long-only tangency with an upper bound of 25% on every weight, solved on the window's means and covariance at the page's risk-free rate. It needs at least five assets, and the shorting switch does not reach it. In-sample.",
+    formula: "max (w′μ − r_f) / √(w′Σw) subject to Σwᵢ = 1 and 0 ≤ wᵢ ≤ 0.25; parameters n + n(n + 1)/2.",
+  },
+  col_parity: {
+    plain: "A mix in which every asset adds the same share of the portfolio's day-to-day swings, so a calmer asset holds more money and a jumpier one less. It ignores average returns, but its weights come from this window's prices, so its figures are in-sample.",
+    finance: "Equal risk contribution: each asset's percentage risk contribution is 1/n, long-only, from the sample covariance alone; expected returns do not enter the weights, so a cut to one of them moves nothing. In-sample.",
+    formula: "wᵢ (Σw)ᵢ / w′Σw = 1/n for every i, wᵢ > 0, Σwᵢ = 1; parameters n(n + 1)/2, as for minimum variance.",
+  },
 };
 
 // A short name per scorecard key, for the info mark's accessible label.
@@ -246,6 +272,10 @@ export const SCORE_TIP_NAMES: Readonly<Record<ScoreTipKey, string>> = {
   frag_cut: "weight lost to a one standard error cut",
   frag_draws: "weight range across redraws",
   frag_params: "parameters estimated",
+  col_last_year: "tangency on the last year",
+  col_shrunk: "tangency on shrunk means",
+  col_capped: "tangency with a 25% cap",
+  col_parity: "risk parity",
 };
 
 /** True for a scorecard key. */
