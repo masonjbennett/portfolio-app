@@ -17,9 +17,11 @@
 // head of each column the reader added carries its own mark, and its text joins that list.
 //
 // Handed `book`, the download row offers a third file: the same figures as a workbook of formulas over the
-// closes (src/workbook.ts). That code loads on the click, never with the page, and SheetJS with it.
-import { useMemo, useState } from "react";
-import { downloadBook } from "../download.ts";
+// closes (src/workbook.ts). That code loads on the click, never with the page, and SheetJS with it; both run
+// in a Web Worker wherever the browser can start one (src/bookjob.ts), so the page stays live while the book
+// is built.
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { BookRun } from "../bookjob.ts";
 import { tipText } from "../content/tooltips.ts";
 import { isAddedId, YEAR_ROWS } from "../lib/constructions.ts";
 import {
@@ -63,23 +65,45 @@ export interface ScoreBookSource {
 /** The third download's label, as the button reads. */
 export const BOOK_LINK = "Download Excel, with formulas";
 
+/** The line beside the button while the book is being built. */
+export const BOOK_BUSY = "Building the workbook…";
+
 // The workbook of formulas: its builder is imported on the click, so the page's first load never carries it.
 // It renders as a fragment, so it sits in the same row as the CSV and Excel buttons.
+//
+// While a build runs, a second click does nothing, and leaving the tab (this unmounts) cancels it: the worker
+// is ended and no file is saved later.
 function BookLink({ model, book }: { model: ScoreModel; book: ScoreBookSource }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const running = useRef<{ cancel(): void } | null>(null);
+  useEffect(() => () => running.current?.cancel(), []);
 
   async function save() {
+    if (running.current) return;
+    let live = true;
+    let job: BookRun | null = null;
+    const mine = {
+      cancel() {
+        live = false;
+        job?.cancel();
+      },
+    };
+    running.current = mine;
     setBusy(true);
     setFailed(false);
     try {
-      const { scoreBook, BOOK_FILENAME } = await import("../workbook.ts");
-      await downloadBook(BOOK_FILENAME, scoreBook({ ...book, model }));
+      const { startBook } = await import("../bookjob.ts");
+      if (!live) return;
+      job = startBook(book, model);
+      await job.done;
     } catch (err) {
+      if (!live) return;
       console.error(`[scorecard] the workbook with formulas could not be built`, err);
       setFailed(true);
     } finally {
-      setBusy(false);
+      if (running.current === mine) running.current = null;
+      if (live) setBusy(false);
     }
   }
 
@@ -88,6 +112,11 @@ function BookLink({ model, book }: { model: ScoreModel; book: ScoreBookSource })
       <button type="button" onClick={save} disabled={busy} aria-busy={busy} aria-label={`${BOOK_LINK}: ${model.title}`}>
         {BOOK_LINK}
       </button>
+      {busy && (
+        <span className="sc-busy" role="status">
+          {BOOK_BUSY}
+        </span>
+      )}
       {failed && (
         <span className="tbl-note" role="status">
           The workbook with formulas could not be built. Download Excel holds the same figures as values.

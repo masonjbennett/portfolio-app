@@ -291,11 +291,16 @@ for (const [name, make] of [["example", () => exampleAnalysis()], ["megacap", ()
     tag("notes: the Beta cell is SLOPE over the raw returns, and the note says so"), betaF);
 }
 
-// The book loads on the click: nothing imports it statically, and the scorecard imports it dynamically.
+// The book loads on the click: nothing the page loads imports it statically. The scorecard imports the job that
+// builds it (src/bookjob.ts) on the click; the job starts the worker, whose own chunk carries the book, and imports
+// the book on the page's thread only when it has to build it there. A type-only import is erased and loads nothing.
 {
   const src = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
   const card = src("../src/components/Scorecard.tsx");
-  check(/await import\("\.\.\/workbook\.ts"\)/.test(card) && !/^import[^\n]*workbook/m.test(card) && !/^import[^\n]*workbook/m.test(src("../src/tabs/Optimization.tsx")) && !/^import[^\n]*workbook/m.test(src("../src/App.tsx")),
+  const job = src("../src/bookjob.ts");
+  const loadsBook = (s) => /^import(?! type)[^\n]*(workbook|bookjob|bookworker)/m.test(s);
+  check(/await import\("\.\.\/bookjob\.ts"\)/.test(card) && /import\("\.\/workbook\.ts"\)/.test(job) && /new Worker\(new URL\("\.\/bookworker\.ts", import\.meta\.url\)/.test(job) &&
+    ![card, job, src("../src/bookmsg.ts"), src("../src/tabs/Optimization.tsx"), src("../src/App.tsx")].some(loadsBook),
     "loading: the workbook's code is imported on the click, never with the page");
   check(W.BOOK_FILENAME === "scorecard_model", "file: the book saves as scorecard_model.xlsx");
 }

@@ -106,4 +106,8 @@ export function devApi(dir: string = fileURLToPath(new URL("./api", import.meta.
 export default defineConfig({
   plugins: [react(), devApi()],
   server: { port: 5174 },
+  // The scorecard's workbook is built in a worker (src/bookworker.ts) that src/bookjob.ts starts as a module
+  // worker, and that imports SheetJS from its CDN at run time. Vite bundles a worker as a classic IIFE script
+  // unless told otherwise; this one is bundled as the ES module it is started as.
+  worker: { format: "es" },
 });

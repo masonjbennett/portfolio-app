@@ -11,7 +11,8 @@
 //
 // SheetJS is loaded from its own CDN only when someone clicks Excel, never bundled: the npm "xlsx"
 // package stopped at 0.18.5 and carries unfixed advisories. Building the sheet is the pure function
-// worksheet(), so node tests the cells without the CDN.
+// worksheet(), so node tests the cells without the CDN. The scorecard's workbook of formulas loads the
+// same pinned build inside a Web Worker (src/bookworker.ts) and hands the page only its bytes to save.
 import { EXCEL_FORMATS, excelSerial, isText } from "./format.ts";
 import type { CellFormat, Column, TableRow } from "./types.ts";
 
@@ -140,9 +141,10 @@ interface SheetJS {
   write(book: unknown, opts: { bookType: "xlsx"; type: "array"; compression?: boolean }): ArrayBuffer;
 }
 
-// One load per page; a failed load is forgotten so the next click tries again.
+// One load per page (a worker holds its own copy of this module, so one per worker too); a failed load is
+// forgotten so the next click tries again.
 let sheetjs: Promise<SheetJS> | null = null;
-function loadSheetJS(): Promise<SheetJS> {
+export function loadSheetJS(): Promise<SheetJS> {
   // A string variable, so neither TypeScript nor Vite tries to resolve the URL at build time.
   const url: string = SHEETJS_URL;
   sheetjs ??= (import(/* @vite-ignore */ url) as Promise<SheetJS>).catch((err: unknown) => {
@@ -171,10 +173,10 @@ export function writeBook(XLSX: BookWriter, sheets: readonly BookSheet[]): Array
   return XLSX.write(book, { bookType: "xlsx", type: "array", compression: true });
 }
 
-// Saves `<filename>.xlsx` holding every sheet in `sheets`. Rejects when SheetJS cannot be loaded.
-export async function downloadBook(filename: string, sheets: readonly BookSheet[]): Promise<void> {
-  const XLSX = await loadSheetJS();
-  save(`${filename}.xlsx`, new Blob([writeBook(XLSX, sheets)], { type: XLSX_TYPE }));
+// Saves `<filename>.xlsx` from bytes writeBook has already written, in a worker or on this thread
+// (src/bookjob.ts decides which).
+export function saveXlsx(filename: string, bytes: ArrayBuffer): void {
+  save(`${filename}.xlsx`, new Blob([bytes], { type: XLSX_TYPE }));
 }
 
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
