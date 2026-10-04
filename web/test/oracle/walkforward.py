@@ -7,8 +7,8 @@ words: each portfolio was fitted on all history up to a point in time, its weigh
 untouched for the following year, then it was re-fitted and rolled forward, six times, with no
 lookahead. It printed one out-of-sample Sharpe ratio per basket and construction (equal weight,
 minimum variance, maximum Sharpe), the mega-cap maximum-Sharpe portfolio's in-sample Sharpe of
-1.107, and that minimum variance held 95.3% AGG going into 2022 on the cross-asset basket. The
-script that produced those numbers did not survive. This file rebuilds it.
+1.107, and minimum variance's AGG weight going into 2022 on the cross-asset basket (first printed
+as 95.3%, the app's full-window weight; the fold itself held 95.1%). The script that produced those numbers did not survive. This file rebuilds it.
 
 Why a grid. The published text fixes the method but not every convention under it: where the six
 one-year holds sit, what "held untouched" means for the weights, how six holds become one Sharpe,
@@ -69,10 +69,9 @@ Equal weight is 1/N under the same H, S, R and J.
     python web/test/oracle/walkforward.py sensitivity [--end YYYY-MM-DD] [--rf 0.0389] [--tight]
         the Sensitivity tab's five lookback windows on the five mega-caps: each window's weights,
         plus the basket's average pairwise correlation and betas against the S&P 500
-    python web/test/oracle/walkforward.py check [--key KEY] [--strict]
-        exits 1 unless the nine Sharpes, the 1.107 and the five Apple weights print under the
-        pinned key (or KEY); --strict also requires the 95.3% AGG, which does not reproduce.
-        Prints each figure's distance to its rounding edge and, for a run walkforward.json
+    python web/test/oracle/walkforward.py check [--key KEY]
+        exits 1 unless the nine Sharpes, the 1.107, the five Apple weights and the AGG weight
+        going into 2022 print under the pinned key (or KEY). Prints each figure's distance to its rounding edge and, for a run walkforward.json
         records, how far each raw value has moved from it
     python web/test/oracle/walkforward.py dump [out.json]
         writes web/test/fixtures/walkforward.json: the pinned run fold by fold, both solvers
@@ -131,7 +130,9 @@ PUBLISHED = {
 # to last, as the app's own page does. That window takes in the years the walk-forward held out, so
 # it is not any one fold's in-sample figure ("is" in a grid cell records those readings too).
 IN_SAMPLE = "1.107"
-AGG_2022 = "95.3%"       # minimum variance's AGG weight going into 2022, cross-asset
+# Minimum variance's AGG weight going into 2022, cross-asset: the fold fitted through Dec 31 2021
+# holds 95.08%. The note first printed 95.3%, which is the app's full-window weight, not the fold's.
+AGG_2022 = "95.1%"
 APPLE_SENS = ["41.7%", "3.8%", "6.4%", "21.0%", "44.8%"]   # Sensitivity tab, Sep 6 2026
 
 # -- the grid's dimensions ----------------------------------------------------
@@ -586,7 +587,7 @@ def recorded(key):
     return out
 
 
-def check(key, strict):
+def check(key):
     """Exit 1 unless every published figure prints under `key`. Beside each figure: its distance to
     the rounding edge, and, where walkforward.json records the run, how far the raw value has moved
     from the recorded one (more than DRIFT_TOL is named DRIFT: a solver or library change has moved
@@ -596,12 +597,12 @@ def check(key, strict):
     rec_raw = recorded(key)
     bad = drift = 0
 
-    def line(label, raw, shown, target, soft=False, record_key=None):
+    def line(label, raw, shown, target, record_key=None):
         nonlocal bad, drift
         ok = shown == target
-        if not ok and not soft:
+        if not ok:
             bad += 1
-        tag = "ok" if ok else ("KNOWN MISMATCH" if soft else "FAIL")
+        tag = "ok" if ok else "FAIL"
         vs = ""
         if rec_raw is not None and record_key in rec_raw:
             moved = raw - rec_raw[record_key]
@@ -632,21 +633,12 @@ def check(key, strict):
         print("  Apple weights skipped: the Sensitivity tab solves at one constant rf, and an "
               "rfhist key has none")
     agg = cells["cross"][1]["agg2022"]
-    # The cross-asset sentence ("held 95.3% AGG going into 2022") does not reproduce under the key
-    # that prints the nine Sharpes: the fit through Dec 31 2021 holds 95.08%. It is reported here,
-    # and fails the run only under --strict, so this check stays a working gate on the nine.
-    # The soft line is meant to be temporary: once the Method Note's sentence is corrected, set
-    # AGG_2022 to the new string, make this line hard like the others and delete --strict.
-    line("cross GMV AGG into 2022", agg, f"{agg:.1%}", AGG_2022, soft=not strict,
-         record_key="agg")
+    line("cross GMV AGG into 2022", agg, f"{agg:.1%}", AGG_2022, record_key="agg")
     if drift:
         print(f"{drift} raw value(s) moved more than {DRIFT_TOL:g} from {RECORD.name}: the run no "
               "longer stops where the recorded one did. Find out why before re-dumping it.")
     if bad:
         print(f"{bad} published figure(s) do not print")
-    elif f"{agg:.1%}" != AGG_2022:
-        print("the nine Sharpes, the 1.107 and the Apple weights print; the 95.3% AGG does not "
-              "(--strict fails on it)")
     else:
         print("every published figure prints")
     return 0 if bad == 0 else 1
@@ -688,9 +680,6 @@ def dump(path):
                                             "tangency_aapl": float(row["tan"].x[0])}
                                            for row in rows]}
     out["sets"]["cross"]["published_agg_into_2022"] = AGG_2022
-    out["sets"]["cross"]["agg_note"] = (
-        "The published 95.3% does not print under this key: the fit through 2021-12-31 holds AGG "
-        "at the weight recorded here.")
     pathlib.Path(path).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n",
                                   encoding="utf-8", newline="\n")
     print(f"wrote {path}")
@@ -712,7 +701,6 @@ def main():
     s.add_argument("--tight", action="store_true")
     c = sub.add_parser("check")
     c.add_argument("--key", default=PINNED)
-    c.add_argument("--strict", action="store_true")
     d = sub.add_parser("dump")
     d.add_argument("out", nargs="?", default=str(FIX / "walkforward.json"))
     a = ap.parse_args()
@@ -727,7 +715,7 @@ def main():
             sensitivity(a.end, rf, "tight" if a.tight else "ship")
             print()
     elif a.cmd == "check":
-        sys.exit(check(a.key, a.strict))
+        sys.exit(check(a.key))
     elif a.cmd == "dump":
         dump(a.out)
 
