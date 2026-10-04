@@ -234,7 +234,7 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     plain: "How many numbers had to be estimated from the price history to choose these weights. Equal weight and a typed mix need none.",
     // Counted by what a solve reads (paramCount in src/lib/robust.ts), not by naming the columns, so every solved
     // column falls under one of the two cases.
-    finance: "A solve that reads only the covariance matrix estimates its variances and covariances; one that maximises the Sharpe ratio estimates every expected return as well. Compare with the days of data they rest on.",
+    finance: "A solve that reads only the covariance matrix needs every variance and covariance estimated; one that maximises the Sharpe ratio needs every expected return estimated as well. Compare with the days of data they rest on.",
     formula: "weights from the covariance alone: n(n + 1)/2; from the means and the covariance: n + n(n + 1)/2; fixed weights: 0.",
   },
   // The heads of the columns a reader can add. Each says what the construction is and that its figures

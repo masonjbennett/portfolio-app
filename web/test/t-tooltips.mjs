@@ -192,6 +192,20 @@ const css = read("src/components/Tip.css");
 check(/\.tip-mark:focus-visible \+ \.tip-text/.test(css) && /\.tip\[data-open\] \.tip-text/.test(css) && /@media \(hover: hover\)/.test(css),
   "tip: its CSS shows the text on keyboard focus, when pinned, and on hover only where hover exists");
 
+// A text that must name no scorecard column is held to this pattern: every column's head as the page prints it
+// (the three solved portfolios, each added construction and each part of its name, Custom, every benchmark the
+// reader can pick), and the words a sentence would use to point at one. It is built from the labels the page
+// reads, so a column added later is covered without editing it.
+const COLUMN_NAMES = await (async () => {
+  const { PORT_LABEL, ADDED_LABEL } = await import("../src/tabs/optimization/model.ts");
+  const { BENCHMARKS } = await import("../src/state/defaults.ts");
+  const heads = [...Object.values(PORT_LABEL), ...Object.values(ADDED_LABEL), "Custom", ...BENCHMARKS.flatMap((b) => [b.display, b.symbol])];
+  const words = ["benchmark", "last year", "last-year", "equal weight", "minimum variance", "risk parity", "shrunk", "capped", "tangency"];
+  const parts = [...heads.flatMap((h) => [h, ...h.split(/,\s*/)]), ...words].filter((x) => x.length >= 3);
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[- ]/g, "[- ]");
+  return new RegExp(parts.map(esc).join("|"), "i");
+})();
+
 // The scorecard's own texts: their own keys, beside the app's, never in the dump.
 {
   const { SCORE_TIPS, SCORE_TIP_NAMES, isScoreTip, tipName } = await import("../src/content/tooltips.ts");
@@ -207,16 +221,16 @@ check(/\.tip-mark:focus-visible \+ \.tip-text/.test(css) && /\.tip\[data-open\] 
   // The scorecard prints a ± beside every column's Sharpe, and every column whose weights were solved on these
   // prices (GMV, Tangency and each added construction, the last-year one on part of the window) has a ± that
   // understates its uncertainty, as the plate's note says of the tangency. Each level says so for all of them,
-  // names none of them (a list of names goes stale as columns are added), and points at the line under each
-  // column's name, which the next check holds to the page.
+  // names none of them (a list of names goes stale as columns are added; COLUMN_NAMES holds every one), and points
+  // at the line under each column's name, which the next check holds to the page.
   const seText = (l) => SCORE_TIPS.sharpe_se[l];
-  const named = LEVEL_IDS.filter((l) => /GMV|tangency|parity|equal.weight|custom|shrunk|capped/i.test(seText(l)));
+  const named = LEVEL_IDS.filter((l) => COLUMN_NAMES.test(seText(l)));
   check(named.length === 0 &&
     /weights were chosen on these same prices, as the line under its name says, could be off by more/.test(seText("plain")) &&
     /understates the uncertainty for every column whose weights were fitted on this window or on part of it, as the line under its name says/.test(seText("finance")) &&
     /holds w fixed, so it understates the error wherever w was solved on these T returns or on a subset of them/.test(seText("formula")),
     "score-tips: the Sharpe ± text says at every level that the error understates for every column solved on this window, naming none",
-    named.length ? `names a column at ${named.join(", ")}` : LEVEL_IDS.map(seText).join(" | "));
+    named.length ? `names a column at ${named.map((l) => `${l} ("${seText(l).match(COLUMN_NAMES)[0]}")`).join(", ")}` : LEVEL_IDS.map(seText).join(" | "));
 }
 
 // "The line under its name" is how the Sharpe ± text tells a solved column from a fixed one, so it must hold on the
@@ -256,8 +270,12 @@ check(/\.tip-mark:focus-visible \+ \.tip-text/.test(css) && /\.tip\[data-open\] 
   const p = SCORE_TIPS.frag_params;
   check(off.length === 0 && paramCount("ew", n) === 0 && paramCount("custom", n) === 0 &&
     p.formula === "weights from the covariance alone: n(n + 1)/2; from the means and the covariance: n + n(n + 1)/2; fixed weights: 0." &&
-    !/GMV|tangency|parity/i.test(`${p.finance} ${p.formula}`),
+    !COLUMN_NAMES.test(`${p.finance} ${p.formula}`),
     "score-tips: the parameters row's formula covers every construction by what it reads, and names none", `off: ${off.join(", ")}; ${p.formula}`);
+  // The finance level says what each kind of solve needs estimated, with nothing a reader could take as the solve's
+  // own variances.
+  check(p.finance === "A solve that reads only the covariance matrix needs every variance and covariance estimated; one that maximises the Sharpe ratio needs every expected return estimated as well. Compare with the days of data they rest on.",
+    "score-tips: the parameters row's finance level says what each kind of solve needs estimated", p.finance);
 }
 
 // The added columns' tips quote the engine's cap, its fewest assets and its year from the constants the page

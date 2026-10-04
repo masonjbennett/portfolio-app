@@ -4,9 +4,10 @@
 // them were sampled. Every table on these tabs is computed from daily closes today; a table built from
 // calendar-month returns passes "monthly" and says so.
 //
-// The fitted head: GMV and Tangency are chosen by an optimiser from the same prices every figure beside
-// them is computed on, so their heads say "weights chosen on this window". Equal weights are fixed in
-// advance and a custom mix is whatever was typed, so theirs never carry it.
+// The fitted head: every column whose weights an optimiser chose from the same prices every figure beside it
+// is computed on (GMV, Tangency, and on the scorecard each added construction solved on the whole window)
+// says "weights chosen on this window"; the last-year construction says its own LAST_YEAR line instead.
+// Equal weights are fixed in advance and a custom mix is whatever was typed, so theirs never carry it.
 import { format } from "../format.ts";
 import { FITTED } from "../content/words.ts";
 
@@ -24,7 +25,10 @@ export function windowsSpan(to: string, freq: Frequency = "daily"): string {
   return `${FREQ[freq]} returns, each window ending ${format(to, "date")}`;
 }
 
-/** The sub-line under a GMV or Tangency head (defined in content/words.ts, which the band shares). */
+/**
+ * The sub-line under the head of every column solved on this window (defined in content/words.ts, which the band
+ * shares).
+ */
 export { FITTED };
 
 /** A Table `subs` map giving each of these heads the fitted sub-line. */
