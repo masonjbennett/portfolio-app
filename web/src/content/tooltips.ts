@@ -169,9 +169,11 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     formula: "max over drawdown spells of (recovery day − peak day); a spell still open on the last day runs to that day.",
   },
   sharpe_se: {
-    plain: "The risk-vs-reward score, with a ± showing how far it could be off just from the luck of this window. GMV's and Tangency's weights were picked on these same prices, so theirs could be off by more.",
-    finance: "Annualised Sharpe ratio ± one standard error. The error treats the weights as fixed; GMV's and Tangency's were fitted on this window, so for them it understates the uncertainty. Each ± is for that figure alone: portfolios scored on the same prices move together, so whether two of them differ needs a test of the difference, not a comparison of their ± bands.",
-    formula: "SE = √252 × √((1 + ½SR² − γ₁SR + ¼γ₂SR²) / T), SR the daily Sharpe, γ₁ sample skew, γ₂ excess kurtosis (Lo 2002, Mertens 2002).",
+    // Which columns' weights were solved on this window is said by the line under each column's name (FITTED,
+    // LAST_YEAR), never by a list of names here, so a column added later is covered without an edit.
+    plain: "The risk-vs-reward score, with a ± showing how far it could be off just from the luck of this window. A column whose weights were chosen on these same prices, as the line under its name says, could be off by more.",
+    finance: "Annualised Sharpe ratio ± one standard error. The error treats the weights as fixed, so it understates the uncertainty for every column whose weights were fitted on this window or on part of it, as the line under its name says. Each ± is for that figure alone: portfolios scored on the same prices move together, so whether two of them differ needs a test of the difference, not a comparison of their ± bands.",
+    formula: "SE = √252 × √((1 + ½SR² − γ₁SR + ¼γ₂SR²) / T), SR the daily Sharpe, γ₁ sample skew, γ₂ excess kurtosis (Lo 2002, Mertens 2002). It holds w fixed, so it understates the error wherever w was solved on these T returns or on a subset of them.",
   },
   calmar: {
     plain: "Yearly growth divided by the worst fall: how much growth came with each point of the deepest loss.",
@@ -230,8 +232,10 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   },
   frag_params: {
     plain: "How many numbers had to be estimated from the price history to choose these weights. Equal weight and a typed mix need none.",
-    finance: "Minimum variance reads the covariance matrix; maximum Sharpe reads it and the expected returns. Compare with the days of data they rest on.",
-    formula: "GMV: n(n + 1)/2; tangency: n + n(n + 1)/2; fixed weights: 0.",
+    // Counted by what a solve reads (paramCount in src/lib/robust.ts), not by naming the columns, so every solved
+    // column falls under one of the two cases.
+    finance: "A solve that reads only the covariance matrix estimates its variances and covariances; one that maximises the Sharpe ratio estimates every expected return as well. Compare with the days of data they rest on.",
+    formula: "weights from the covariance alone: n(n + 1)/2; from the means and the covariance: n + n(n + 1)/2; fixed weights: 0.",
   },
   // The heads of the columns a reader can add. Each says what the construction is and that its figures
   // are in-sample; none says how it compares with another column.

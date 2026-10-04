@@ -204,12 +204,60 @@ check(/\.tip-mark:focus-visible \+ \.tip-text/.test(css) && /\.tip\[data-open\] 
     "score-tips: every scorecard key has an accessible name, and the app's keys keep theirs");
   check(sk.every((k) => LEVEL_IDS.every((l) => !/\p{Extended_Pictographic}/u.test(SCORE_TIPS[k][l]) && !/best (possible|mix|portfolio)|optimal/i.test(SCORE_TIPS[k][l]))),
     "score-tips: no emoji, and no text calls a mix best or optimal");
-  // The scorecard prints a ± beside GMV's and Tangency's Sharpe too, whose weights were fitted on the same
-  // prices: the plain and finance texts must say the ± understates their uncertainty, as the plate's note does.
+  // The scorecard prints a ± beside every column's Sharpe, and every column whose weights were solved on these
+  // prices (GMV, Tangency and each added construction, the last-year one on part of the window) has a ± that
+  // understates its uncertainty, as the plate's note says of the tangency. Each level says so for all of them,
+  // names none of them (a list of names goes stale as columns are added), and points at the line under each
+  // column's name, which the next check holds to the page.
   const seText = (l) => SCORE_TIPS.sharpe_se[l];
-  check(/GMV's and Tangency's/.test(seText("plain")) && /off by more/.test(seText("plain")) &&
-    /GMV's and Tangency's were fitted on this window/.test(seText("finance")) && /understates the uncertainty/.test(seText("finance")),
-    "score-tips: the Sharpe ± text says the fitted mixes' error understates their uncertainty", seText("finance"));
+  const named = LEVEL_IDS.filter((l) => /GMV|tangency|parity|equal.weight|custom|shrunk|capped/i.test(seText(l)));
+  check(named.length === 0 &&
+    /weights were chosen on these same prices, as the line under its name says, could be off by more/.test(seText("plain")) &&
+    /understates the uncertainty for every column whose weights were fitted on this window or on part of it, as the line under its name says/.test(seText("finance")) &&
+    /holds w fixed, so it understates the error wherever w was solved on these T returns or on a subset of them/.test(seText("formula")),
+    "score-tips: the Sharpe ± text says at every level that the error understates for every column solved on this window, naming none",
+    named.length ? `names a column at ${named.join(", ")}` : LEVEL_IDS.map(seText).join(" | "));
+}
+
+// "The line under its name" is how the Sharpe ± text tells a solved column from a fixed one, so it must hold on the
+// page: every column whose weights were solved here (GMV, Tangency, each added construction, long-only and with
+// shorting) carries a line saying its weights were chosen on this window or on its last year, and no fixed-weight
+// column (equal weight, the typed mix, the benchmark) carries one. A construction added later without that line
+// goes red here. The parameters row's text is held the same way: every construction's count is one of the two
+// cases its formula level names, by what the solve reads.
+{
+  const { SCORE_TIPS } = await import("../src/content/tooltips.ts");
+  const { scorecard } = await import("../src/tabs/optimization/scorecard.ts");
+  const { customWeights } = await import("../src/tabs/optimization/model.ts");
+  const { ADDED_IDS } = await import("../src/lib/constructions.ts");
+  const { paramCount } = await import("../src/lib/robust.ts");
+  const { exampleAnalysis } = await import("./_analysis.mjs");
+  const CHOSEN = /^weights chosen on (the last year of )?this window\b/;
+  const wrong = [];
+  let solved = 0;
+  for (const allowShort of [false, true]) {
+    const a = exampleAnalysis({ allowShort });
+    for (const mix of [{}, Object.fromEntries(a.tickers.map((t, i) => [t, i + 1]))]) {
+      const m = scorecard(a, customWeights(a, mix), { status: "ready", value: null }, ADDED_IDS);
+      for (const c of m.columns) {
+        const fixed = c.id === "ew" || c.id === "custom" || c.id === "bench";
+        if (!c.ok) continue;
+        if (!fixed) solved += 1;
+        if (fixed ? CHOSEN.test(c.sub ?? "") || /chosen on/.test(c.sub ?? "") : !CHOSEN.test(c.sub ?? "")) wrong.push(`${c.id}${allowShort ? " short" : ""}: ${c.sub}`);
+      }
+    }
+  }
+  check(solved === 24 && wrong.length === 0,
+    "score-tips: every solved column, and no fixed one, carries the line under its name that the Sharpe ± text points to", `${solved} solved; ${wrong.join(" | ")}`);
+  const n = 7;
+  const cases = [(n * (n + 1)) / 2, n + (n * (n + 1)) / 2];
+  const kinds = ["gmv", "tan", ...ADDED_IDS];
+  const off = kinds.filter((k) => !cases.includes(paramCount(k, n)));
+  const p = SCORE_TIPS.frag_params;
+  check(off.length === 0 && paramCount("ew", n) === 0 && paramCount("custom", n) === 0 &&
+    p.formula === "weights from the covariance alone: n(n + 1)/2; from the means and the covariance: n + n(n + 1)/2; fixed weights: 0." &&
+    !/GMV|tangency|parity/i.test(`${p.finance} ${p.formula}`),
+    "score-tips: the parameters row's formula covers every construction by what it reads, and names none", `off: ${off.join(", ")}; ${p.formula}`);
 }
 
 // The added columns' tips quote the engine's cap, its fewest assets and its year from the constants the page
