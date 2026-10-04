@@ -188,13 +188,28 @@ const Weights = memo(function Weights({ a, height, strips }: { a: Analysis; heig
   );
 });
 
-// The scorecard: every portfolio across, the benchmark last, below the weights.
-const ScorecardSection = memo(function ScorecardSection({ a, c, redraws, level }: { a: Analysis; c: Custom; redraws: RedrawState; level: Level }) {
+// The scorecard: every portfolio across, the benchmark last, below the weights. It is handed what the
+// workbook of formulas needs (the analysis, the amount invested, why a typed mix was refused), so its
+// download row offers that book beside the values.
+const ScorecardSection = memo(function ScorecardSection({
+  a,
+  c,
+  redraws,
+  level,
+  amount,
+}: {
+  a: Analysis;
+  c: Custom;
+  redraws: RedrawState;
+  level: Level;
+  amount: number;
+}) {
   const model = useMemo(() => scorecard(a, c, redraws), [a, c, redraws]);
+  const book = useMemo(() => ({ analysis: a, amount, refused: c.ok ? null : c.reason }), [a, amount, c]);
   return (
     <section className="opt-section" aria-labelledby="opt-scorecard">
       <Slug id="opt-scorecard">Scorecard</Slug>
-      <Scorecard model={model} redraws={redraws} level={level} allowShort={a.allowShort} filename="scorecard" />
+      <Scorecard model={model} redraws={redraws} level={level} allowShort={a.allowShort} filename="scorecard" book={book} />
     </section>
   );
 });
@@ -309,7 +324,7 @@ export default function Optimization({ analysis: a, settings, level, weights, re
         <Weights a={a} height={barHeight} strips={strips} />
       </Boundary>
       <Boundary name="Scorecard" resetKey={scoreKey}>
-        <ScorecardSection a={a} c={c} redraws={redraws} level={level} />
+        <ScorecardSection a={a} c={c} redraws={redraws} level={level} amount={settings.amount} />
       </Boundary>
       <Boundary name="Risk contribution" resetKey={c}>
         <RiskContribution a={a} c={c} height={barHeight} />

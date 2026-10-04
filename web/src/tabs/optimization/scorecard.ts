@@ -39,6 +39,12 @@ export interface ScoreColumn {
   sub: string | null;
   /** False for a failed solve or a refused custom mix: its cells are all dashes. */
   ok: boolean;
+  /**
+   * The weights behind the column's figures, in ticker order: the page's own solution or typed mix, so the
+   * formula workbook (src/workbook.ts) can enter them as they are. Null for the benchmark and for a column
+   * that is not ok.
+   */
+  weights: Vec | null;
 }
 
 const CONSTRUCTION: Readonly<Record<Exclude<ScoreColId, "bench">, Construction>> = { ew: "ew", gmv: "gmv", tangency: "tan", custom: "custom" };
@@ -185,12 +191,12 @@ export const CUSTOM_EQUAL = "equal weights, so it matches Equal-Weight";
 /** The columns' heads: a failed solve and a refused mix keep their column, labelled. */
 export function scoreColumns(a: Analysis, c: Custom): ScoreColumn[] {
   return SCORE_COL_IDS.map((id): ScoreColumn => {
-    if (id === "bench") return { id, label: a.benchLabel, sub: null, ok: true };
+    if (id === "bench") return { id, label: a.benchLabel, sub: null, ok: true, weights: null };
     const w = columnWeights(a, c, id);
     // Untyped tickers default to 1/n, so on a first visit the typed mix IS equal weight; the head says so.
-    if (id === "custom") return { id, label: w ? "Custom" : "Custom (not shown)", sub: w && isEqualWeight(w) ? CUSTOM_EQUAL : null, ok: w !== null };
+    if (id === "custom") return { id, label: w ? "Custom" : "Custom (not shown)", sub: w && isEqualWeight(w) ? CUSTOM_EQUAL : null, ok: w !== null, weights: w };
     const fitted = id === "gmv" || id === "tangency";
-    return { id, label: w ? PORT_LABEL[id] : failedLabel(id), sub: w && fitted ? FITTED : null, ok: w !== null };
+    return { id, label: w ? PORT_LABEL[id] : failedLabel(id), sub: w && fitted ? FITTED : null, ok: w !== null, weights: w };
   });
 }
 

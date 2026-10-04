@@ -26,7 +26,7 @@
 //
 // A column marked `pageHidden` is left out of the page's head and rows but stays in both downloads, for
 // a figure the page need not print twice in two units while a spreadsheet may want the second one.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { downloadCsv, downloadXlsx } from "../download.ts";
 import { format, isText } from "../format.ts";
 import type { CellFormat, Column, TableProps } from "../types.ts";
@@ -53,9 +53,17 @@ function labelKey(columns: Column[]): string | undefined {
 /**
  * The two download buttons, on their own so a table laid out elsewhere (the scorecard, whose rows each
  * carry their own format) saves through exactly the same path. `rowFormats` is download.ts's: one format
- * per row, for a sheet whose rows measure different things.
+ * per row, for a sheet whose rows measure different things. `extra` is set in the same row after the
+ * Excel button, for a table that offers a third file of its own.
  */
-export function Downloads({ title, columns, rows, filename, rowFormats }: TableProps & { rowFormats?: readonly CellFormat[] }) {
+export function Downloads({
+  title,
+  columns,
+  rows,
+  filename,
+  rowFormats,
+  extra,
+}: TableProps & { rowFormats?: readonly CellFormat[]; extra?: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -80,6 +88,7 @@ export function Downloads({ title, columns, rows, filename, rowFormats }: TableP
       <button type="button" onClick={excel} disabled={busy} aria-busy={busy} aria-label={`Download Excel of ${title}`}>
         Download Excel
       </button>
+      {extra}
       {failed && (
         <span className="tbl-note" role="status">
           The Excel file could not be built. The CSV holds the same numbers.

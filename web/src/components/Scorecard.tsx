@@ -14,7 +14,11 @@
 //
 // Each row's label carries its explanation: an info mark where the tooltip component takes the key, and
 // every visible row's text at the chosen level under "What each row means", which works on touch too.
+//
+// Handed `book`, the download row offers a third file: the same figures as a workbook of formulas over the
+// closes (src/workbook.ts). That code loads on the click, never with the page, and SheetJS with it.
 import { useMemo, useState } from "react";
+import { downloadBook } from "../download.ts";
 import { tipText } from "../content/tooltips.ts";
 import {
   cellText,
@@ -26,7 +30,7 @@ import {
   type ScoreColId,
   type ScoreModel,
 } from "../tabs/optimization/scorecard.ts";
-import type { Level } from "../types.ts";
+import type { Analysis, Level } from "../types.ts";
 import { Downloads } from "./Table.tsx";
 import Tip from "./Tip.tsx";
 import "./Table.css";
@@ -42,9 +46,55 @@ export interface ScorecardProps {
   filename: string;
   /** A column to set in bold (the Custom tab marks its own mix). */
   focus?: ScoreColId;
+  /** What the workbook of formulas is built from; without it the row offers only the CSV and the values Excel. */
+  book?: ScoreBookSource;
 }
 
-export default function Scorecard({ model, redraws, level, allowShort, filename, focus }: ScorecardProps) {
+/** The analysis behind the scorecard, the amount invested, and why a typed mix was refused (null when it was not). */
+export interface ScoreBookSource {
+  analysis: Analysis;
+  amount: number;
+  refused: "zero" | "net-short" | "leverage" | null;
+}
+
+/** The third download's label, as the button reads. */
+export const BOOK_LINK = "Download Excel, with formulas";
+
+// The workbook of formulas: its builder is imported on the click, so the page's first load never carries it.
+// It renders as a fragment, so it sits in the same row as the CSV and Excel buttons.
+function BookLink({ model, book }: { model: ScoreModel; book: ScoreBookSource }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const { scoreBook, BOOK_FILENAME } = await import("../workbook.ts");
+      await downloadBook(BOOK_FILENAME, scoreBook({ ...book, model }));
+    } catch (err) {
+      console.error(`[scorecard] the workbook with formulas could not be built`, err);
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button type="button" onClick={save} disabled={busy} aria-busy={busy} aria-label={`${BOOK_LINK}: ${model.title}`}>
+        {BOOK_LINK}
+      </button>
+      {failed && (
+        <span className="tbl-note" role="status">
+          The workbook with formulas could not be built. Download Excel holds the same figures as values.
+        </span>
+      )}
+    </>
+  );
+}
+
+export default function Scorecard({ model, redraws, level, allowShort, filename, focus, book }: ScorecardProps) {
   const [full, setFull] = useState(false);
   const lines = visibleLines(model, full);
   const sheet = useMemo(() => scoreSheet(model), [model]);
@@ -130,7 +180,14 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
           ))}
         </dl>
       </details>
-      <Downloads title={model.title} columns={sheet.columns} rows={sheet.rows} filename={filename} rowFormats={sheet.rowFormats} />
+      <Downloads
+        title={model.title}
+        columns={sheet.columns}
+        rows={sheet.rows}
+        filename={filename}
+        rowFormats={sheet.rowFormats}
+        extra={book ? <BookLink model={model} book={book} /> : null}
+      />
     </div>
   );
 }

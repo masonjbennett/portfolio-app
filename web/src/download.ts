@@ -21,9 +21,20 @@ export const SHEETJS_URL = "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs
 // One spreadsheet cell in SheetJS's shape: s = text, n = number (z = its number format).
 export type Cell = { t: "s"; v: string } | { t: "n"; v: number; z?: string };
 
+// A formula cell: f is the formula without its leading "=", v the value it is saved with. Excel shows that
+// value until it recalculates, and so does every viewer that never calculates (a phone's preview, a mail
+// attachment), so v must be the formula's own answer. A function newer than Excel 2007 is written with its
+// _xlfn. prefix (_xlfn.STDEV.S), as Excel itself stores it; without the prefix Excel shows #NAME?.
+export interface FormulaCell {
+  t: "n";
+  v: number;
+  f: string;
+  z?: string;
+}
+
 // A SheetJS worksheet: cells keyed by A1 address, plus the used range and column widths.
 export interface Worksheet {
-  [address: string]: Cell | string | { wch: number }[];
+  [address: string]: Cell | FormulaCell | string | { wch: number }[];
   "!ref": string;
   "!cols": { wch: number }[];
 }
@@ -126,7 +137,7 @@ interface SheetJS {
     book_new(): unknown;
     book_append_sheet(book: unknown, sheet: Worksheet, name: string): void;
   };
-  write(book: unknown, opts: { bookType: "xlsx"; type: "array" }): ArrayBuffer;
+  write(book: unknown, opts: { bookType: "xlsx"; type: "array"; compression?: boolean }): ArrayBuffer;
 }
 
 // One load per page; a failed load is forgotten so the next click tries again.
@@ -140,6 +151,33 @@ function loadSheetJS(): Promise<SheetJS> {
   });
   return sheetjs;
 }
+
+// One sheet of a book of several, in the order the book lists them.
+export interface BookSheet {
+  name: string;
+  sheet: Worksheet;
+}
+
+// The slice of SheetJS writeBook calls: the same two utilities and write() the page's own load returns.
+export type BookWriter = Pick<SheetJS, "utils" | "write">;
+
+// The .xlsx bytes of a book of several sheets, written by the SheetJS build handed in. Pure apart from that
+// build, so the script that has desktop Excel recalculate the book writes it through this same function.
+// Compressed: a book of formulas over every trading day is mostly repeated XML, and deflating it halves the
+// file at no cost in time.
+export function writeBook(XLSX: BookWriter, sheets: readonly BookSheet[]): ArrayBuffer {
+  const book = XLSX.utils.book_new();
+  for (const s of sheets) XLSX.utils.book_append_sheet(book, s.sheet, sheetName(s.name));
+  return XLSX.write(book, { bookType: "xlsx", type: "array", compression: true });
+}
+
+// Saves `<filename>.xlsx` holding every sheet in `sheets`. Rejects when SheetJS cannot be loaded.
+export async function downloadBook(filename: string, sheets: readonly BookSheet[]): Promise<void> {
+  const XLSX = await loadSheetJS();
+  save(`${filename}.xlsx`, new Blob([writeBook(XLSX, sheets)], { type: XLSX_TYPE }));
+}
+
+const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 // Saves `<filename>.xlsx` with one sheet named `sheet`. Rejects when SheetJS cannot be loaded.
 export async function downloadXlsx(filename: string, sheet: string, columns: Column[], rows: TableRow[], rowFormats?: readonly CellFormat[]): Promise<void> {

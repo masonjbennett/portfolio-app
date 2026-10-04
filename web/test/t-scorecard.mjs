@@ -20,6 +20,7 @@ const M = await import("../src/tabs/optimization/model.ts");
 const { seedOf, solveRedraws } = await import("../src/tabs/optimization/redraws.ts");
 const { stripRows } = await import("../src/tabs/optimization/DotStrips.tsx");
 const Scorecard = (await import("../src/components/Scorecard.tsx")).default;
+const { BOOK_LINK } = await import("../src/components/Scorecard.tsx");
 const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
 const Custom = (await import("../src/tabs/Custom.tsx")).default;
 const { scorecardRow, returnShare, sharpeSE } = await import("../src/lib/stats.ts");
@@ -78,6 +79,10 @@ for (const { label, a } of baskets) {
   const fits = fitWindows(a).value;
   const wOf = { ew: a.ew, gmv: a.gmv?.w, tangency: a.tangency?.w, custom: c.ok ? c.w : null };
   const kind = { ew: "ew", gmv: "gmv", tangency: "tan", custom: "custom" };
+  // Each column carries the weights behind its figures (the workbook of formulas enters them as they are).
+  const zeroMix = SC.scoreColumns(a, M.customWeights(a, Object.fromEntries(a.tickers.map((t) => [t, 0])))).find((x) => x.id === "custom");
+  check(m.columns.every((x) => (x.id === "bench" ? x.weights === null : x.weights !== undefined && x.weights === wOf[x.id])) && zeroMix.weights === null && !zeroMix.ok,
+    tag("scorecard: each column carries the page's own weights, the benchmark and a refused mix none"));
   const expected = m.columns.map(({ id }) => {
     if (id === "bench") return { row: scorecardRow(a.bench, a.bench, a.dates, start, a.rf), frag: null };
     const w = wOf[id];
@@ -264,6 +269,12 @@ for (const { label, a } of baskets) {
 
   // The tab: nothing solved during render, the strips after paint, Redraw moves to the next seed.
   const r = quiet(() => render(h(Optimization, tabProps(a))));
+  // The download row offers the workbook of formulas as a third file, after the CSV and the values Excel,
+  // in the same row as those two.
+  const dl = [...r.container.querySelectorAll('section[aria-labelledby="opt-scorecard"] .tbl-dl button')].map(text);
+  check(dl.join("|") === `Download CSV|Download Excel|${BOOK_LINK}`, "downloads: on Optimization the scorecard offers the CSV, the values Excel, then the Excel with formulas", dl.join("|"));
+  const dlRows = r.container.querySelectorAll('section[aria-labelledby="opt-scorecard"] .tbl-dl');
+  check(dlRows.length === 1 && dlRows[0].querySelectorAll("button").length === 3, "downloads: the three buttons share one row", `${dlRows.length} rows`);
   const strips = () => r.container.querySelector(".opt-strips");
   check(strips() && !strips().dataset.seed && /Solving the draws/.test(text(strips())), "strips: the first render does not solve the draws; it says they are pending");
   // The clipped caption title loses nothing only while the heading above it says the same.
@@ -299,6 +310,7 @@ for (const { label, a } of baskets) {
   const sc = r.container.querySelector('section[aria-labelledby="cust-scorecard"] .tbl.sc');
   const focus = sc?.querySelector("thead .sc-focus");
   check(sc && focus && focus.dataset.col === "custom" && [...sc.querySelectorAll("thead th")].length === 6, "custom: the Custom tab shows the same scorecard, the Custom column set in bold");
+  check(sc && ![...sc.querySelectorAll(".tbl-dl button")].some((b) => text(b) === BOOK_LINK), "downloads: the Custom tab's scorecard offers no workbook of formulas; that file lives on Optimization");
   check(text(r.container.querySelector("#cust-scorecard")) === text(sc.querySelector("caption .tbl-title")),
     "caption: on Custom the clipped title is what the section heading prints");
   const v = M.customWeights(a, props.weights);
