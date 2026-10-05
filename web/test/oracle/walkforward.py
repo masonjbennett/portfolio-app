@@ -74,7 +74,10 @@ Equal weight is 1/N under the same H, S, R and J.
         going into 2022 print under the pinned key (or KEY). Prints each figure's distance to its rounding edge and, for a run walkforward.json
         records, how far each raw value has moved from it
     python web/test/oracle/walkforward.py dump [out.json]
-        writes web/test/fixtures/walkforward.json: the pinned run fold by fold, both solvers
+        writes web/test/fixtures/walkforward.json: the pinned run fold by fold, both solvers. Its
+        "versions" block records the Python, numpy and pandas that wrote it, so a dump from an
+        environment whose libraries have moved on differs there and nowhere else: compare two dumps
+        with that block left out, and re-pin the libraries before replacing the committed file
     python web/test/oracle/walkforward.py options [out.json] [--rf-csv saved.csv] [--fetch]
         writes web/test/fixtures/walkforward-options.json, the reference for the page's own
         walk-forward: the schedule by bar count under each fit and hold option (cross-asset, 2%),
