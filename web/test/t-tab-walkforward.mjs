@@ -575,7 +575,7 @@ for (const [name, a] of [
   const { w } = expected(EX, NONE, W.DEFAULT_WALK, true);
   const ses = [...w.runs.filter((x) => x.sharpe !== null).map((x) => x.se), w.bench.se];
   const x = ses.reduce((s, v) => s + v, 0) / ses.length;
-  const want = `With ${w.folds.length} holds, ${format(w.heldRows, "int")} held days in all, each out-of-sample Sharpe ratio above carries about ±${format(x, "num3")} (one standard error), so a gap smaller than about two of them, ${format(2 * x, "num3")}, is not evidence either way.`;
+  const want = `With ${w.folds.length} holds, ${format(w.heldRows, "int")} held days in all, each out-of-sample Sharpe ratio above carries about ±${format(x, "num3")} (one standard error). A gap smaller than about one of them is well inside the noise of either figure; rows held over the same days move together, so this is a scale for reading a gap, not a test of one.`;
   const notes = [...root.querySelectorAll(".wfl-note")].map(text);
   check(notes.includes(want), "sentence: the standard error sentence, its values read from the run", notes.find((n) => n.startsWith("With")) ?? "(none)");
   const tan = w.runs.find((q) => q.id === "tan");
@@ -616,6 +616,67 @@ for (const [name, a] of [
     root.querySelectorAll(".wfl-bell-list circle.wfl-bell-in").length === rows.filter((q) => q.inSample !== null).length,
     "dumbbell: every row is drawn alike, a hollow dot in-sample and a filled one out-of-sample");
   allText.push(segText(root));
+  r.unmount();
+}
+
+// ---- 7b. on the published run's own terms: the figures that print differently from the published note --------------
+
+{
+  const { PUBLISHED_SETS } = await import("../src/content/published.ts");
+  const T = await import("../src/tabs/walkforward/terms.ts");
+  // A published set as its rerun button loads it: prices from the default start through the published last bar, the
+  // published rate typed in the rail, long-only.
+  const onTerms = (name, over = {}) => {
+    const p = json(new URL(`./fixtures/prices-${name}.json`, import.meta.url));
+    const q = { ...p, rows: p.rows.filter((row) => row[0] <= T.PUBLISHED_LAST_BAR), start: T.RERUN_START, end: T.dayAfter(T.PUBLISHED_LAST_BAR) };
+    const a = analyze(q, settingsFor(q, { rf: PUB_RF, allowShort: !!over.allowShort }), { rate: PUB_RF, source: "manual" });
+    if (!a.ok) throw new Error(a.message);
+    return a;
+  };
+  const key = (t) => [...t].sort().join(",");
+  const lower = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+  const termsOf = (root) => root.querySelector(".wfl-note--terms");
+  for (const name of ["megacap5", "cross"]) {
+    const a = onTerms(name);
+    const set = PUBLISHED_SETS.find((s) => key(s.tickers) === key(a.tickers));
+    const { w } = expected(a, TYPED, W.DEFAULT_WALK, false);
+    const quoted = { ew: set.ew, gmv: set.gmv, tan: set.tangency };
+    const off = ["ew", "gmv", "tan"].flatMap((id) => {
+      const here = format(w.runs.find((q) => q.id === id).sharpe, "num3");
+      return here === quoted[id] ? [] : [`${lower(L.labelOf(id))}, ${here} where the note prints ${quoted[id]}`];
+    });
+    const { r, root } = await mount(a, TYPED);
+    const got = text(termsOf(root) ?? { textContent: "" });
+    check(a.asOf === T.PUBLISHED_LAST_BAR && off.length > 0 && got.includes(`${off.length} of the three figures ${off.length === 1 ? "prints" : "print"} differently from the published note: ${off.join("; ")}.`) &&
+      got.endsWith("a little short of the exact solution (the solver note under As published)."),
+      `published terms: ${set.name} at the published rate typed names exactly the figures that print differently, read from published.ts`, got || "(none)");
+    r.unmount();
+    // Off the published terms in any one way, the line is gone.
+    const offTerms = [
+      ["the daily series held, per period", a, SERIES, W.DEFAULT_WALK],
+      ["no rate typed", a, NONE, W.DEFAULT_WALK],
+      ["shorting on", onTerms(name, { allowShort: true }), TYPED, W.DEFAULT_WALK],
+      ["rolling fits", a, TYPED, { ...W.DEFAULT_WALK, fit: "rolling" }],
+      ["126-return holds", a, TYPED, { ...W.DEFAULT_WALK, hold: 126 }],
+    ];
+    const shown = offTerms.flatMap(([why, an, rates, opts]) => {
+      const plan = L.ratePlan(an, rates);
+      const res = expected(an, rates, opts, false).w;
+      return L.publishedTermsNote(an, plan, res, opts, { lastBar: T.PUBLISHED_LAST_BAR, rf: T.PUBLISHED_RF }, T.RERUN_START) === null ? [] : [why];
+    });
+    check(shown.length === 0, `published terms: ${set.name} off the published terms in any one way prints no such line`, shown.join(", "));
+  }
+  // Every figure as published: the line says so, rather than naming none.
+  const a = onTerms("megacap5");
+  const set = PUBLISHED_SETS.find((s) => key(s.tickers) === key(a.tickers));
+  const { w } = expected(a, TYPED, W.DEFAULT_WALK, false);
+  const asQuoted = { ...w, runs: w.runs.map((q) => (q.id === "tan" ? { ...q, sharpe: Number(set.tangency.replace("−", "-")) } : q)) };
+  const line = L.publishedTermsNote(a, L.ratePlan(a, TYPED), asQuoted, W.DEFAULT_WALK, { lastBar: T.PUBLISHED_LAST_BAR, rf: T.PUBLISHED_RF }, T.RERUN_START);
+  check(line === "This is the published run's own set, prices, rate and schedule, and all three figures print as the published note prints them.",
+    "published terms: when every figure prints as published, the line says so", line ?? "(null)");
+  // Not on the example: it is the cross-asset set, on prices through a later day.
+  const { r, root } = await mount(EX, TYPED);
+  check(EX.asOf !== T.PUBLISHED_LAST_BAR && termsOf(root) === null, "published terms: the cross-asset example, on later prices, prints no such line");
   r.unmount();
 }
 

@@ -22,12 +22,14 @@
 // (walkForwardSteps, which walkForward() itself drains), so the page and the engine run one code path;
 // test/t-tab-walkforward.mjs holds what is left to this file: one step per refit and one for the whole window,
 // the engine's inputs taken from ratePlan(), and a series that starts too late refused by name.
+import { PUBLISHED_SETS } from "../../content/published.ts";
 import { format } from "../../format.ts";
 import { CAP_MIN_ASSETS, YEAR_ROWS, type Unavailable } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
 import { portfolioReturns } from "../../lib/portfolio.ts";
 import { scorecardRow } from "../../lib/stats.ts";
 import {
+  DEFAULT_WALK,
   FIRST_FIT,
   MIN_HOLD,
   rateOn,
@@ -519,7 +521,46 @@ export function seSentence(w: Walk, rows: readonly LiveRow[]): string | null {
   if (x === null) return null;
   return (
     `With ${holdCount(w.folds.length)}, ${format(w.heldRows, "int")} held days in all, each out-of-sample Sharpe ratio above carries about ` +
-    `±${format(x, "num3")} (one standard error), so a gap smaller than about two of them, ${format(2 * x, "num3")}, is not evidence either way.`
+    `±${format(x, "num3")} (one standard error). A gap smaller than about one of them is well inside the noise of either figure; rows held ` +
+    `over the same days move together, so this is a scale for reading a gap, not a test of one.`
+  );
+}
+
+/**
+ * On the published run's own terms (a published set, prices from the app's default start through the published
+ * last bar, the published rate typed in the rail, long-only, the default schedule), which of the three figures
+ * print differently from the published note, and why they can. Null off those terms. The published strings are
+ * read from src/content/published.ts and compared with this run's own figures as the table prints them.
+ */
+export function publishedTermsNote(a: Analysis, plan: RatePlan, w: Walk, opts: WalkOptions, pub: PublishedRun, start: string): string | null {
+  const key = (t: readonly string[]) => [...t].sort().join(",");
+  const set = PUBLISHED_SETS.find((s) => key(s.tickers) === key(a.tickers));
+  if (
+    set === undefined ||
+    a.requested.start !== start ||
+    a.asOf !== pub.lastBar ||
+    plan.kind !== "flat" ||
+    plan.why !== "typed" ||
+    Math.abs(plan.rate - pub.rf) > 1e-12 ||
+    a.allowShort ||
+    opts.fit !== DEFAULT_WALK.fit ||
+    opts.hold !== DEFAULT_WALK.hold
+  )
+    return null;
+  const quoted: Record<"ew" | "gmv" | "tan", string> = { ew: set.ew, gmv: set.gmv, tan: set.tangency };
+  const off = (["ew", "gmv", "tan"] as const).flatMap((id) => {
+    const run = w.runs.find((r) => r.id === id);
+    const here = run && run.sharpe !== null ? format(run.sharpe, "num3") : null;
+    if (here === null || here === quoted[id]) return [];
+    const name = labelOf(id);
+    return [`${name.charAt(0).toLowerCase()}${name.slice(1)}, ${here} where the note prints ${quoted[id]}`];
+  });
+  const terms = "This is the published run's own set, prices, rate and schedule";
+  if (off.length === 0) return `${terms}, and all three figures print as the published note prints them.`;
+  return (
+    `${terms}, and ${off.length} of the three figures ${off.length === 1 ? "prints" : "print"} differently from the published ` +
+    `note: ${off.join("; ")}. This segment solves every fit exactly, on prices as the source serves them today; the published ` +
+    `weights are where the app's solver stopped, a little short of the exact solution (the solver note under As published).`
   );
 }
 

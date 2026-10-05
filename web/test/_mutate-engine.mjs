@@ -203,6 +203,8 @@ const M = [
   ["src/tabs/walkforward/live.ts", "  return Math.abs(rate * 1000 - Math.round(rate * 1000)) < 1e-9 ? format(rate, \"pct1\") : format(rate, \"pct2\");", "  return format(rate, \"pct2\");", "a typed 2.0% printed as 2.00% beside the published 2.0%", "t-tab-walkforward"],
   ["src/tabs/walkforward/Published.tsx", "{into.holdFirst.slice(0, 4)}.", "{into.holdLast.slice(0, 4)}.", "the AGG sentence's year read from the hold's last day", "t-walkforward-published"],
   ["src/content/tooltips.ts", "export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {", "import { WALK_TIPS as WT } from \"../tabs/walkforward/tips.ts\";\nexport const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {\n  ...(Object.fromEntries(Object.entries(WT).map(([k, t]) => [`wf_${k}`, t.texts])) as Record<ScoreTipKey, Texts>),", "the walk-forward tab's tooltip texts registered with the page's own tooltips, in the first chunk", "t-split"],
+  ["src/tabs/walkforward/live.ts", "    plan.why !== \"typed\" ||\n", "", "the published-terms line printed when the rate is not typed", "t-tab-walkforward"],
+  ["src/tabs/walkforward/live.ts", "    if (here === null || here === quoted[id]) return [];", "    if (here === null) return [];", "the published-terms line naming figures that print as published", "t-tab-walkforward"],
   ["src/tabs/walkforward/Dumbbell.tsx", "  return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;", "  return Math.min(1, (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag);", "the gridline step stopped at 1, a line per unit on a wide axis", "t-tab-walkforward"],
 ];
 

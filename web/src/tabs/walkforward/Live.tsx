@@ -44,6 +44,7 @@ import {
   labelLine,
   liveRows,
   OOS_HEAD,
+  publishedTermsNote,
   ratePlan,
   rowsTable,
   SE_HEAD,
@@ -56,7 +57,7 @@ import {
 } from "./live.ts";
 import { useLiveWalk } from "./liveSolve.ts";
 import { WALK_TIPS } from "./tips.ts";
-import { PAIR_HEADING, PUBLISHED_LAST_BAR, PUBLISHED_RF } from "./terms.ts";
+import { PAIR_HEADING, PUBLISHED_LAST_BAR, PUBLISHED_RF, RERUN_START } from "./terms.ts";
 import "./Live.css";
 
 export interface LiveProps {
@@ -80,8 +81,8 @@ const LiveTableView = memo(function LiveTableView({ t }: { t: LiveTable }) {
 });
 
 // The figures side by side: what the whole window promised and what the held-out days paid, then what a gap
-// between two of them can carry.
-const Figures = memo(function Figures({ a, w, level }: { a: Analysis; w: Walk; level: Level }) {
+// between two of them can carry. `terms` is the line for a run on the published run's own terms, or null.
+const Figures = memo(function Figures({ a, w, level, terms }: { a: Analysis; w: Walk; level: Level; terms: string | null }) {
   const rows = useMemo(() => liveRows(a, w), [a, w]);
   const table = useMemo(() => rowsTable(a, w, rows), [a, w, rows]);
   const decay = decayLine(rows);
@@ -107,6 +108,7 @@ const Figures = memo(function Figures({ a, w, level }: { a: Analysis; w: Walk; l
           {m}
         </p>
       ))}
+      {terms ? <p className="wfl-note wfl-note--terms">{terms}</p> : null}
       {se ? <p className="wfl-note">{se}</p> : null}
       <p className="wfl-note">{YARDSTICK}</p>
       <p className="wfl-note">{conventionLine(w)}</p>
@@ -149,6 +151,8 @@ export default function Live({ analysis: a, level, rates }: LiveProps) {
   const state = useLiveWalk(a, plan, opts, added);
   const label = useMemo(() => labelLine(a, plan, published()), [a, plan]);
   const assets = a.returns.length;
+  const done = state.status === "ready" && state.value.ok ? state.value : null;
+  const terms = useMemo(() => (done ? publishedTermsNote(a, plan, done, opts, published(), RERUN_START) : null), [a, plan, done, opts]);
 
   if (state.status === "ready" && !state.value.ok) {
     return (
@@ -196,7 +200,7 @@ export default function Live({ analysis: a, level, rates }: LiveProps) {
         {w ? (
           <>
             <Boundary name={PAIR_HEADING} resetKey={w}>
-              <Figures a={a} w={w} level={level} />
+              <Figures a={a} w={w} level={level} terms={terms} />
             </Boundary>
             <Boundary name="Hold by hold" resetKey={w}>
               <Holds a={a} w={w} />

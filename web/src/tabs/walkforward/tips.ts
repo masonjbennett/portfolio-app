@@ -21,7 +21,7 @@ export const WALK_TIPS: Readonly<Record<WalkTipKey, OwnTip>> = {
   se: {
     name: "standard error of the out-of-sample Sharpe ratio",
     texts: {
-      plain: "How far the out-of-sample score could be off from the luck of these particular days alone. Two scores closer together than about two of these are not evidence either way.",
+      plain: "How far the out-of-sample score could be off from the luck of these particular days alone. Two scores closer together than about one of these are well inside the noise; it is a scale for reading a gap, not a test of one.",
       finance: "One standard error of the annualised Sharpe ratio on the joined held days (Lo 2002, with Mertens' allowance for skew and fat tails). Portfolios held over the same days move together, so it is a scale for reading a gap, not a test of one.",
       formula: "SE = √252 × √((1 + ½SR² − γ₁SR + ¼γ₂SR²) / T), with SR the daily Sharpe ratio of the joined held days, γ₁ their skew, γ₂ their excess kurtosis and T their count.",
     },
