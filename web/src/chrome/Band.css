@@ -101,6 +101,18 @@
   cursor: pointer;
 }
 
+/* A click held while the panel's code arrives: the line stays as it is, and only the pointer says it is working. */
+.band-whatif-fold[aria-busy="true"] > summary {
+  cursor: progress;
+}
+
+.band-whatif-failed {
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-claret);
+}
+
 @media (max-width: 760px) {
   .band-plates {
     grid-template-columns: repeat(2, minmax(0, 1fr));

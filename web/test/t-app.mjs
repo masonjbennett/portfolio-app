@@ -12,7 +12,7 @@ import { act, render, setMedia, text } from "./_dom.mjs";
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
-const { default: Band, snapshotPlates, finding } = await import("../src/chrome/Band.tsx");
+const { default: Band, snapshotPlates, finding, seams: bandSeams } = await import("../src/chrome/Band.tsx");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: Footer } = await import("../src/chrome/Footer.tsx");
 const P = await import("../src/content/published.ts");
@@ -61,6 +61,17 @@ function setValue(el, value) {
   });
 }
 const click = (el) => act(() => el.click());
+// The band's what-if fold fetches its panel's code when the reader reaches for it (src/chrome/Band.tsx):
+// opened here as a reader opens it, by its line, then waited on until the panel is in. Returns the fold.
+async function openWhatIf(root) {
+  const fold = root.querySelector("details.band-whatif-fold");
+  if (!fold) return null;
+  click(fold.querySelector("summary"));
+  for (let i = 0; i < 400 && !(fold.open && fold.querySelector("section.whatif")); i++) {
+    await act(() => new Promise((res) => setTimeout(res, 5)));
+  }
+  return fold;
+}
 const key = (el, k, mods = {}) => act(() => el.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, ...mods })));
 const clickables = (root) => [...root.querySelectorAll("button, [role=tab], [role=radio], [role=option]")];
 const byLabel = (root, label) =>
@@ -508,8 +519,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   // Rendered text of the band, masthead and footer, the tooltips' own text included (the app's words that
   // called the mix best are replaced, ledger:plain-tip-words), and every accessible name on them.
   const names = [];
+  // The band is read with its what-if fold open, so the panel's own words are read too.
+  const bandShown = render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
+  const bandFold = await openWhatIf(bandShown.container);
+  check(!!bandFold?.open && bandShown.container.querySelectorAll("section.whatif").length === 1,
+    "plain words: the band is read with its what-if panel open in it", bandFold ? bandFold.outerHTML.slice(0, 160) : "no fold");
   const shown = [
-    render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null })),
+    bandShown,
     render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false })),
     render(h(Footer)),
   ].map((r) => {
@@ -706,14 +722,17 @@ function rail(over = {}) {
     text(fold.querySelector("blockquote") ?? {}) === P.CARD_SENTENCE && !!pFigures && !fold.contains(pFigures) && !!pLink && !fold.contains(pLink),
     "phone: the published sentence folds behind a closed disclosure; the figures and the link stay on the first screen",
     pStrip ? pStrip.innerHTML.slice(0, 200) : "no strip");
-  // The what-if panel: below the plates and folded shut, so the first row of plates stays on the first screen.
+  // The what-if panel: below the plates and folded shut, so the first row of plates stays on the first screen,
+  // and not fetched until the reader reaches for it (section (g2)). Opened by its line, it holds the one panel.
   const wPlates = r.container.querySelector(".band-plates");
   const wFold = r.container.querySelector(".band details.band-whatif-fold");
-  check(!!wPlates && !!wFold && !wFold.open && !!wFold.querySelector("section.whatif input[type=range]") && !wFold.contains(wPlates) &&
+  check(!!wPlates && !!wFold && !wFold.open && !wFold.querySelector("section.whatif") && !wFold.contains(wPlates) &&
     !!(wPlates.compareDocumentPosition(wFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
-    text(wFold.querySelector("summary") ?? {}) === "What if one expected return were different?" &&
-    r.container.querySelectorAll("section.whatif").length === 1,
+    text(wFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
     "phone: the what-if panel folds behind a closed disclosure below the plates", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
+  await openWhatIf(r.container);
+  check(!!wFold?.open && !!wFold.querySelector("section.whatif input[type=range]") && r.container.querySelectorAll("section.whatif").length === 1,
+    "phone: opened by its line, the fold holds the what-if panel, once", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
   r.unmount();
   setMedia(() => false);
   const desk = page({});
@@ -723,12 +742,95 @@ function rail(over = {}) {
   // Folded on a desktop too: printed open it pushed the tab bar below a 900 px first screen.
   const dPlates = desk.container.querySelector(".band-plates");
   const dFold = desk.container.querySelector(".band details.band-whatif-fold");
-  check(!!dPlates && !!dFold && !dFold.open && !!dFold.querySelector("section.whatif input[type=range]") && !dFold.contains(dPlates) &&
+  check(!!dPlates && !!dFold && !dFold.open && !dFold.querySelector("section.whatif") && !dFold.contains(dPlates) &&
     !!(dPlates.compareDocumentPosition(dFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
-    text(dFold.querySelector("summary") ?? {}) === "What if one expected return were different?" &&
-    desk.container.querySelectorAll("section.whatif").length === 1,
+    text(dFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
     "desktop: the what-if panel folds behind the same closed disclosure below the plates", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
+  await openWhatIf(desk.container);
+  check(!!dFold?.open && !!dFold.querySelector("section.whatif input[type=range]") && desk.container.querySelectorAll("section.whatif").length === 1,
+    "desktop: opened by its line, the fold holds the what-if panel, once", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
   desk.unmount();
+}
+
+// ---- (g2) the what-if fold fetches its panel when the reader reaches for it ------------------------
+// The panel and the solvers it runs are a chunk of their own (t-split.mjs reads that off the real build).
+// Each promise is checked with the fetch held in this suite's hands: nothing is fetched before the reader
+// reaches for the line; a click that lands first is held, the fold shut and marked busy, and the fold then
+// opens on the finished panel in one commit, never open on an empty box; pressing the line fetches ahead
+// of the click, which then opens the fold at once; a chunk that never arrives says so inside the fold.
+{
+  const real = bandSeams.whatIf;
+  const wait = () => act(() => new Promise((res) => setTimeout(res, 5)));
+  const until = async (cond, tries = 400) => {
+    for (let i = 0; i < tries && !cond(); i++) await wait();
+    return cond();
+  };
+  const band = () => render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
+  const foldOf = (r) => r.container.querySelector("details.band-whatif-fold");
+  let asked = 0;
+  try {
+    // Held in flight. Every state the fold is seen in, after each change to it, is kept.
+    let release;
+    const gate = new Promise((res) => (release = res));
+    bandSeams.whatIf = () => {
+      asked++;
+      return gate.then(real);
+    };
+    const r = band();
+    const fold = foldOf(r);
+    const seen = [];
+    const watch = new window.MutationObserver(() => seen.push({ open: fold.open, panel: !!fold.querySelector("section.whatif") }));
+    watch.observe(fold, { attributes: true, childList: true, subtree: true });
+    check(asked === 0 && !fold.querySelector("section.whatif"), "what-if fold: nothing is fetched before the reader reaches for the line", `asked ${asked}`);
+    click(fold.querySelector("summary"));
+    await wait();
+    check(asked === 1 && !fold.open && fold.getAttribute("aria-busy") === "true" && !fold.querySelector("section.whatif"),
+      "what-if fold: a click before the panel's code is in is held, the fold shut and marked busy",
+      `asked ${asked} open ${fold.open} busy ${fold.getAttribute("aria-busy")}`);
+    await act(async () => {
+      release();
+      await gate;
+    });
+    await until(() => fold.open && !!fold.querySelector("section.whatif"));
+    await wait();
+    watch.disconnect();
+    check(fold.open && !!fold.querySelector("section.whatif input[type=range]") && !fold.hasAttribute("aria-busy") &&
+      seen.some((s) => s.open) && seen.every((s) => !s.open || s.panel),
+      "what-if fold: it opens on the finished panel in one step, and is never seen open without it", JSON.stringify(seen));
+    click(fold.querySelector("summary"));
+    check(!fold.open && !!fold.querySelector("section.whatif"), "what-if fold: shut again, the panel stays mounted behind its line");
+    r.unmount();
+
+    // Pressed: the code is asked for on the press, ahead of the click, which then opens the fold at once.
+    asked = 0;
+    bandSeams.whatIf = () => {
+      asked++;
+      return real();
+    };
+    const p = band();
+    const pf = foldOf(p);
+    act(() => pf.querySelector("summary").dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })));
+    await until(() => !!pf.querySelector("section.whatif"));
+    check(asked >= 1 && !pf.open && !!pf.querySelector("section.whatif"),
+      "what-if fold: pressing the line fetches the panel ahead of the click, the fold still shut", `asked ${asked} open ${pf.open}`);
+    click(pf.querySelector("summary"));
+    check(pf.open && !pf.hasAttribute("aria-busy") && p.container.querySelectorAll("section.whatif").length === 1,
+      "what-if fold: the click after it opens the fold at once, on the panel");
+    p.unmount();
+
+    // A chunk that never arrives (a deploy that no longer serves it, a dropped connection).
+    bandSeams.whatIf = () => Promise.reject(new Error("chunk 404"));
+    const f = band();
+    const ff = foldOf(f);
+    click(ff.querySelector("summary"));
+    await until(() => ff.open);
+    check(ff.open && text(ff.querySelector("[role=alert]") ?? {}) === "The what-if could not be loaded. Reload the page to try again." &&
+      !ff.querySelector("section.whatif") && !ff.hasAttribute("aria-busy"),
+      "what-if fold: a chunk that never arrives says so inside the fold, never an empty box", ff.outerHTML.slice(0, 200));
+    f.unmount();
+  } finally {
+    bandSeams.whatIf = real;
+  }
 }
 
 // ---- (h) the command palette -----------------------------------------------------------------------

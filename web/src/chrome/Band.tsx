@@ -13,8 +13,9 @@
 // print a dash, and the sentence says the optimisation failed.
 //
 // Below the plates sits the what-if panel (./WhatIf.tsx): one expected return moved by hand and the
-// weights solved again on these prices. On a phone it folds behind a closed disclosure, as the published
-// sentence does, so the first row of plates stays on the first screen; on a desktop it is open.
+// weights solved again on these prices. It folds behind a closed disclosure at every width, so the first
+// row of plates and the tab bar stay on the first screen, and its code is fetched only when the reader
+// reaches for it (WhatIfFold, below).
 //
 // The tangency Sharpe plate carries plus or minus one standard error of that Sharpe (the engine's
 // sharpeSE, on the tangency portfolio's own daily returns). It treats the weights as fixed, and they were
@@ -22,7 +23,8 @@
 //
 // While a shorting or rate change is still being worked into the analysis, `settling` marks the figures
 // as the previous settings' (aria-busy, dimmed), as the tab below them is.
-import { useContext } from "react";
+import { useContext, useState } from "react";
+import type { MouseEvent } from "react";
 import Plate from "../components/Plate.tsx";
 import { CARD_SENTENCE, MEGA_CAP_IN_SAMPLE, PUBLISHED_SETS, PUBLISHED_URL, PUBLISHED_WHEN } from "../content/published.ts";
 import { format } from "../format.ts";
@@ -32,7 +34,7 @@ import { TabContext } from "../state/useWorkbench.ts";
 import type { Analysis, BandProps, FormatId, TipKey } from "../types.ts";
 import { usePhone } from "./usePhone.ts";
 import { monthYear } from "./when.ts";
-import WhatIf from "./WhatIf.tsx";
+import type WhatIf from "./WhatIf.tsx";
 import "./Band.css";
 
 export interface SnapshotPlate {
@@ -160,11 +162,59 @@ export function PublishedResult() {
 // The what-if panel, folded shut below the plates at every width. Printed open on a desktop it stood
 // about 350 px tall, which put the tab bar below the first screen of a 1440 x 900 display; folded, the
 // question stays in view as the way in and the tabs stay on the first screen.
+//
+// The panel's code, and the solvers it runs (src/lib/robust.ts and what that imports), are not in the
+// page's first chunk. They are fetched when the reader points at, focuses or presses the line, and a
+// click that lands before they arrive is held until they have, so the fold opens on the finished panel
+// in one step, never on an empty box that fills a moment later. Once here, the panel stays mounted, shut
+// or open, as it always was. The browser keeps the fetched module, so a fold mounted again later gets it
+// back within a microtask of asking. A fetch that fails says so inside the fold.
+type Panel = typeof WhatIf;
+
+// What a test replaces: how the panel's code is fetched (a test holds it in flight, or makes it fail).
+export const seams = { whatIf: () => import("./WhatIf.tsx") };
+
+const fetchPanel = (): Promise<Panel> => seams.whatIf().then((m) => m.default);
+
 function WhatIfFold({ a }: { a: Analysis }) {
+  const [Loaded, setLoaded] = useState<Panel | null>(null);
+  const [open, setOpen] = useState(false);
+  const [held, setHeld] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const warm = () => {
+    if (!Loaded) fetchPanel().then((P) => setLoaded(() => P), () => {});
+  };
+  const onClick = (e: MouseEvent<HTMLElement>) => {
+    // With the panel here, or the failure line showing, the browser opens or shuts the fold itself.
+    if (Loaded || open) return;
+    e.preventDefault();
+    setHeld(true);
+    fetchPanel().then(
+      (P) => {
+        setLoaded(() => P);
+        setFailed(false);
+        setHeld(false);
+        setOpen(true);
+      },
+      () => {
+        setFailed(true);
+        setHeld(false);
+        setOpen(true);
+      },
+    );
+  };
   return (
-    <details className="band-whatif-fold">
-      <summary>What if one expected return were different?</summary>
-      <WhatIf a={a} />
+    <details className="band-whatif-fold" open={open} onToggle={(e) => setOpen(e.currentTarget.open)} aria-busy={held || undefined}>
+      <summary onPointerEnter={warm} onPointerDown={warm} onFocus={warm} onClick={onClick}>
+        What if one expected return were different?
+      </summary>
+      {Loaded ? (
+        <Loaded a={a} />
+      ) : failed ? (
+        <p className="band-whatif-failed" role="alert">
+          The what-if could not be loaded. Reload the page to try again.
+        </p>
+      ) : null}
     </details>
   );
 }

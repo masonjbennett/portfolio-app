@@ -7,6 +7,9 @@
 // vite.config.ts, so what this suite reads is what `vite build` writes to dist/. A static import of
 // a tab, of a chart, or of recharts from anything the entry reaches puts it back in the first chunk,
 // and this suite names the module.
+//
+// The build's own module graph rides along (a plugin that only reads it, `graph` below), so a check
+// that finds a module in the first chunk can also name the first-chunk module that imports it.
 import { readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
@@ -15,9 +18,17 @@ import { check, done } from "./_assert.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const { build } = await import("vite");
 
+const graph = new Map();
+const readGraph = {
+  name: "t-split:graph",
+  generateBundle() {
+    for (const id of this.getModuleIds()) graph.set(id, this.getModuleInfo(id));
+  },
+};
+
 let out;
 try {
-  out = await build({ root, logLevel: "silent", build: { write: false } });
+  out = await build({ root, logLevel: "silent", build: { write: false }, plugins: [readGraph] });
 } catch (err) {
   check(false, "split: the production build runs", err.message.split("\n")[0]);
   done("t-split");
@@ -64,12 +75,45 @@ check(walkEarly.length === 0, "split: nothing of the walk-forward tab, its data 
   check(words.length === 10 && early.length === 0 && !!tabChunk && words.every((w) => tabChunk.code.includes(w)),
     "split: the walk-forward tab's tooltip texts load with the tab, none in the first chunk", early[0] ?? `${words.length} texts`);
 }
-// The share link names the scorecard's added constructions from their ids module, which imports nothing, not
+// The share link names the scorecard's added constructions from their ids module, which imports no solver, not
 // from the module that solves them.
 {
   const url = readFileSync(new URL("../src/state/url.ts", import.meta.url), "utf8");
   check(/from "\.\.\/lib\/added\.ts"/.test(url) && !/lib\/constructions\.ts/.test(url) && firstIds.includes("web/src/lib/added.ts"),
     "split: the share link reads the added ids from lib/added.ts, never from lib/constructions.ts");
+  // The tooltips quote the cap, its fewest assets and the last-year window from there too. Through the
+  // re-export the build would follow either path to lib/added.ts; the import says where they live.
+  const tips = readFileSync(new URL("../src/content/tooltips.ts", import.meta.url), "utf8");
+  check(/import \{ CAP, CAP_MIN_ASSETS, YEAR_ROWS \} from "\.\.\/lib\/added\.ts"/.test(tips) && !/lib\/constructions\.ts/.test(tips),
+    "split: the tooltips read the cap and the year from lib/added.ts, never from lib/constructions.ts");
+}
+
+// The solvers the first screen never runs stay out of the first chunk: the scorecard's added constructions
+// (lib/constructions.ts), the what-if's and the redraws' engine (lib/robust.ts) and its random draws
+// (lib/rng.ts), and the what-if panel that reaches them (chrome/WhatIf.tsx), which the band fetches when the
+// reader opens it. Nor does any first-chunk module import one statically, even an import the build drops
+// as unused today: the first use of it would bring the module in. A failure names the importer.
+const firstSet = new Set(firstIds);
+const infoOf = (id) => [...graph.values()].find((m) => rel(m.id) === id);
+const pulledBy = (id) => (infoOf(id)?.importers ?? []).map(rel).filter((i) => firstSet.has(i));
+{
+  const SOLVERS = ["web/src/lib/constructions.ts", "web/src/lib/robust.ts", "web/src/lib/rng.ts", "web/src/chrome/WhatIf.tsx"];
+  const early = SOLVERS.filter((id) => firstSet.has(id) || pulledBy(id).length > 0);
+  check(graph.size > 0 && SOLVERS.every((id) => !!infoOf(id)) && early.length === 0,
+    "split: no solver the first screen does not run is in the first chunk or imported by it (the added constructions, the what-if and its engine)",
+    early.map((id) => `${id}${firstSet.has(id) ? "" : " (not bundled there yet)"}, imported by ${pulledBy(id).join(", ") || "the entry"}`).join("; ") ||
+      `${graph.size} modules in the graph`);
+  const home = chunks.filter((c) => c.moduleIds.map(rel).includes("web/src/chrome/WhatIf.tsx"));
+  const lazy = home.length === 1 && !first.has(home[0]) && [...first].some((c) => c.dynamicImports.includes(home[0].fileName));
+  check(lazy, "split: the what-if panel is its own chunk, fetched on demand from the first chunk", home.map((c) => c.fileName).join());
+}
+// The first screen does solve the minimum-variance and tangency mixes and the frontier (state/analyze.ts, the
+// band's plates read them), so lib/optimize.ts, and quadprog under it, are first-chunk code; analyze.ts is
+// the only first-chunk module that may import it.
+{
+  const by = pulledBy("web/src/lib/optimize.ts").filter((i) => i !== "web/src/state/analyze.ts");
+  check(!!infoOf("web/src/lib/optimize.ts") && by.length === 0,
+    "split: lib/optimize.ts is in the first chunk for the first screen's solve alone (state/analyze.ts)", by.join(", "));
 }
 
 // Each tab is reached, and reached only, through the entry's dynamic imports.

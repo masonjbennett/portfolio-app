@@ -16,7 +16,7 @@
 // plate never had, so that tip gains one closing line (NOTES, below) saying what the ± measures and
 // what it leaves out. The app's text before it is unchanged.
 import type { Level, TipKey } from "../types.ts";
-import { CAP, CAP_MIN_ASSETS, YEAR_ROWS } from "../lib/constructions.ts";
+import { CAP, CAP_MIN_ASSETS, YEAR_ROWS } from "../lib/added.ts";
 import TIPS from "./tooltips.json" with { type: "json" };
 
 type Texts = Record<Level, string>;

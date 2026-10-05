@@ -14,21 +14,13 @@
 import { cholSolve, dot, sum, type Mat, type Vec } from "./num.ts";
 import { riskParity, tangency, tangencyCapped, type Solution } from "./optimize.ts";
 import { windowMoments } from "./portfolio.ts";
-import { loadVerdict, TRADING_DAYS } from "./stats.ts";
-import type { AddedId } from "./added.ts";
+import { loadVerdict } from "./stats.ts";
+import { CAP, CAP_MIN_ASSETS, YEAR_ROWS, type AddedId } from "./added.ts";
 
-// The ids, their order and the guard live in ./added.ts, which imports nothing; they are re-exported
-// here so every import of them from this module stays as it was.
-export { ADDED_IDS, isAddedId, type AddedId } from "./added.ts";
-
-/** The last-year window: 252 daily return rows, ending on the window's last day. */
-export const YEAR_ROWS = TRADING_DAYS;
-
-/** The capped construction's largest weight, a decimal (0.25 is 25%). */
-export const CAP = 0.25;
-
-/** Below five assets a 25% cap forces equal weight (four) or leaves no mix at all (fewer). */
-export const CAP_MIN_ASSETS = 5;
+// The ids, their order, the guard and the three numbers that define the constructions (YEAR_ROWS, CAP,
+// CAP_MIN_ASSETS) live in ./added.ts, which imports no solver; they are re-exported here so every import
+// of them from this module stays as it was.
+export { ADDED_IDS, CAP, CAP_MIN_ASSETS, isAddedId, YEAR_ROWS, type AddedId } from "./added.ts";
 
 /**
  * Why a construction cannot be offered on this window. These are identifiers, not page copy.
