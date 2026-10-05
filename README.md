@@ -33,6 +33,7 @@ inputs is made visible rather than averaged away. Method note and the full figur
 - **Portfolio Optimization** — Equal-weight, Global Minimum Variance, and Maximum Sharpe (Tangency) portfolios with efficient frontier and Capital Allocation Line
 - **Custom Portfolio Builder** — User-defined portfolio weights with dynamic performance metrics
 - **Estimation Window Sensitivity** — Analyze how lookback periods affect optimization results
+- **Walk-forward** (web version) — The out-of-sample test above, run on your own tickers: weights chosen on earlier prices and held, unchanged, over the days after them, refitted before each hold, with every portfolio's in-sample and out-of-sample Sharpe ratios side by side. A second view replays the published test from the weights it held.
 
 ## Tech Stack
 
