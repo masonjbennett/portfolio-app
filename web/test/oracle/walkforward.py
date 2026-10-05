@@ -75,6 +75,11 @@ Equal weight is 1/N under the same H, S, R and J.
         records, how far each raw value has moved from it
     python web/test/oracle/walkforward.py dump [out.json]
         writes web/test/fixtures/walkforward.json: the pinned run fold by fold, both solvers
+    python web/test/oracle/walkforward.py options [out.json] [--rf-csv saved.csv] [--fetch]
+        writes web/test/fixtures/walkforward-options.json, the reference for the page's own
+        walk-forward: the schedule by bar count under each fit and hold option (cross-asset, 2%),
+        and every set under rfhist, with the exact solver. DGS3MO is read from
+        web/test/fixtures/dgs3mo.csv (or --rf-csv); --fetch pulls it from FRED once and saves it there
 """
 import argparse
 import io
@@ -685,6 +690,137 @@ def dump(path):
     print(f"wrote {path}")
 
 
+# -- the page's own walk-forward: options and the rate of each period ---------
+# The web page runs the walk-forward on any basket, with a choice of fit (expanding or rolling) and
+# hold (252 or 126 returns), and, when it holds FRED's daily bill series, at each period's own rate.
+# This block is its reference. The schedule is read by BAR COUNT on any data: the first fit is the
+# first 504 returns, then holds of H returns counted forward, each preceded by a refit, the last one
+# whatever remains. On the frozen prices with H = 252 and an expanding fit it is exactly `fwd252`,
+# which `options` asserts before it writes anything.
+FIRST_FIT = 504
+OPTIONS_OUT = FIX / "walkforward-options.json"
+RF_FIXTURE = FIX / "dgs3mo.csv"
+OPTION_RUNS = [("expanding", 126), ("rolling", 252), ("rolling", 126)]
+
+
+def bar_folds(T, fit, hold):
+    """Return-row index ranges (fit_from, fit_to, hold_from, hold_to), half-open. An expanding fit
+    starts at row 0; a rolling one is the FIRST_FIT rows right before its hold."""
+    out, h = [], FIRST_FIT
+    while h < T:
+        e = min(h + hold, T)
+        out.append((0 if fit == "expanding" else h - FIRST_FIT, h, h, e))
+        h = e
+    return out
+
+
+def options_run(walk, fit, hold, rkey, opt):
+    """One walk-forward on the bar-count schedule: per fold the dates, the fit's rate, the weights,
+    each construction's held Sharpe (the benchmark's too, held over the same days), and the joined
+    Sharpes; then the whole window fitted at its last bar's rate and scored on itself."""
+    ns, R = SOLVERS[opt], walk.joined
+    bench = SHIP["compute_returns"](walk.prices)[BENCH]
+    assert bench.index.equals(R.index), "the benchmark's return rows differ from the basket's"
+    days = R.index
+    ew = np.ones(walk.n) / walk.n
+    folds, weights = [], {"gmv": [], "tan": []}
+    paths = {"ew": [], "gmv": [], "tan": [], "bench": []}
+    for a, b, h, e in bar_folds(len(R), fit, hold):
+        F = R.iloc[a:b]
+        m, S = F.mean(), F.cov()
+        rate = walk.fit_rate(rkey, days[b - 1])
+        g = ns["optimize_gmv"](m, S, walk.n)
+        t = ns["optimize_tangency"](m, S, rate, walk.n)
+        H = R.iloc[h:e]
+        for name, w in (("ew", ew), ("gmv", np.asarray(g.x, float)), ("tan", np.asarray(t.x, float))):
+            paths[name].append(walk.path(H, w, "rebal"))
+        paths["bench"].append(bench.iloc[h:e])
+        weights["gmv"].append(np.asarray(g.x, float).tolist())
+        weights["tan"].append(np.asarray(t.x, float).tolist())
+        folds.append({"fit_first": str(days[a].date()), "fit_last": str(days[b - 1].date()),
+                      "hold_first": str(days[h].date()), "hold_last": str(days[e - 1].date()),
+                      "fit_rows": b - a, "bars": e - h, "rate": rate,
+                      "solved": bool(g.success and t.success)})
+    m, S = R.mean(), R.cov()
+    rate = walk.fit_rate(rkey, days[-1])
+    g = ns["optimize_gmv"](m, S, walk.n)
+    t = ns["optimize_tangency"](m, S, rate, walk.n)
+    return {
+        "folds": folds,
+        "weights": weights,
+        "fold_sharpe": {k: [walk.sharpe_daily(p, rkey) for p in v] for k, v in paths.items()},
+        "sharpe": {k: walk.sharpe_daily(pd.concat(v), rkey) for k, v in paths.items()},
+        "in_sample": {"rate": rate,
+                      "ew": walk.in_sample(R, rkey, ew),
+                      "gmv": walk.in_sample(R, rkey, np.asarray(g.x, float)),
+                      "tan": walk.in_sample(R, rkey, np.asarray(t.x, float)),
+                      "bench": walk.sharpe_daily(bench, rkey),
+                      "tan_weights": np.asarray(t.x, float).tolist()},
+    }
+
+
+def same_as_study(rec, cell, label):
+    """The bar-count driver against the study's own `fwd252` cell: identical folds, weights and
+    Sharpes, or stop before anything is written."""
+    got = [[f["hold_first"], f["hold_last"], f["fit_last"]] for f in rec["folds"]]
+    assert got == cell["folds"], f"{label}: the bar-count folds are not fwd252's"
+    worst = 0.0
+    for k in ("ew", "gmv", "tan"):
+        worst = max(worst, abs(rec["sharpe"][k] - cell[k]),
+                    *(abs(x - y) for x, y in zip(rec["fold_sharpe"][k], cell["fold_sharpe"][k])))
+    for k in ("gmv", "tan"):
+        for u, v in zip(rec["weights"][k], cell["weights"][k]):
+            worst = max(worst, *(abs(x - y) for x, y in zip(u, v)))
+    assert worst <= 1e-12, f"{label}: the bar-count driver moved {worst:.1e} from the study's cell"
+    print(f"  {label}: the bar-count driver equals the study's fwd252 cell (worst {worst:.1e})")
+
+
+def options(out_path, rf_csv, fetch):
+    rf_path = pathlib.Path(rf_csv)
+    if fetch:
+        text = fetch_rf_text()
+        rf_path.write_text(text, "utf-8", newline="")
+        print(f"DGS3MO fetched from FRED and saved to {rf_path}")
+    else:
+        text = rf_path.read_text("utf-8")
+    rf_hist = fetch_rf_history(text)
+    print(f"DGS3MO from {rf_path.name}: {len(rf_hist)} values, "
+          f"{rf_hist.index[0].date()} .. {rf_hist.index[-1].date()}")
+    e = ENDS["e0904"]
+    out = {"what": "The page's own walk-forward on the frozen prices through 2026-09-04, by "
+                   "web/test/oracle/walkforward.py options: the schedule by bar count under each fit "
+                   "and hold option, and each set at the 3-month bill rate of each period.",
+           "first_fit": FIRST_FIT, "solver": "tight",
+           "rf_csv": rf_path.name,
+           "rf_span": [str(rf_hist.index[0].date()), str(rf_hist.index[-1].date())],
+           "flat": {"rf": RATES["rf200"], "set": "cross", "runs": {}},
+           "rfhist": {"fit": "expanding", "hold": 252, "sets": {}}}
+    walks = {s: Walk(s, e, rf_hist) for s in SETS}
+    cross = walks["cross"]
+    out["flat"]["tickers"] = cross.tickers
+    base = options_run(cross, "expanding", 252, "rf200", "tight")
+    same_as_study(base, cross.cell("fwd252", "rebal", "concat", "rf200", "joined", "tight"),
+                  "cross, 2%, expanding, 252")
+    for fit, hold in OPTION_RUNS:
+        out["flat"]["runs"][f"{fit}|{hold}"] = options_run(cross, fit, hold, "rf200", "tight")
+    for s, walk in walks.items():
+        rec = options_run(walk, "expanding", 252, "rfhist", "tight")
+        same_as_study(rec, walk.cell("fwd252", "rebal", "concat", "rfhist", "joined", "tight"),
+                      f"{s}, rfhist, expanding, 252")
+        out["rfhist"]["sets"][s] = {"tickers": walk.tickers, **rec}
+    pathlib.Path(out_path).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n",
+                                      encoding="utf-8", newline="\n")
+    print(f"wrote {out_path}")
+    print("rfhist, expanding, 252: joined Sharpes, exact solver (written) and the app's own SLSQP "
+          "(printed only)")
+    for s, walk in walks.items():
+        tight = out["rfhist"]["sets"][s]
+        ship = options_run(walk, "expanding", 252, "rfhist", "ship")
+        print(f"  {s:9s} " + "  ".join(
+            f"{k} {tight['sharpe'][k]: .6f} / {ship['sharpe'][k]: .6f}" for k in ("ew", "gmv", "tan"))
+            + f"   in sample tan {tight['in_sample']['tan']: .6f} / {ship['in_sample']['tan']: .6f}")
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")   # the published minus sign is not cp1252
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -703,6 +839,12 @@ def main():
     c.add_argument("--key", default=PINNED)
     d = sub.add_parser("dump")
     d.add_argument("out", nargs="?", default=str(FIX / "walkforward.json"))
+    o = sub.add_parser("options")
+    o.add_argument("out", nargs="?", default=str(OPTIONS_OUT))
+    o.add_argument("--rf-csv", default=str(RF_FIXTURE),
+                   help="the saved DGS3MO CSV to read (and, with --fetch, to write)")
+    o.add_argument("--fetch", action="store_true",
+                   help="pull DGS3MO from FRED and save it to --rf-csv before reading it")
     a = ap.parse_args()
     if a.cmd == "grid":
         run_grid(a.out, a.rf_csv)
@@ -718,6 +860,8 @@ def main():
         sys.exit(check(a.key))
     elif a.cmd == "dump":
         dump(a.out)
+    elif a.cmd == "options":
+        options(a.out, a.rf_csv, a.fetch)
 
 
 if __name__ == "__main__":
