@@ -123,7 +123,7 @@ export function PublishedResult() {
       type="button"
       className="text-button band-published-open"
       title="Open the published test, replayed, in the Walk-forward tab"
-      onClick={() => page.setTab("walkforward", "published")}
+      onClick={() => page.setTab("walkforward", "published", true)}
     >
       Walk-forward test
     </button>

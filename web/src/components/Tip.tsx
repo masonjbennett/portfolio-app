@@ -8,8 +8,10 @@ import type { TipProps } from "../types.ts";
 import "./Tip.css";
 
 // allowShort: the shorting toggle, which changes two Advanced texts (see content/tooltips.ts).
-export default function Tip({ tip, level, allowShort = false }: TipProps) {
-  const text = tipText(tip, level, allowShort);
+// own: a tab's own tooltip, given whole, which takes the place of `tip`.
+export default function Tip({ tip, own, level, allowShort = false }: TipProps) {
+  const text = own ? own.texts[level] : tip ? tipText(tip, level, allowShort) : "";
+  const name = own ? own.name : tip ? tipName(tip) : "";
   const id = useId();
   const [open, setOpen] = useState(false);
   const [hushed, setHushed] = useState(false);
@@ -45,7 +47,7 @@ export default function Tip({ tip, level, allowShort = false }: TipProps) {
       <button
         type="button"
         className="tip-mark"
-        aria-label={`About ${tipName(tip)}`}
+        aria-label={`About ${name}`}
         aria-expanded={open}
         aria-controls={id}
         aria-describedby={id}

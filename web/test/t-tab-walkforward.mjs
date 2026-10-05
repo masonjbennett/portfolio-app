@@ -18,9 +18,11 @@ import { act, render, text } from "./_dom.mjs";
 
 const { createElement: h } = await import("react");
 const { default: Live, ADDED_SWITCH } = await import("../src/tabs/walkforward/Live.tsx");
+const { bellDomain, bellStep, bellTicks } = await import("../src/tabs/walkforward/Dumbbell.tsx");
 const L = await import("../src/tabs/walkforward/live.ts");
 const W = await import("../src/lib/walkforward.ts");
-const { default: WalkForward } = await import("../src/tabs/WalkForward.tsx");
+const { default: WalkForward, walkRates } = await import("../src/tabs/WalkForward.tsx");
+const { TabContext } = await import("../src/state/useWorkbench.ts");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
 const { format } = await import("../src/format.ts");
 const { parseRfSeries } = await import("../src/state/rfwindow.ts");
@@ -28,7 +30,7 @@ const { analyze } = await import("../src/state/analyze.ts");
 const { ADDED_IDS, CAP_MIN_ASSETS } = await import("../src/lib/constructions.ts");
 const { columnFigures } = await import("../src/tabs/optimization/scorecard.ts");
 const { customWeights, tiles } = await import("../src/tabs/optimization/model.ts");
-const { SCORE_TIPS } = await import("../src/content/tooltips.ts");
+const { WALK_TIPS } = await import("../src/tabs/walkforward/tips.ts");
 const { exampleAnalysis, examplePayload, fixtureAnalysis, settingsFor, ORACLE_RF } = await import("./_analysis.mjs");
 
 const RECORD = json(new URL("./fixtures/walkforward.json", import.meta.url));
@@ -123,12 +125,12 @@ function holdChecks(name, root, a, w, added) {
   const f = readTable(tableBy(root, "Each hold, and the Sharpe ratio it held"));
   const fb = [];
   w.folds.forEach((fold, k) => {
-    const want = [`Hold ${k + 1}`, fold.fitFirst, fold.fitLast, format(fold.fitRate, "pct2"), fold.holdFirst, fold.holdLast, format(fold.bars, "int"),
+    const want = [`Hold ${k + 1}`, fold.fitFirst, fold.fitLast, format(fold.fitTo - fold.fitFrom, "int"), format(fold.fitRate, "pct2"), fold.holdFirst, fold.holdLast, format(fold.bars, "int"),
       ...rows.map((r) => format(r.run ? r.run.foldSharpe[k] : w.bench.foldSharpe[k], "num3"))];
     seen.cells += want.length - 1;
     if (want.join("|") !== (f?.rows[k] ?? []).join("|")) fb.push(`${want.join(" ")} vs ${(f?.rows[k] ?? []).join(" ")}`);
   });
-  check(!!f && f.rows.length === w.folds.length && fb.length === 0, `${name}: every hold's fit, rate, held days and each row's held Sharpe ratio are the engine's`, fb.slice(0, 2).join(" | ") || `${f?.rows.length} rows`);
+  check(!!f && f.rows.length === w.folds.length && fb.length === 0, `${name}: every hold's fit (its dates and its count of returns), rate, held days and each row's held Sharpe ratio are the engine's`, fb.slice(0, 2).join(" | ") || `${f?.rows.length} rows`);
   return rows;
 }
 function weightChecks(name, root, a, w, id) {
@@ -138,11 +140,14 @@ function weightChecks(name, root, a, w, id) {
   const t = readTable(tableBy(root, `Weights held in each hold: ${L.labelOf(id)}`));
   const bad = [];
   a.tickers.forEach((tk, i) => {
-    const want = [tk, ...run.weights.map((wt) => format(wt ? wt[i] : null, "pct2"))];
+    const want = [tk, ...run.weights.map((wt) => format(wt ? wt[i] : null, "pct1"))];
     seen.cells += want.length - 1;
     if (want.join("|") !== (t?.rows[i] ?? []).join("|")) bad.push(`${want.join(" ")} vs ${(t?.rows[i] ?? []).join(" ")}`);
   });
   check(!!t && bad.length === 0, `${name}: the weights ${L.labelOf(id)} held in each hold are the engine's, per asset and hold`, bad.slice(0, 2).join(" | ") || (t ? "" : "no table"));
+  const assetSub = text(tableBy(root, `Weights held in each hold: ${L.labelOf(id)}`)?.querySelector("thead th:first-child .tbl-sub") ?? { textContent: "" });
+  check(assetSub === L.rowSub(id, a.allowShort) && /^weights chosen on (the last year of )?the fit window before each hold/.test(assetSub),
+    `${name}: the ${L.labelOf(id)} weights table says its weights were chosen on the fit window before each hold`, assetSub);
 }
 const segText = (root) => {
   const c = root.cloneNode(true);
@@ -206,7 +211,59 @@ async function setAdded(root, on) {
     if (JSON.stringify(value) !== JSON.stringify(want)) bad.push(name);
     if (value.ok && steps !== value.folds.length + 1) bad.push(`${name}: ${steps} steps for ${value.folds.length} folds`);
   }
-  check(bad.length === 0 && cases.length === 10, "steps: the stepwise solve the page runs equals walkForward() field for field, one step per refit and one for the whole window", bad.join(" | "));
+  // walkSteps is the engine's own generator, so the comparison above holds the INPUTS the page hands it (the
+  // analysis' returns, dates, benchmark and shorting, the switch, and ratePlan()'s rate), not a second code path.
+  check(bad.length === 0 && cases.length === 10,
+    "steps: the page's stepwise solve hands the engine the analysis' own inputs and ratePlan()'s rate, in one step per refit and one for the whole window",
+    bad.join(" | "));
+  // A per-period plan whose series starts after the first return day cannot pass ratePlan(); handed one anyway,
+  // the steps refuse it by name rather than print figures under the wrong label.
+  const a = exampleAnalysis();
+  const late = { kind: "per-period", points: DGS.filter(([d]) => d > a.dates[0]) };
+  let threw = "";
+  try {
+    const g = L.walkSteps(a, late, W.DEFAULT_WALK, false);
+    for (let r = g.next(); !r.done; r = g.next());
+  } catch (err) {
+    threw = err.message;
+  }
+  check(/^the rate series starts on \d{4}-\d\d-\d\d, after /.test(threw), "steps: a series that starts after the first return day is refused by name", threw || "(no error)");
+}
+
+// ---- 0b. the rate the page hands the run: a typed rate runs flat, a held series runs per period ---------------------
+
+{
+  const a = exampleAnalysis();
+  const held = { rate: DGS.at(-1)[1], date: DGS.at(-1)[0], source: "FRED DGS3MO", start: DGS[0][0], series: DGS };
+  const hist = (over) => ({ basis: "window", series: held, loading: false, ...over });
+  const cases = [
+    ["a typed rate, with the series held", { ...a, rfSource: "manual" }, hist({ basis: "manual" }), { points: null, flat: "typed" }],
+    ["the live rate, with the series held", { ...a, rfSource: "live" }, hist(), { points: DGS, flat: null }],
+    ["the example's rate, with the series held", { ...a, rfSource: "example" }, hist(), { points: DGS, flat: null }],
+    ["a series that starts after the first price day", { ...a, rfSource: "live" }, hist({ series: { ...held, start: "2020-01-02" } }), { points: null, flat: "uncovered" }],
+    ["that series while a lookup is out", { ...a, rfSource: "live" }, hist({ series: { ...held, start: "2020-01-02" }, loading: true }), { points: null, flat: "loading" }],
+    ["no series, a lookup out", { ...a, rfSource: "live" }, hist({ series: null, loading: true }), { points: null, flat: "loading" }],
+    ["no series, none out", { ...a, rfSource: "live" }, hist({ series: null }), { points: null, flat: "unavailable" }],
+  ];
+  const bad = cases.flatMap(([name, an, h, want]) => {
+    const got = walkRates(h, an);
+    return got.points === want.points && got.flat === want.flat ? [] : [`${name}: ${got.points ? "points" : "null"} ${got.flat}`];
+  });
+  check(a.prices.dates[0] >= DGS[0][0] && a.prices.dates[0] < "2020-01-02" && bad.length === 0,
+    "rates: a typed rate runs flat even with the daily series held; the series held over the window runs per period; otherwise flat, saying why",
+    bad.join(" | "));
+
+  // Inside the tab, on the page's own context: the series held and a typed rate print the flat label line.
+  const typed = exampleAnalysis({ rf: PUB_RF });
+  const an = { ...typed, rfSource: "manual" };
+  const settings = settingsFor(examplePayload(), { rf: PUB_RF });
+  const ctx = { view: "basket", setTab() {}, rfHistory: hist({ basis: "manual" }), landing: 0, takeLanding: () => false };
+  const r = await quietly(() => render(h(TabContext.Provider, { value: ctx }, h(WalkForward, { analysis: an, settings, level: "plain", weights: {}, setWeights() {}, requestSettings() {} }))));
+  await quietly(flush);
+  const label = text(r.container.querySelector(".wfl-label") ?? { textContent: "" });
+  const flat = `Recomputed on prices through ${longDay(typed.asOf)} at a ${format(PUB_RF, "pct1")} risk-free rate; the published note used prices through ${longDay(PUB_LAST)} at a ${format(PUB_RF, "pct1")} risk-free rate.`;
+  check(label === flat, "rates, in the tab: a rate typed in the rail runs flat at that rate though the daily series is held", label);
+  r.unmount();
 }
 
 // ---- 1. the default cross-asset example, every option, the added constructions off and on -----------------
@@ -269,7 +326,9 @@ for (const [name, a] of [
   const asOf = longDay(EX.asOf);
   const then = longDay(PUB_LAST);
   const pubRf = format(PUB_RF, "pct1");
-  const flatLine = (rate) => `Recomputed on prices through ${asOf} at a ${format(rate, "pct2")} risk-free rate; the published note used prices through ${then} at a ${pubRf} risk-free rate.`;
+  // One decimal when that is the rate exactly, so a typed 2.0% reads as the published 2.0% beside it; two otherwise.
+  const rateText = (rate) => (Math.abs(rate * 1000 - Math.round(rate * 1000)) < 1e-9 ? format(rate, "pct1") : format(rate, "pct2"));
+  const flatLine = (rate) => `Recomputed on prices through ${asOf} at a ${rateText(rate)} risk-free rate; the published note used prices through ${then} at a ${pubRf} risk-free rate.`;
   const COULD_NOT = "The daily 3-month Treasury bill series could not be had for this window, so every refit and every held day uses that one rate.";
   const STATES = [
     ["the series held, a FRED basis", SERIES, `Recomputed on prices through ${asOf}, each refit and each held day at the 3-month Treasury bill rate of its time; the published note used prices through ${then} at a flat ${pubRf} risk-free rate.`, "per-period"],
@@ -295,8 +354,8 @@ for (const [name, a] of [
     figures[name] = (readTable(tableBy(root, "In-sample and out-of-sample Sharpe ratios"))?.rows ?? []).map((x) => x.join(" ")).join(" / ");
     if (convention === "per-period") {
       const sub = text(root.querySelector(".tbl thead th:nth-child(2) .tbl-sub") ?? { textContent: "" });
-      check(sub === L.inSampleSub(w) && /each day at its own bill rate; the other tabs score it at one rate/.test(sub),
-        "rates, per period: the in-sample head says it differs from the other tabs by the rate convention", sub);
+      check(sub === L.inSampleSub(w) && /^fitted at the bill rate of the window's last day and scored on the whole window, held-out years included, each day at its own rate; the other tabs fit and score at one rate$/.test(sub),
+        "rates, per period: the in-sample head says it was fitted at the last day's bill rate and scored at each day's, where the other tabs fit and score at one rate", sub);
     }
     allText.push(segText(root));
     r.unmount();
@@ -306,7 +365,8 @@ for (const [name, a] of [
   // A typed rate other than the analysis' own: the typed analysis is built at it, and the run follows it.
   const typed = exampleAnalysis({ rf: PUB_RF });
   const { r, root } = await mount({ ...typed, rfSource: "manual" }, TYPED);
-  check(text(root.querySelector(".wfl-label")) === flatLine(PUB_RF), "rates, typed: a typed 2.0% prints its own label", text(root.querySelector(".wfl-label")));
+  check(text(root.querySelector(".wfl-label")) === flatLine(PUB_RF) && flatLine(PUB_RF).includes(` at a ${pubRf} risk-free rate; the published`),
+    "rates, typed: a typed 2.0% prints its own label, at the published rate's precision", text(root.querySelector(".wfl-label")));
   const { w } = expected(typed, TYPED, W.DEFAULT_WALK, false);
   check(w.inSampleRate === PUB_RF && w.folds.every((f) => f.fitRate === PUB_RF), "rates, typed: every fit and the in-sample column use the typed rate");
   r.unmount();
@@ -352,7 +412,7 @@ for (const [name, a] of [
   const { w } = expected(enough, NONE, W.DEFAULT_WALK, false);
   check(w.folds.length === 1 && w.folds[0].bars === W.MIN_HOLD, "edge: at the edge the run has one hold of the fewest days a hold's figure is printed from");
   holdChecks(`edge, ${need} returns`, root, enough, w, false);
-  check(readTable(tableBy(root, "Each hold, and the Sharpe ratio it held")).rows[0].slice(7).every((x) => x !== "–"), "edge: that one hold prints its own figures");
+  check(readTable(tableBy(root, "Each hold, and the Sharpe ratio it held")).rows[0].slice(8).every((x) => x !== "–"), "edge: that one hold prints its own figures");
   r.unmount();
 
   // Before the run lands: the label and the options are there, the figures say they are being solved.
@@ -418,6 +478,95 @@ for (const [name, a] of [
   m.r.unmount();
 }
 
+// ---- 6b. the convention in words, a short last hold, and a fit that earned no more than its rate -----------------------
+
+{
+  const p = examplePayload();
+  const cutAt = (prices) => {
+    const q = { ...p, dates: p.dates.slice(0, prices), prices: p.prices.map((c) => c.slice(0, prices)) };
+    q.end = p.dates[prices];
+    const a = analyze(q, settingsFor(q, { rf: ORACLE_RF }), { rate: ORACLE_RF, source: "example" });
+    if (!a.ok) throw new Error(a.message);
+    return a;
+  };
+  const notesOf = (root) => [...root.querySelectorAll(".wfl-note")].map(text);
+  const tail = "Weights are held constant through each hold and rebalanced daily, and the held days of every hold are joined into one series and scored once.";
+  const opening = (w) => `The first fit is the window's first ${format(W.FIRST_FIT, "int")} daily returns (${w.folds[0].fitFirst} to ${w.folds[0].fitLast}). `;
+
+  // One full hold and nothing after it: no partial hold, one hold said as one.
+  const full = cutAt(W.FIRST_FIT + 252 + 1);
+  let { w } = expected(full, NONE, W.DEFAULT_WALK, false);
+  let m = await mount(full, NONE);
+  const fullWant = `${opening(w)}Then come 1 hold of 252 daily returns counted forward, and each refit reads every daily return before its hold. ${tail}`;
+  check(w.folds.length === 1 && w.folds[0].bars === 252 && notesOf(m.root).includes(fullWant) && L.conventionLine(w) === fullWant,
+    "convention: a schedule of whole holds says so, with no partial hold", notesOf(m.root).find((n) => n.startsWith("The first fit")) ?? "(none)");
+  check(!m.root.querySelector(".wfl-note") || !notesOf(m.root).some((n) => n.startsWith("A hold's own Sharpe ratio")), "short hold: with no short hold there is no note about one");
+  m.r.unmount();
+
+  // A last hold of one day: it joins the series, prints dashes, and the note says why, in the singular.
+  const one = cutAt(W.FIRST_FIT + 252 + 2);
+  ({ w } = expected(one, NONE, W.DEFAULT_WALK, false));
+  m = await mount(one, NONE);
+  const last = w.folds.at(-1);
+  const oneConv = `${opening(w)}Then come 2 holds of 252 daily returns counted forward, and each refit reads every daily return before its hold. The last hold is partial: 1 day, ${last.holdFirst} to ${last.holdLast}. ${tail}`;
+  const oneShort = `A hold's own Sharpe ratio is printed from ${format(W.MIN_HOLD, "int")} days up: hold 2 has 1 day, so it shows a dash, but its days are in every joined figure.`;
+  const notes = notesOf(m.root);
+  check(w.folds.length === 2 && last.bars === 1 && notes.includes(oneConv), "convention: a partial last hold of one day is said with its dates, as one day", notes.find((n) => n.startsWith("The first fit")) ?? "(none)");
+  check(notes.includes(oneShort), "short hold: the note under the hold table names the hold and its one day, and says its days still join the series", notes.find((n) => n.startsWith("A hold's")) ?? "(none)");
+  const row = readTable(tableBy(m.root, "Each hold, and the Sharpe ratio it held"))?.rows[1] ?? [];
+  check(row.length > 8 && row.slice(8).every((x) => x === "–"), "short hold: its own figures are dashes", row.join(" "));
+  m.r.unmount();
+
+  // A hold of 62 days among longer ones, at 126-day holds on the same example: the note names it in the plural.
+  const sixty = cutAt(W.FIRST_FIT + 126 + 62 + 1);
+  ({ w } = expected(sixty, NONE, { fit: "expanding", hold: 126 }, false));
+  m = await mount(sixty, NONE);
+  await setOptions(m.root, { fit: "expanding", hold: 126 });
+  const sixtyShort = `A hold's own Sharpe ratio is printed from ${format(W.MIN_HOLD, "int")} days up: hold 2 has 62 days, so it shows a dash, but its days are in every joined figure.`;
+  check(w.folds.at(-1).bars === 62 && notesOf(m.root).includes(sixtyShort), "short hold: a 62-day hold is named with its days", notesOf(m.root).find((n) => n.startsWith("A hold's")) ?? "(none)");
+  m.r.unmount();
+
+  // Per period, rolling one-year fits, the added constructions on: where a maximum-Sharpe fit found no mix
+  // earning more than its fit's rate, the note under its weights names the hold, the rate and what it held.
+  const o = { fit: "rolling", hold: 252 };
+  ({ w } = expected(EX, SERIES, o, true));
+  m = await mount(EX, SERIES);
+  await setAdded(m.root, true);
+  await setOptions(m.root, o);
+  let named = 0;
+  const bad = [];
+  for (const id of ["gmv", "tan", "tan.1y", "tan.bs", "tan.cap", "rp"]) {
+    const choice = pill(m.root, "Weights of", L.labelOf(id));
+    if (choice && choice.getAttribute("aria-checked") !== "true") await quietly(() => click(choice));
+    const run = w.runs.find((x) => x.id === id);
+    const below = run.beatsRf.flatMap((b, k) => (b === false && run.weights[k] ? [k] : []));
+    named += below.length;
+    const said = below.map((k) => {
+      const held = run.weights[k].flatMap((x, i) => (x > 1e-9 ? [EX.tickers[i]] : []));
+      const what = held.length === 1 ? `${held[0]} alone` : "the mix whose Sharpe ratio is least negative there";
+      return `In hold ${k + 1}, no long-only mix earned more than the ${format(w.folds[k].fitRate, "pct2")} rate on the fit window through ${w.folds[k].fitLast}, so it holds ${what}.`;
+    });
+    const want = said.length ? `${L.labelOf(id)}: ${said.join(" ")}` : null;
+    const got = m.root.querySelector(".wfl-note--below");
+    if ((got ? text(got) : null) !== want) bad.push(`${id}: ${got ? text(got) : "(none)"} // ${want}`);
+  }
+  check(named > 0 && bad.length === 0, "below the rate: under each fitted construction's weights, every hold whose fit earned no more than its rate is named, with the rate and the one asset held",
+    bad.slice(0, 2).join(" | ") || `${named} holds named`);
+  // The in-sample head with the last-year row shown, per period.
+  const sub = text(m.root.querySelector(".tbl thead th:nth-child(2) .tbl-sub") ?? { textContent: "" });
+  check(sub === "fitted (the last-year row on the window's last year) at the bill rate of the window's last day and scored on the whole window, held-out years included, each day at its own rate; the other tabs fit and score at one rate",
+    "in-sample head, per period with the added rows: the last-year row's own fit window is said", sub);
+  m.r.unmount();
+
+  // And at a flat rate.
+  m = await mount(EX, NONE);
+  await setAdded(m.root, true);
+  const flatSub = text(m.root.querySelector(".tbl thead th:nth-child(2) .tbl-sub") ?? { textContent: "" });
+  check(flatSub === "fitted (the last-year row on the window's last year) and scored on the whole window, held-out years included",
+    "in-sample head, flat with the added rows: the last-year row's own fit window is said", flatSub);
+  m.r.unmount();
+}
+
 // ---- 7. the sentences: the standard error, the decay, the yardstick, the one citation -------------------------------
 
 {
@@ -444,6 +593,25 @@ for (const [name, a] of [
   const rows = L.liveRows(EX, w);
   check(bells.length === rows.length && bells.every((b, i) => text(b.querySelector(".wfl-bell-values")) === `${format(rows[i].inSample, "num3")} to ${format(rows[i].oos, "num3")}`),
     "dumbbell: one per row, each printing its in-sample and out-of-sample figures", bells.map((b) => text(b)).join(" | "));
+  // The axis: a label for every gridline, zero among them, and nothing at the padded ends of the domain.
+  const dom = bellDomain(rows);
+  const ticks = bellTicks(dom);
+  const tickFmt = bellStep(dom) >= 1 ? "int" : "num2";
+  const labels = [...root.querySelectorAll(".wfl-bell-ends > span")];
+  check(ticks.length >= 3 && labels.length === ticks.length && labels.every((l, i) => l.classList.contains("wfl-bell-tick") && text(l) === format(ticks[i], tickFmt)) &&
+    ticks.includes(0) && labels.filter((l) => l.hasAttribute("data-zero")).length === 1,
+    "dumbbell: the axis labels every gridline, zero among them, and not the padded ends", labels.map(text).join(" "));
+  // The step on any domain: 1, 2 or 5 times a power of ten, three to eight lines, zero among them. The widest is a
+  // 500% rate with shorting, where a step that stopped at 1 drew one line per unit.
+  const DOMAINS = [[-0.66, 1.09], [-3.56, 0.74], [-9.03, 0.51], [-91.6, 5.2], [-0.0004, 0.0102], [0, 2.4]];
+  const odd = DOMAINS.flatMap((d) => {
+    const t = bellTicks(d);
+    const st = bellStep(d);
+    const lead = st / 10 ** Math.floor(Math.log10(st) + 1e-9);
+    return t.length >= 3 && t.length <= 8 && t.includes(0) && t.every((x) => x >= d[0] - 1e-9 && x <= d[1] + 1e-9) && [1, 2, 5].some((k) => Math.abs(lead - k) < 1e-9)
+      ? [] : [`[${d}]: step ${st}, ${t.join(" ")}`];
+  });
+  check(odd.length === 0, "dumbbell: the gridlines step by 1, 2 or 5 times a power of ten, three to eight of them, zero among them, on any domain", odd.join(" | "));
   check(bells.every((b) => b.className === bells[0].className && b.querySelectorAll("circle.wfl-bell-in").length <= 1 && b.querySelectorAll("circle.wfl-bell-out").length <= 1) &&
     root.querySelectorAll(".wfl-bell-list circle.wfl-bell-in").length === rows.filter((q) => q.inSample !== null).length,
     "dumbbell: every row is drawn alike, a hollow dot in-sample and a filled one out-of-sample");
@@ -468,7 +636,7 @@ for (const [name, a] of [
   const BANNED = /\b(best|optimal|winners?|race|contenders?|outperform\w*)\b/i;
   const hits = allText.flatMap((t, i) => (BANNED.test(t) ? [`render ${i}: ${t.match(BANNED)[0]}`] : []));
   check(allText.length >= 20 && hits.length === 0, "words: no render of the segment says best, optimal, winner, race, contender or outperform (outside the cited title)", hits.slice(0, 3).join(" | ") || `${allText.length} renders`);
-  const tips = ["wf_oos", "wf_se", "wf_fit", "wf_hold", "wf_added"].flatMap((k) => Object.values(SCORE_TIPS[k]));
+  const tips = Object.values(WALK_TIPS).flatMap((t) => Object.values(t.texts));
   check(tips.length === 15 && tips.every((t) => !BANNED.test(t) && !/better|beats?|wins?\b/i.test(t)), "words: the segment's five tooltips, at every level, claim no construction does better");
   // No row set apart: render the busiest state and look at every row and mark.
   const { r, root } = await mount(fixtureAnalysis("sectors"), NONE);

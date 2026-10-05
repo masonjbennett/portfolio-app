@@ -43,7 +43,9 @@ check(W.FIRST_FIT === FIRST, `the first fit is the oracle's ${FIRST} rows`, Stri
 check(W.MIN_HOLD === FLOOR, `a hold's own Sharpe is reported from ${FLOOR} rows`, String(W.MIN_HOLD));
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const gapOf = (a, b) => (a.length === b.length ? Math.max(0, ...a.map((x, i) => Math.abs(x - b[i]))) : Infinity);
+// A side that is not a list of the same length (a fold with no weights, a schedule with another count of folds)
+// is an infinite gap, so its check fails by name rather than the suite throwing and skipping every check after it.
+const gapOf = (a, b) => (Array.isArray(a) && Array.isArray(b) && a.length === b.length ? Math.max(0, ...a.map((x, i) => Math.abs(x - b[i]))) : Infinity);
 const worst = {};
 function within(label, a, b, tol, bucket) {
   const g = Array.isArray(b) ? gapOf(a, b) : Math.abs(a - b);
@@ -82,6 +84,13 @@ for (const set of SETS) {
   const dates = plan.folds.map((f) => ({ fit_last: d.dates[f.fitTo - 1], hold_first: d.dates[f.holdFrom], hold_last: d.dates[f.holdTo - 1] }));
   check(same(dates, entry.folds), `${set}: the schedule's fold dates are the published run's`, JSON.stringify(dates));
   check(plan.folds.every((f) => f.fitFrom === 0 && f.fitTo === f.holdFrom), `${set}: every published fit is expanding and ends where its hold starts`);
+  // A schedule with another count of folds than the record cannot replay it: say so by name and move on, rather
+  // than throwing on a fold the record has no weights for and skipping every check after this one.
+  const holds = plan.ok ? plan.folds.length : 0;
+  if (!Object.values(entry.ship.weights).every((ws) => ws.length === holds)) {
+    check(false, `${set}: the schedule has the record's count of folds`, `${holds} against ${entry.ship.weights.ew.length}`);
+    continue;
+  }
 
   for (const [k, field] of Object.entries(KEYS)) {
     const rep = W.replay(d.cols, plan.folds, entry.ship.weights[k], WF.rf);
@@ -112,6 +121,10 @@ for (const set of SETS) {
     tight.weights[r.id].forEach((w, f) => within(`${set} ${r.id}: fold ${f} weights`, r.weights[f], w, 1e-6, "tight weights"));
     within(`${set} ${r.id}: fold Sharpes`, r.foldSharpe, tight.fold_sharpe[r.id], 1e-6, "tight fold");
     within(`${set} ${r.id}: joined Sharpe`, r.sharpe, tight.sharpe[r.id], 1e-6, "tight joined");
+    // The solver note on the page is formatted from the record's exact solve: the engine the page runs must print
+    // the same three decimals, not merely sit within 1e-6 of a figure that could round the other way.
+    check(format(r.sharpe, "num3") === format(tight.sharpe[r.id], "num3"), `${set} ${r.id}: the exact engine prints what the solver note says`,
+      `${format(r.sharpe, "num3")} against ${format(tight.sharpe[r.id], "num3")}`);
   }
   check(same(run.folds.map((f) => f.fitRate), run.folds.map(() => WF.rf)), `${set}: every flat fit is at the flat rate`);
   // In-sample at a flat rate is the figure the Optimization tab prints for the whole window.
@@ -189,6 +202,31 @@ for (const set of SETS) {
   check(new Set(run.folds.map((f) => f.fitRate)).size > 3, `${set} rfhist: the fits sit at different rates`);
 }
 
+// Whether each maximum-Sharpe fit's mix earned more than its fit's rate, per fold, as the solver itself says on
+// that fold's rows: the cross-asset set per period, rolling fits, with the added constructions. Some fit there sits
+// below its rate, so the check reads both answers.
+{
+  const d = DATA.cross;
+  const run = W.walkForward({ cols: d.cols, dates: d.dates, bench: d.bench, rates: DGS, allowShort: false, added: true }, { fit: "rolling", hold: 252 });
+  const bad = [];
+  let below = 0;
+  for (const r of run.runs) {
+    run.folds.forEach((f, k) => {
+      const fit = d.cols.map((c) => c.slice(f.fitFrom, f.fitTo));
+      let want = null;
+      if (r.id === "tan") want = O.tangency(fit.map(mean), covMatrix(fit), f.fitRate, false)?.beatsRf ?? null;
+      else if (r.id !== "ew" && r.id !== "gmv" && !r.unavailable[k]) {
+        const own = C.ownWindow(r.id, fit);
+        want = C.solveAdded(r.id, own.m, own.S, own.T, f.fitRate, false)?.beatsRf ?? null;
+      }
+      if (r.beatsRf[k] !== want) bad.push(`${r.id} fold ${k}: ${r.beatsRf[k]} against ${want}`);
+      if (r.beatsRf[k] === false) below += 1;
+    });
+  }
+  check(bad.length === 0 && below > 0, "cross rfhist rolling: each fold's maximum-Sharpe fits say whether they beat the fit's rate, as the solver does",
+    bad.slice(0, 3).join(" | ") || `${below} fits below their rate`);
+}
+
 // ---- 4. synthetic baskets: the added constructions per fold, the edges, the rate ------------------------
 
 function rng(seed) {
@@ -245,7 +283,7 @@ const runOf = (b, over = {}, opts) => W.walkForward({ cols: b.cols, dates: b.dat
       run.folds.forEach((f, k) => {
         const solve = (from, to) => {
           const own = C.ownWindow(r.id, b.cols.map((c) => c.slice(from, to)));
-          return C.solveAdded(r.id, own.m, own.S, own.T, 0.02, false).w;
+          return C.solveAdded(r.id, own.m, own.S, own.T, 0.02, false)?.w ?? null;
         };
         within(`synthetic ${fit} ${r.id} fold ${k}: solveAdded on exactly the fold's fit rows`, r.weights[k], solve(f.fitFrom, f.fitTo), 1e-15);
         if (gapOf(solve(f.fitFrom, f.fitTo + 1), r.weights[k]) > 1e-6 && gapOf(solve(f.fitFrom, f.fitTo - 1), r.weights[k]) > 1e-6) moved += 1;
@@ -258,7 +296,7 @@ const runOf = (b, over = {}, opts) => W.walkForward({ cols: b.cols, dates: b.dat
     const y = run.runs.find((r) => r.id === "tan.1y");
     run.folds.forEach((f, k) => {
       const last = b.cols.map((c) => c.slice(f.fitTo - 252, f.fitTo));
-      const want = O.tangency(last.map(mean), covMatrix(last), 0.02, false).w;
+      const want = O.tangency(last.map(mean), covMatrix(last), 0.02, false)?.w ?? null;
       within(`synthetic ${fit} tan.1y fold ${k}: the tangency of the fold's last 252 fit rows`, y.weights[k], want, 1e-15);
     });
   }
@@ -308,8 +346,9 @@ const runOf = (b, over = {}, opts) => W.walkForward({ cols: b.cols, dates: b.dat
   const f = run.folds[0];
   const want = [];
   for (let t = f.holdFrom; t < f.holdTo; t++) want.push(b.cols.reduce((s, c, i) => s + c[t] * g.weights[0][i], 0));
-  const rep = W.replay(b.cols, run.folds, [g.weights[0]], 0.02);
-  within("a held day's return is r_t . w", rep.joined, want, 1e-15);
+  check(run.folds.length === 1, "a window of the first fit and one hold has one hold", String(run.folds.length));
+  const rep = run.folds.length === 1 ? W.replay(b.cols, run.folds, [g.weights[0]], 0.02) : null;
+  within("a held day's return is r_t . w", rep?.joined ?? null, want, 1e-15);
 }
 
 // A construction whose solve fails on one fold: no joined figure, the fold named, nothing standing in.
@@ -323,6 +362,22 @@ const runOf = (b, over = {}, opts) => W.walkForward({ cols: b.cols, dates: b.dat
   check(cap.sharpe === null && cap.se === null, "a failed fold leaves no joined figure");
   check(cap.foldSharpe[0] !== null && cap.foldSharpe[1] === null && cap.foldSharpe[2] !== null, "the folds that solved keep their own Sharpe");
   check(run.runs.filter((r) => ["ew", "gmv"].includes(r.id)).every((r) => r.sharpe !== null), "the other constructions still have joined figures");
+
+  // The same basket under a daily rate that moves every day: a fold that solved is scored from its own hold's
+  // first row of the rate series, never from the window's first, even though another fold failed.
+  const moving = b.dates.map((d, t) => [d, 0.02 + 1e-5 * t]);
+  const per = runOf(b, { rates: moving });
+  const pcap = per.runs.find((r) => r.id === "tan.cap");
+  const daily = W.dayRates(moving, b.dates);
+  check(per.convention === "per-period" && daily.ok && pcap.failed.length > 0 && pcap.sharpe === null,
+    "per period: the capped construction still fails on a fold and has no joined figure", JSON.stringify(pcap.failed));
+  const solved = per.folds.flatMap((f, k) => (pcap.weights[k] ? [k] : []));
+  const own = solved.map((k) => W.sharpeOn(W.heldReturns(b.cols, per.folds[k], pcap.weights[k]), per.folds[k].holdFrom, daily.rates));
+  const fromZero = solved.map((k) => W.sharpeOn(W.heldReturns(b.cols, per.folds[k], pcap.weights[k]), 0, daily.rates));
+  within("per period: a solved fold's own Sharpe beside a failed one is scored on its own days' rates", solved.map((k) => pcap.foldSharpe[k]), own, 1e-12);
+  check(solved.length > 0 && solved.every((k, i) => Math.abs(own[i] - fromZero[i]) > 1e-6),
+    "per period: the rates from the window's first row would print another figure, so the check above can tell them apart",
+    solved.map((k, i) => Math.abs(own[i] - fromZero[i]).toExponential(2)).join(" "));
 }
 
 // Shorting reaches minimum variance and maximum Sharpe.

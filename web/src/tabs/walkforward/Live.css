@@ -193,8 +193,8 @@
 }
 
 .wfl-bell-zero {
-  stroke: var(--color-hairline);
-  stroke-width: 1.5;
+  stroke: var(--color-ink2);
+  stroke-width: 1;
 }
 
 .wfl-bell-bar {
@@ -228,9 +228,33 @@
   font-family: var(--font-sans);
 }
 
+/* The gridlines' labels, each placed at its line's share of the strip's width. */
 .wfl-bell-ends {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  min-height: 1.4em;
+}
+
+.wfl-bell-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.wfl-bell-tick[data-edge="start"] {
+  transform: none;
+}
+
+.wfl-bell-tick[data-edge="end"] {
+  transform: translateX(-100%);
+}
+
+.wfl-bell-tick[data-zero] {
+  color: var(--color-ink);
+}
+
+.wfl-key-name {
+  color: var(--color-ink);
 }
 
 /* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */

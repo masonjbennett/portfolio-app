@@ -6,13 +6,14 @@
 //   level:    Level      the explanation level for tooltips
 //   rates:    WalkRates  the rate input (src/types.ts):
 //               points  FRED's daily 3-month bill yields (DGS3MO), [ISO day, annual decimal], ascending, when the
-//                       series held covers the analysis' first and last price day and no rate is set in the
-//                       rail: each refit's tangency takes the last observation on or before its fit's last bar,
+//                       series held starts on or before the analysis' first price day and has an observation
+//                       inside the window, and no rate is set in the rail (days after its last observation
+//                       carry that one forward): each refit's tangency takes the last observation on or before its fit's last bar,
 //                       and each held day is scored on its return minus that day's rate / 252, the series
 //                       carried forward over days FRED did not publish;
 //               null    run flat at analysis.rf, and `flat` says why: "typed" (a rate is set in the rail),
 //                       "loading" (the series is on its way), "unavailable" (it could not be had) or
-//                       "uncovered" (the series held does not reach back over the window);
+//                       "uncovered" (the series held starts after the window's first day, or has nothing inside it);
 //               basis   what the analysis on screen is scored against (src/state/rfwindow.ts RfBasis).
 //
 // What it lays out, top to bottom: the line saying what the run was computed on against what the published
@@ -31,6 +32,7 @@ import { DEFAULT_WALK, type Construction, type FitMode, type HoldRows, type Walk
 import type { Analysis, Level, Settings, WalkRates } from "../../types.ts";
 import Dumbbell from "./Dumbbell.tsx";
 import {
+  belowRateNote,
   CITE_AUTHORS,
   CITE_TITLE,
   cannotRun,
@@ -53,7 +55,8 @@ import {
   type LiveTable,
 } from "./live.ts";
 import { useLiveWalk } from "./liveSolve.ts";
-import { PUBLISHED_LAST_BAR, PUBLISHED_RF } from "./terms.ts";
+import { WALK_TIPS } from "./tips.ts";
+import { PAIR_HEADING, PUBLISHED_LAST_BAR, PUBLISHED_RF } from "./terms.ts";
 import "./Live.css";
 
 export interface LiveProps {
@@ -86,15 +89,16 @@ const Figures = memo(function Figures({ a, w, level }: { a: Analysis; w: Walk; l
   const missing = rows.flatMap((r) => (r.missing ? [r.missing] : []));
   return (
     <section className="wfl-section" aria-labelledby="wfl-figures">
-      <Slug id="wfl-figures">Fitted against held out</Slug>
+      <Slug id="wfl-figures">{PAIR_HEADING}</Slug>
       {decay ? <p className="wfl-finding">{decay}</p> : null}
       <Bells rows={rows} />
       <p className="wfl-key">
+        <span className="wfl-key-name">About the columns below:</span>
         <span>
-          {OOS_HEAD} <Tip tip="wf_oos" level={level} />
+          {OOS_HEAD} <Tip own={WALK_TIPS.oos} level={level} />
         </span>
         <span>
-          {SE_HEAD} <Tip tip="wf_se" level={level} />
+          {SE_HEAD} <Tip own={WALK_TIPS.se} level={level} />
         </span>
       </p>
       <LiveTableView t={table} />
@@ -122,6 +126,7 @@ const Holds = memo(function Holds({ a, w }: { a: Analysis; w: Walk }) {
   const shown = choices.some((c) => c.value === pick) ? pick : (choices[0]?.value ?? "tan");
   const weights = useMemo(() => weightsTable(a, w, shown as Construction), [a, w, shown]);
   const short = shortHoldNote(w);
+  const below = belowRateNote(a, w, shown as Construction);
   return (
     <section className="wfl-section" aria-labelledby="wfl-holds">
       <Slug id="wfl-holds">Hold by hold</Slug>
@@ -132,6 +137,7 @@ const Holds = memo(function Holds({ a, w }: { a: Analysis; w: Walk }) {
         <SegControl options={choices} value={shown} onChange={setPick} ariaLabel="Weights of" />
       </div>
       {weights ? <LiveTableView t={weights} /> : null}
+      {below ? <p className="wfl-note wfl-note--below">{below}</p> : null}
     </section>
   );
 });
@@ -164,13 +170,13 @@ export default function Live({ analysis: a, level, rates }: LiveProps) {
       <div className="wfl-options">
         <div className="wfl-row">
           <span className="wfl-row-label">
-            Fit on <Tip tip="wf_fit" level={level} />
+            Fit on <Tip own={WALK_TIPS.fit} level={level} />
           </span>
           <SegControl options={FIT_OPTIONS} value={opts.fit} onChange={(fit: FitMode) => setOpts((o) => ({ ...o, fit }))} ariaLabel="Fit on" />
         </div>
         <div className="wfl-row">
           <span className="wfl-row-label">
-            Hold for <Tip tip="wf_hold" level={level} />
+            Hold for <Tip own={WALK_TIPS.hold} level={level} />
           </span>
           <SegControl
             options={HOLD_OPTIONS}
@@ -183,13 +189,13 @@ export default function Live({ analysis: a, level, rates }: LiveProps) {
           <button type="button" className="wfl-toggle" aria-pressed={added} onClick={() => setAdded((x) => !x)}>
             {ADDED_SWITCH}
           </button>
-          <Tip tip="wf_added" level={level} />
+          <Tip own={WALK_TIPS.added} level={level} />
         </div>
       </div>
       <div className="wfl-results" aria-busy={w ? undefined : true}>
         {w ? (
           <>
-            <Boundary name="Fitted against held out" resetKey={w}>
+            <Boundary name={PAIR_HEADING} resetKey={w}>
               <Figures a={a} w={w} level={level} />
             </Boundary>
             <Boundary name="Hold by hold" resetKey={w}>

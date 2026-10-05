@@ -19,8 +19,9 @@
 // The solve is taken in steps (walkSteps): one refit per step, then the whole window, then the scoring. At ten
 // assets with short holds and the added constructions on, one call of walkForward() holds the page for longer
 // than a frame, so ./liveSolve.ts runs the steps across macrotasks. The steps are the engine's own generator
-// (walkForwardSteps, which walkForward() itself drains), so the page and the engine run one code path, and
-// test/t-tab-walkforward.mjs still holds the result equal to walkForward()'s, field for field.
+// (walkForwardSteps, which walkForward() itself drains), so the page and the engine run one code path;
+// test/t-tab-walkforward.mjs holds what is left to this file: one step per refit and one for the whole window,
+// the engine's inputs taken from ratePlan(), and a series that starts too late refused by name.
 import { format } from "../../format.ts";
 import { CAP_MIN_ASSETS, YEAR_ROWS, type Unavailable } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
@@ -170,8 +171,8 @@ export function labelOf(id: Construction): string {
 }
 
 /** The sub-line under a fitted row's name: its weights were chosen before each hold, never on the hold. */
-export const FOLD_FITTED = "weights chosen on each fold's fit window";
-const FOLD_LAST_YEAR = "weights chosen on the last year of each fold's fit window";
+export const FOLD_FITTED = "weights chosen on the fit window before each hold";
+const FOLD_LAST_YEAR = "weights chosen on the last year of the fit window before each hold";
 export const EW_SUB = "fixed weights, nothing fitted";
 export const BENCH_SUB = "the benchmark, held, not fitted";
 
@@ -189,6 +190,14 @@ export interface PublishedRun {
   rf: number;
 }
 
+/**
+ * A flat rate as the label prints it: to one decimal of a percent when that is the rate exactly (a typed 2.0%
+ * reads as the published 2.0% beside it), to two otherwise.
+ */
+export function rateWords(rate: number): string {
+  return Math.abs(rate * 1000 - Math.round(rate * 1000)) < 1e-9 ? format(rate, "pct1") : format(rate, "pct2");
+}
+
 /** What the run was computed on, against what the published note used: one to three sentences. */
 export function labelLine(a: Analysis, plan: RatePlan, pub: PublishedRun): string[] {
   const asOf = longDay(a.asOf);
@@ -199,7 +208,7 @@ export function labelLine(a: Analysis, plan: RatePlan, pub: PublishedRun): strin
           `Recomputed on prices through ${asOf}, each refit and each held day at the 3-month Treasury bill rate of its time; the published note used prices through ${then} at a flat ${format(pub.rf, "pct1")} risk-free rate.`,
         ]
       : [
-          `Recomputed on prices through ${asOf} at a ${format(plan.rate, "pct2")} risk-free rate; the published note used prices through ${then} at a ${format(pub.rf, "pct1")} risk-free rate.`,
+          `Recomputed on prices through ${asOf} at a ${rateWords(plan.rate)} risk-free rate; the published note used prices through ${then} at a ${format(pub.rf, "pct1")} risk-free rate.`,
         ];
   if (plan.kind === "flat" && plan.why === "loading") {
     out.push("The daily 3-month Treasury bill series is still loading, so every refit and every held day uses that one rate for now.");
@@ -218,6 +227,16 @@ export function cannotRun(t: TooFewRows): string {
   );
 }
 
+/** "1 day", "62 days". */
+export function dayCount(n: number): string {
+  return `${format(n, "int")} ${n === 1 ? "day" : "days"}`;
+}
+
+/** "1 hold", "6 holds". */
+export function holdCount(n: number): string {
+  return `${format(n, "int")} ${n === 1 ? "hold" : "holds"}`;
+}
+
 /** The convention in plain words, every number read from the run. */
 export function conventionLine(w: Walk): string {
   const f = w.folds;
@@ -227,10 +246,10 @@ export function conventionLine(w: Walk): string {
     w.options.fit === "expanding"
       ? "each refit reads every daily return before its hold"
       : `each refit reads the ${format(FIRST_FIT, "int")} daily returns right before its hold`;
-  const partial = last.bars < w.options.hold ? ` The last hold is partial: ${format(last.bars, "int")} days, ${last.holdFirst} to ${last.holdLast}.` : "";
+  const partial = last.bars < w.options.hold ? ` The last hold is partial: ${dayCount(last.bars)}, ${last.holdFirst} to ${last.holdLast}.` : "";
   return (
     `The first fit is the window's first ${format(FIRST_FIT, "int")} daily returns (${first.fitFirst} to ${first.fitLast}). ` +
-    `Then come ${f.length} holds of ${format(w.options.hold, "int")} daily returns counted forward, and ${fit}.${partial} ` +
+    `Then come ${holdCount(f.length)} of ${format(w.options.hold, "int")} daily returns counted forward, and ${fit}.${partial} ` +
     "Weights are held constant through each hold and rebalanced daily, and the held days of every hold are joined into one series and scored once."
   );
 }
@@ -356,11 +375,16 @@ export const IN_SAMPLE_HEAD = "In-sample Sharpe";
 export const OOS_HEAD = "Out-of-sample Sharpe";
 export const SE_HEAD = "± 1 standard error";
 
-/** The sub-line under the in-sample head: the whole window, and under the daily rates, how that differs from the other tabs. */
+/**
+ * The sub-line under the in-sample head: the window it was fitted and scored on (the last-year row is fitted on
+ * the window's last year), and under the daily rates how that differs from the other tabs, which fit and score
+ * at one rate: here the fit is at the bill rate of the window's last day and each day is scored at its own.
+ */
 export function inSampleSub(w: Walk): string {
+  const lastYear = w.runs.some((r) => r.id === "tan.1y") ? " (the last-year row on the window's last year)" : "";
   return w.convention === "per-period"
-    ? "fitted and scored on the whole window, held-out years included, each day at its own bill rate; the other tabs score it at one rate"
-    : "fitted and scored on the whole window, held-out years included";
+    ? `fitted${lastYear} at the bill rate of the window's last day and scored on the whole window, held-out years included, each day at its own rate; the other tabs fit and score at one rate`
+    : `fitted${lastYear} and scored on the whole window, held-out years included`;
 }
 
 /** In-sample beside out-of-sample, with the out-of-sample figure's standard error. */
@@ -393,6 +417,7 @@ export function foldTable(a: Analysis, w: Walk, rows: readonly LiveRow[]): LiveT
       { key: "hold", label: "Hold", format: "text", first: true },
       { key: "fitFirst", label: "Fit from", format: "date" },
       { key: "fitLast", label: "Fit to", format: "date" },
+      { key: "fitDays", label: "Fit days", format: "int" },
       { key: "rate", label: "Fit rate", format: "pct2" },
       { key: "holdFirst", label: "Held from", format: "date" },
       { key: "holdLast", label: "Held to", format: "date" },
@@ -403,6 +428,7 @@ export function foldTable(a: Analysis, w: Walk, rows: readonly LiveRow[]): LiveT
       hold: `Hold ${k + 1}`,
       fitFirst: f.fitFirst,
       fitLast: f.fitLast,
+      fitDays: f.fitTo - f.fitFrom,
       rate: f.fitRate,
       holdFirst: f.holdFirst,
       holdLast: f.holdLast,
@@ -421,7 +447,7 @@ export function foldTable(a: Analysis, w: Walk, rows: readonly LiveRow[]): LiveT
 export function shortHoldNote(w: Walk): string | null {
   const short = w.folds.flatMap((f, k) => (f.bars < MIN_HOLD ? [k] : []));
   if (!short.length) return null;
-  const which = list(short.map((k) => `hold ${k + 1} has ${format(w.folds[k].bars, "int")} days`));
+  const which = list(short.map((k) => `hold ${k + 1} has ${dayCount(w.folds[k].bars)}`));
   return `A hold's own Sharpe ratio is printed from ${format(MIN_HOLD, "int")} days up: ${which}, so it shows a dash, but its days are in every joined figure.`;
 }
 
@@ -437,12 +463,31 @@ export function weightsTable(a: Analysis, w: Walk, id: Construction): LiveTable 
   const head = (k: number) => `Hold ${k + 1}`;
   return {
     title: `Weights held in each hold: ${labelOf(id)}`,
-    columns: [{ key: "ticker", label: "Asset", format: "text", first: true }, ...w.folds.map((_, k): Column => ({ key: `h${k}`, label: head(k), format: "pct2" }))],
+    columns: [{ key: "ticker", label: "Asset", format: "text", first: true }, ...w.folds.map((_, k): Column => ({ key: `h${k}`, label: head(k), format: "pct1" }))],
     rows: a.tickers.map((t, i) => ({ ticker: t, ...Object.fromEntries(run.weights.map((wt, k) => [`h${k}`, wt ? wt[i] : null])) })),
     span: tableSpan(w.folds[0].fitFirst, w.folds[w.folds.length - 1].fitLast),
-    subs: Object.fromEntries(w.folds.map((f, k) => [head(k), `fitted through ${f.fitLast}`])),
+    subs: { Asset: rowSub(id, a.allowShort), ...Object.fromEntries(w.folds.map((f, k) => [head(k), `fitted through ${f.fitLast}`])) },
     filename: "walkforward_weights",
   };
+}
+
+/**
+ * The holds in which a maximum-Sharpe fit found no mix earning more than its fit's rate on the fit window, and
+ * what it held there instead, as the scorecard says it of the whole window; null when there is none.
+ */
+export function belowRateNote(a: Analysis, w: Walk, id: Construction): string | null {
+  const run = w.runs.find((r) => r.id === id);
+  if (!run) return null;
+  const mix = a.allowShort ? "no mix" : "no long-only mix";
+  const out = run.beatsRf.flatMap((b, k) => {
+    const wt = run.weights[k];
+    if (b !== false || !wt) return [];
+    const held = wt.map((x, i) => (x > 1e-9 ? i : -1)).filter((i) => i >= 0);
+    const what = held.length === 1 ? `${a.tickers[held[0]]} alone` : "the mix whose Sharpe ratio is least negative there";
+    const f = w.folds[k];
+    return [`In hold ${k + 1}, ${mix} earned more than the ${format(f.fitRate, "pct2")} rate on the fit window through ${f.fitLast}, so it holds ${what}.`];
+  });
+  return out.length ? `${labelOf(id)}: ${out.join(" ")}` : null;
 }
 
 // ---- the sentences ------------------------------------------------------------------------------------------
@@ -473,7 +518,7 @@ export function seSentence(w: Walk, rows: readonly LiveRow[]): string | null {
   const x = typicalSE(rows);
   if (x === null) return null;
   return (
-    `With ${w.folds.length} holds, ${format(w.heldRows, "int")} held days in all, each out-of-sample Sharpe ratio above carries about ` +
+    `With ${holdCount(w.folds.length)}, ${format(w.heldRows, "int")} held days in all, each out-of-sample Sharpe ratio above carries about ` +
     `±${format(x, "num3")} (one standard error), so a gap smaller than about two of them, ${format(2 * x, "num3")}, is not evidence either way.`
   );
 }

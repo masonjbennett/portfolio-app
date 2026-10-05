@@ -212,6 +212,12 @@ export interface Fitted {
   w: Vec | null;
   /** Why the construction cannot be offered on this fit (added constructions only), else null. */
   unavailable: Unavailable | null;
+  /**
+   * A maximum-Sharpe fit (the tangency and the three added tangencies): whether its mix earned more than the
+   * fit's rate on the fit's own rows. False means none did, and the solver holds the mix whose Sharpe ratio is
+   * least negative there (one asset, long-only). Null for the other constructions and where there are no weights.
+   */
+  beatsRf: boolean | null;
 }
 
 /**
@@ -227,19 +233,21 @@ export function fitAll(ids: readonly Construction[], fit: Vec[], rf: number, all
   const out: Record<string, Fitted> = {};
   for (const id of ids) {
     if (id === "ew") {
-      out[id] = { w: new Array<number>(n).fill(1 / n), unavailable: null };
+      out[id] = { w: new Array<number>(n).fill(1 / n), unavailable: null, beatsRf: null };
     } else if (id === "gmv") {
-      out[id] = { w: gmv(m, S, allowShort)?.w ?? null, unavailable: null };
+      out[id] = { w: gmv(m, S, allowShort)?.w ?? null, unavailable: null, beatsRf: null };
     } else if (id === "tan") {
-      out[id] = { w: tangency(m, S, rf, allowShort)?.w ?? null, unavailable: null };
+      const t = tangency(m, S, rf, allowShort);
+      out[id] = { w: t?.w ?? null, unavailable: null, beatsRf: t ? t.beatsRf : null };
     } else {
       const why = unavailable(id, T, n);
       if (why) {
-        out[id] = { w: null, unavailable: why };
+        out[id] = { w: null, unavailable: why, beatsRf: null };
         continue;
       }
       const own = ownWindow(id, fit);
-      out[id] = { w: solveAdded(id, own.m, own.S, own.T, rf, allowShort)?.w ?? null, unavailable: null };
+      const sol = solveAdded(id, own.m, own.S, own.T, rf, allowShort);
+      out[id] = { w: sol?.w ?? null, unavailable: null, beatsRf: sol ? sol.beatsRf : null };
     }
   }
   return out;
@@ -278,6 +286,8 @@ export interface ConstructionRun {
   unavailable: (Unavailable | null)[];
   /** The folds (indices) whose solve found no weights. */
   failed: number[];
+  /** Per fold: Fitted.beatsRf, whether a maximum-Sharpe fit's mix earned more than that fit's rate. */
+  beatsRf: (boolean | null)[];
   /** Per fold: the hold's own Sharpe; null below MIN_HOLD rows or without weights. */
   foldSharpe: (number | null)[];
   /** The joined held days' Sharpe; null unless every fold has weights. */
@@ -371,6 +381,7 @@ export function* walkForwardSteps(input: WalkInput, opts: WalkOptions = DEFAULT_
       weights,
       unavailable: why,
       failed,
+      beatsRf: fits.map((f) => f[id].beatsRf),
       foldSharpe,
       sharpe: held ? held.sharpe : null,
       se: held ? held.se : null,

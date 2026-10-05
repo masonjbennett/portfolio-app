@@ -4,6 +4,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+  /* A landing (src/tabs/WalkForward.tsx) leaves this much paper above the heading. */
+  scroll-margin-top: var(--space-4);
 }
 
 .wf-dek {

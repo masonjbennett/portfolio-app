@@ -52,6 +52,18 @@ check(firstIds.some((id) => id === "web/src/chrome/Band.tsx") && firstIds.some((
 const WALK = /^web\/src\/(tabs\/WalkForward\.tsx|tabs\/walkforward\/|content\/walkforward\.ts|lib\/walkforward\.ts)/;
 const walkEarly = firstIds.filter((id) => WALK.test(id));
 check(walkEarly.length === 0, "split: nothing of the walk-forward tab, its data or its engine is in the first chunk", walkEarly.join(", "));
+// Its words too: the tab's own tooltip texts (src/tabs/walkforward/tips.ts) are in the tab's chunk and in no chunk
+// loaded before first paint. Read as text from the module's source, plain and finance levels (the formula level
+// carries symbols the build may escape), and looked for by their first 40 characters.
+{
+  const src = readFileSync(new URL("../src/tabs/walkforward/tips.ts", import.meta.url), "utf8");
+  const words = [...src.matchAll(/\b(?:plain|finance): "([^"]{40,})"/g)].map((m) => m[1].slice(0, 40));
+  const firstCode = [...first].map((c) => c.code).join("\n");
+  const tabChunk = chunks.find((c) => c.moduleIds.map(rel).includes("web/src/tabs/WalkForward.tsx"));
+  const early = words.filter((w) => firstCode.includes(w));
+  check(words.length === 10 && early.length === 0 && !!tabChunk && words.every((w) => tabChunk.code.includes(w)),
+    "split: the walk-forward tab's tooltip texts load with the tab, none in the first chunk", early[0] ?? `${words.length} texts`);
+}
 // The share link names the scorecard's added constructions from their ids module, which imports nothing, not
 // from the module that solves them.
 {

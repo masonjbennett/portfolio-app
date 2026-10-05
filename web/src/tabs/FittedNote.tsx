@@ -10,7 +10,12 @@ import { TabContext } from "../state/useWorkbench.ts";
 export default function FittedNote({ className }: { className: string }) {
   const page = useContext(TabContext);
   const test = page ? (
-    <button type="button" className="text-button" onClick={() => page.setTab("walkforward", "published")}>
+    <button
+      type="button"
+      className="text-button"
+      title="Open the published test, replayed, in the Walk-forward tab"
+      onClick={() => page.setTab("walkforward", "published", true)}
+    >
       The walk-forward test
     </button>
   ) : (

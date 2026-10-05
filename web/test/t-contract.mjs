@@ -97,7 +97,8 @@ check(ANALYSIS.length === 23 && WORKBENCH.length === 14 && TABPROPS.length === 6
 check(WORKBENCH.includes("view") && WORKBENCH.includes("rfHistory") && WORKBENCH.includes("setTab") &&
   /setTab: \(tab: TabId, view\?: WalkView\) => void;/.test(src("src/types.ts")),
   "types: Workbench carries the walk-forward segment (view), the rate history (rfHistory), and setTab names a segment", WORKBENCH.join(","));
-check(same(fields("TabContextValue"), ["view", "setTab", "rfHistory"]) && same(fields("RfHistory"), ["basis", "series", "loading"]) &&
+// TabContextValue also carries the landing a way in asks for (landing, takeLanding: src/App.tsx).
+check(same(fields("TabContextValue"), ["view", "setTab", "rfHistory", "landing", "takeLanding"]) && same(fields("RfHistory"), ["basis", "series", "loading"]) &&
   same(fields("WalkRates"), ["basis", "points", "flat"]) &&
   same(TABPROPS, ["analysis", "settings", "level", "weights", "setWeights", "requestSettings"]),
   "types: TabContextValue, RfHistory and WalkRates have exactly their fields, and TabProps is unchanged",

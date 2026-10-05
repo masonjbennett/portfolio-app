@@ -408,6 +408,16 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const segment = () => panel()?.querySelector("[data-segment]")?.getAttribute("data-segment") ?? null;
   const segRow = () => panel()?.querySelector('[role=tablist][aria-label="Walk-forward"]');
   const source = () => r.container.querySelector(".band-published-source");
+  // Where a switch lands the reader. jsdom lays nothing out, so scrolling is read off the call: the elements
+  // scrollIntoView was called on, since the last reset, and where the focus is.
+  const landed = [];
+  const proto = globalThis.HTMLElement.prototype;
+  const hadScroll = Object.getOwnPropertyDescriptor(proto, "scrollIntoView");
+  proto.scrollIntoView = function scrollIntoView() {
+    landed.push(this);
+  };
+  const landedOn = (seg) => landed.length === 1 && landed[0].classList.contains("wf") && document.activeElement?.id === `walkforward-tab-${seg}`;
+  const where = () => `${landed.map((e) => e.className).join(",") || "no scroll"}; focus on ${document.activeElement?.id || document.activeElement?.tagName}`;
 
   // The strip's source line: the words that were already on it open the tab on the published test, and the
   // line reads exactly as before, so it is no wider and no taller. Its one link is still the method note.
@@ -426,6 +436,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   click(byLabel(segRow(), "As published"));
   check(segment() === "published" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "As published",
     "walk-forward: the switch shows As published", `${segment()}`);
+  check(landed.length === 0, "walk-forward: the tab row and the segment row switch where the reader already is, and scroll nothing", where());
   click(byLabel(row, TAB_LABELS.returns));
   click(byLabel(row, TAB_LABELS.walkforward));
   check(segment() === "basket", "walk-forward: leaving the tab and coming back by its pill opens Your basket again", `${segment()}`);
@@ -433,14 +444,23 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   click(source().querySelector("button.text-button"));
   check(segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "analysis-tab-walkforward",
     "walk-forward: the strip's control switches to the tab on As published, without a reload", `${segment()}`);
+  check(landedOn("published"), "walk-forward: the strip's control lands the reader on the tab: scrolled into view, the As published segment focused", where());
+  landed.length = 0;
+  click(byLabel(row, TAB_LABELS.returns));
+  click(byLabel(row, TAB_LABELS.walkforward));
+  check(landed.length === 0, "walk-forward: a landing is taken once; the tab mounted again by its pill does not land again", where());
   click(byLabel(row, TAB_LABELS.optimization));
   const note = panel()?.querySelector('[data-note="in-sample"] button.text-button');
   // The note itself must not link out to the method note; As published, which it opens, carries that link.
   const linksOut = !!panel()?.querySelector(`[data-note="in-sample"] a[href="${P.PUBLISHED_URL}"]`);
+  landed.length = 0;
   if (note) click(note);
   check(!!note && segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "analysis-tab-walkforward" &&
     !linksOut,
     "walk-forward: the Optimization tab's in-sample note switches to the tab on As published", `${segment()}`);
+  check(landedOn("published"), "walk-forward: the in-sample note lands the reader on the tab: scrolled into view, the As published segment focused", where());
+  check(!!note && !!open && !!note.getAttribute("title") && note.getAttribute("title") === open.getAttribute("title"),
+    "walk-forward: the in-sample note's control says where it goes, as the strip's does", note?.getAttribute("title") ?? "(no title)");
   r.unmount();
 
   // "Rerun this set on fresh prices": the set's tickers on the published run's own terms, held to the test's
@@ -454,6 +474,25 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     DEFAULT_START <= set.first_bar && set.last_bar === WF.PUBLISHED_LAST_BAR) && WF.PUBLISHED_RF === record.rf,
     "walk-forward: a rerun asks for the set's tickers from the default start through the day after its last bar, at the record's rate, long-only",
     JSON.stringify(asked.map(([, x]) => x)));
+
+  // On the page: a set's button hands those settings to the rail, then shows Your basket and lands the reader on it.
+  const s = stand();
+  const rr = render(h(Harness, { wb: s.wb, tabs: TABS }));
+  click(rr.container.querySelector(".band-published-source button.text-button"));
+  landed.length = 0;
+  const buttons = [...rr.container.querySelectorAll(".wfp-rerun-button")];
+  const last = buttons.at(-1);
+  const set = last?.closest("[data-set]")?.getAttribute("data-set");
+  const asks = s.calls.settings.length;
+  if (last) click(last);
+  const seg = rr.container.querySelector("[role=tabpanel] [data-segment]")?.getAttribute("data-segment") ?? null;
+  check(buttons.length === 3 && !!record.sets[set] && s.calls.settings.length === asks + 1 && same(s.calls.settings.at(-1), WF.rerunSettings(record.sets[set].tickers)) &&
+    seg === "basket" && s.calls.view.at(-1) === "basket" && landedOn("basket"),
+    "walk-forward: a set's rerun button asks the rail for that set on the published terms, then shows Your basket and lands the reader on it",
+    `${set} ${JSON.stringify(s.calls.settings.at(-1))} ${seg}; ${where()}`);
+  rr.unmount();
+  if (hadScroll) Object.defineProperty(proto, "scrollIntoView", hadScroll);
+  else delete proto.scrollIntoView;
 }
 
 // ---- (d3) plain words: no "best" or "optimal" as a label in the band, masthead or footer ----------

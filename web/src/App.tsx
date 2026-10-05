@@ -10,7 +10,7 @@
 // needs the masthead, the rail and the band, none of which chart anything. Once a tab has drawn,
 // the others are fetched while the page is idle, so a later switch finds its tab in memory and
 // a deploy mid-visit cannot strand a tab whose chunk the new deployment no longer serves.
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState, useTransition, type ComponentType } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition, type ComponentType } from "react";
 import BandView from "./chrome/Band.tsx";
 import CommandPaletteView from "./chrome/CommandPalette.tsx";
 import FooterView from "./chrome/Footer.tsx";
@@ -118,8 +118,29 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   const { setTab, view, rfHistory } = wb;
   // The walk-forward tab opens on its first segment unless the caller names the other (the published
   // strip in the band, the in-sample note on the Optimization tab).
-  const switchTab = useCallback((id: TabId, to?: WalkView) => startSwitch(() => setTab(id, to)), [setTab]);
-  const reach = useMemo<TabContextValue>(() => ({ view, setTab: switchTab, rfHistory }), [view, switchTab, rfHistory]);
+  //
+  // A caller that sits away from the tab (those two, and the tab's own rerun buttons) also asks to land the
+  // reader on it: `landing` counts those asks, and the tab takes each one once (takeLanding), scrolling
+  // itself into view and focusing its segment. The tab row and the palette never ask.
+  const [landing, setLanding] = useState(0);
+  const landed = useRef(0);
+  const switchTab = useCallback(
+    (id: TabId, to?: WalkView, land = false) =>
+      startSwitch(() => {
+        setTab(id, to);
+        if (land) setLanding((n) => n + 1);
+      }),
+    [setTab],
+  );
+  const takeLanding = useCallback((n: number) => {
+    if (n <= landed.current) return false;
+    landed.current = n;
+    return true;
+  }, []);
+  const reach = useMemo<TabContextValue>(
+    () => ({ view, setTab: switchTab, rfHistory, landing, takeLanding }),
+    [view, switchTab, rfHistory, landing, takeLanding],
+  );
 
   const rail = (
     <Rail

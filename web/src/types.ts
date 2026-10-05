@@ -323,11 +323,13 @@ export interface RfHistory {
 export interface WalkRates {
   /** What the analysis on screen is scored against (src/state/rfwindow.ts). */
   basis: RfBasis;
-  /** FRED's daily DGS3MO observations, ascending (decimal, annual), when the series held covers the analysis'
-   *  first and last price day and no rate is set in the rail; null otherwise. */
+  /** FRED's daily DGS3MO observations, ascending (decimal, annual), when the series held starts on or before
+   *  the analysis' first price day and has an observation inside the window (later days carry its last one
+   *  forward), and no rate is set in the rail; null otherwise. */
   points: readonly RfPoint[] | null;
   /** Why `points` is null: "typed" (a rate is set in the rail), "loading" (the series is on its way),
-   *  "unavailable" (it could not be had), "uncovered" (the series held does not reach back over the window).
+   *  "unavailable" (it could not be had), "uncovered" (the series held starts after the window's first day or
+   *  has nothing inside it).
    *  null when `points` are held. */
   flat: "typed" | "loading" | "unavailable" | "uncovered" | null;
 }
@@ -339,10 +341,14 @@ export interface WalkRates {
 export interface TabContextValue {
   /** The walk-forward tab's segment. */
   view: WalkView;
-  /** Switch tabs, as Workbench.setTab. */
-  setTab: (tab: TabId, view?: WalkView) => void;
+  /** Switch tabs, as Workbench.setTab; `land` also brings the walk-forward tab into view and focuses its segment. */
+  setTab: (tab: TabId, view?: WalkView, land?: boolean) => void;
   /** As Workbench.rfHistory. */
   rfHistory: RfHistory;
+  /** How many landings have been asked for; a new count is a new one. */
+  landing: number;
+  /** Takes landing `n` if no render has yet: true once per landing. */
+  takeLanding: (n: number) => boolean;
 }
 
 /** What every tab component receives. Tabs render only with a ready analysis. */
@@ -498,9 +504,19 @@ export type TipKey =
   | "alpha";
 
 /** An info mark that shows one tooltip at the chosen level. */
+/** A tooltip a tab carries itself, outside the page's tooltip modules: its name and its three texts. */
+export interface OwnTip {
+  /** A short name, for the info mark's accessible label. */
+  name: string;
+  /** The text at each level. */
+  texts: Readonly<Record<Level, string>>;
+}
+
 export interface TipProps {
-  /** Which tooltip: one of the app's, or one of the scorecard's own. */
-  tip: TipKey | ScoreTipKey;
+  /** Which tooltip: one of the app's, or one of the scorecard's own. Ignored when `own` is given. */
+  tip?: TipKey | ScoreTipKey;
+  /** A tab's own tooltip, given whole (src/tabs/walkforward/tips.ts), so its text loads with the tab. */
+  own?: OwnTip;
   /** Which of its three texts. */
   level: Level;
   /** The shorting toggle: two formula-level texts follow it (content/tooltips.ts). Default off. */

@@ -7,7 +7,12 @@
 // The segment is the page's, not this tab's (src/state/useWorkbench.ts): the published strip in the band and
 // the in-sample note on the Optimization tab open this tab on "As published", and a link carrying
 // view=published does too. Rendered on its own, outside the page, the tab keeps the segment itself.
-import { useCallback, useContext, useMemo, useState } from "react";
+//
+// Those ways in, and a set's rerun button, ask the page to LAND the reader here: the tab is scrolled to the
+// top of the view and the segment's own tab takes the focus, because the control that was clicked has just
+// left the page (or sits far from where the segment opens) and would otherwise leave the reader looking at
+// nothing new, with the focus on the document. A switch made here, by the segment row or the tab row, does not.
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import SegControl, { tabId, tabPanelId } from "../components/SegControl.tsx";
 import Slug from "../components/Slug.tsx";
@@ -39,8 +44,9 @@ export function rerunSettings(tickers: readonly string[]): Partial<Settings> {
 
 /**
  * The rate input for the test on the reader's basket (src/types.ts WalkRates). The daily series is used
- * when it covers the analysis' first and last price day, by the rule the rail's window rate is held to
- * (windowRate, src/state/rfwindow.ts), and no rate is set in the rail; otherwise the test runs flat at the
+ * when it starts on or before the analysis' first price day and has an observation inside the window, the
+ * rule the rail's window rate is held to (windowRate, src/state/rfwindow.ts), and no rate is set in the
+ * rail; days after its last observation carry that one forward. Otherwise the test runs flat at the
  * analysis' own rate and `flat` names why.
  */
 export function walkRates(h: RfHistory | null, a: Analysis): WalkRates {
@@ -56,26 +62,40 @@ export default function WalkForward({ analysis, settings, level, requestSettings
   const [own, setOwn] = useState<WalkView>("basket");
   const view = page ? page.view : own;
   const go = page?.setTab;
-  const show = useCallback((v: WalkView) => (go ? go("walkforward", v) : setOwn(v)), [go]);
+  const show = useCallback((v: WalkView, land = false) => (go ? go("walkforward", v, land) : setOwn(v)), [go]);
+  const pick = useCallback((v: WalkView) => show(v), [show]);
   const history = page?.rfHistory ?? null;
   const rates = useMemo(() => walkRates(history, analysis), [history, analysis]);
   const rerun = useCallback(
     (tickers: readonly string[]) => {
       requestSettings(rerunSettings(tickers));
-      show("basket");
+      show("basket", true);
     },
     [requestSettings, show],
   );
   const label = SEGMENTS.find((s) => s.value === view)?.label ?? "";
 
+  // Each landing the page asks for is taken once, by whichever render of this tab sees it first (the tab may
+  // mount only after its chunk arrives); a remount for any other reason finds it taken and leaves the scroll be.
+  const root = useRef<HTMLDivElement>(null);
+  const landing = page?.landing ?? 0;
+  const take = page?.takeLanding;
+  useEffect(() => {
+    if (!landing || !take?.(landing)) return;
+    const el = root.current;
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" });
+    document.getElementById(tabId(PREFIX, view))?.focus({ preventScroll: true });
+    // Only a new landing runs this; the segment it reads is the one the same switch set.
+  }, [landing, take]);
+
   return (
-    <div className="wf">
+    <div className="wf" ref={root}>
       <Slug>Walk-forward test</Slug>
       <p className="wf-dek">
         Weights chosen on earlier prices and then held, unchanged, over the days after them: what a fitted portfolio earned on
         days it had not seen.
       </p>
-      <SegControl options={SEGMENTS} value={view} onChange={show} ariaLabel="Walk-forward" idPrefix={PREFIX} />
+      <SegControl options={SEGMENTS} value={view} onChange={pick} ariaLabel="Walk-forward" idPrefix={PREFIX} />
       <section className="wf-panel" role="tabpanel" id={tabPanelId(PREFIX, view)} aria-labelledby={tabId(PREFIX, view)}>
         <Boundary key={view} name={label} resetKey={analysis}>
           {view === "published" ? (

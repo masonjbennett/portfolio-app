@@ -1,6 +1,7 @@
 // The drop from in-sample to out-of-sample, one dumbbell per row on one shared Sharpe axis: a hollow dot at
 // the figure fitted and scored on the whole window, a filled dot at the figure the held-out days paid, a line
-// between them, and both values printed beside the row. Hollow against filled tells the two apart without
+// between them, and both values printed beside the row. The axis under the rows labels its gridlines, zero
+// among them, drawn darker than the rest. Hollow against filled tells the two apart without
 // colour; every row is drawn the same way, in ink, so none is singled out. Static: no animation.
 import { format } from "../../format.ts";
 import type { LiveRow } from "./live.ts";
@@ -18,13 +19,25 @@ export function bellDomain(rows: readonly LiveRow[]): [number, number] {
   return [lo - pad, hi + pad];
 }
 
-/** Gridline marks every quarter or half point, whichever keeps them to about six. */
-export function bellTicks([lo, hi]: [number, number]): number[] {
-  const step = hi - lo > 3 ? 1 : hi - lo > 1.5 ? 0.5 : 0.25;
+/** The gridlines' spacing: 1, 2 or 5 times a power of ten, the smallest that keeps them to about six. */
+export function bellStep([lo, hi]: [number, number]): number {
+  const raw = (hi - lo || 1) / 6;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+}
+
+/** The gridlines: every multiple of the step inside the domain, zero among them whenever the domain holds it. */
+export function bellTicks(domain: [number, number]): number[] {
+  const [lo, hi] = domain;
+  const step = bellStep(domain);
   const out: number[] = [];
-  for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) out.push(Math.round(t * 100) / 100);
+  for (let k = Math.ceil(lo / step - 1e-9); k * step <= hi + 1e-9; k += 1) out.push(Number((k * step).toPrecision(12)) || 0);
   return out;
 }
+
+// Where a value sits across the strip, as a fraction of its width (the strip is drawn W wide and scaled to fit).
+const across = (v: number, [lo, hi]: [number, number]) => (PAD + ((v - lo) / (hi - lo)) * (W - 2 * PAD)) / W;
 
 function Bell({ row, domain, ticks }: { row: LiveRow; domain: [number, number]; ticks: number[] }) {
   const [lo, hi] = domain;
@@ -47,6 +60,9 @@ function Bell({ row, domain, ticks }: { row: LiveRow; domain: [number, number]; 
 export default function Dumbbell({ rows }: { rows: readonly LiveRow[] }) {
   const domain = bellDomain(rows);
   const ticks = bellTicks(domain);
+  const step = bellStep(domain);
+  // As many decimals as the step needs and no more.
+  const tickFormat = step >= 1 ? "int" : step >= 0.01 ? "num2" : step >= 0.001 ? "num3" : "num4";
   return (
     <div className="wfl-bells">
       <div className="wfl-bells-key" aria-hidden="true">
@@ -77,8 +93,16 @@ export default function Dumbbell({ rows }: { rows: readonly LiveRow[] }) {
       <div className="wfl-bell-axis" aria-hidden="true">
         <span className="wfl-bell-axis-name">Sharpe ratio</span>
         <span className="wfl-bell-ends">
-          <span>{format(domain[0], "num2")}</span>
-          <span>{format(domain[1], "num2")}</span>
+          {ticks.map((t) => {
+            const at = across(t, domain);
+            // A label near either end is anchored inward, so none reaches past the strip.
+            const edge = at < 0.06 ? "start" : at > 0.94 ? "end" : "mid";
+            return (
+              <span key={t} className="wfl-bell-tick" data-edge={edge} data-zero={t === 0 ? "" : undefined} style={{ left: `${(at * 100).toFixed(2)}%` }}>
+                {format(t, tickFormat)}
+              </span>
+            );
+          })}
         </span>
       </div>
     </div>

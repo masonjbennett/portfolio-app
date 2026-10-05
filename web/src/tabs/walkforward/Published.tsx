@@ -5,7 +5,7 @@
 //   level: Level                                  the explanation level for tooltips
 //   rerun: (tickers: readonly string[]) => void   "Rerun this set on fresh prices": sets the rail to these
 //          tickers, the published run's start, an end that makes its last bar the last one loaded, its rate
-//          rate typed into the rail and shorting off, then shows "Your basket". Call it with a set's tickers.
+//          typed into the rail and shorting off, then shows "Your basket". Call it with a set's tickers.
 //
 // Two sources, never mixed within a figure:
 //   - the published strings (the nine, 1.107, the AGG weight and the five Apple weights) are printed exactly as
@@ -13,7 +13,9 @@
 //   - everything else (each hold's dates, its count of daily returns, its Sharpe ratio, the weights held, the
 //     rate, the exact solve's figures) is read from src/content/walkforward.ts, the stored record of the same
 //     run, and printed through format(). test/t-walkforward-published.mjs replays that record's weights on the
-//     run's frozen prices and holds the two sources to each other.
+//     run's frozen prices and holds the two sources to each other. The Apple lookbacks are the exception: the
+//     suite holds them to the record's own refit (test/oracle/walkforward.py's check refits them), not to a
+//     replay.
 // The solver note is worked out here, not written: it names whichever of the nine the exact solve prints
 // differently, so a regenerated record cannot leave it saying the wrong thing.
 import Slug from "../../components/Slug.tsx";
@@ -31,6 +33,7 @@ import { WALK_AGG, WALK_APPLE, WALK_RF, WALK_RUNS, type ByConstruction, type Pub
 import { format } from "../../format.ts";
 import type { Column, Level, TableRow } from "../../types.ts";
 import { FITTED, tableSpan, windowsSpan } from "../caption.ts";
+import { PAIR_HEADING, RERUN_START } from "./terms.ts";
 import "./Published.css";
 
 export interface PublishedProps {
@@ -40,14 +43,15 @@ export interface PublishedProps {
 
 type Key = keyof ByConstruction<unknown>;
 const KEYS: readonly Key[] = ["ew", "gmv", "tan"];
-const LABEL: Readonly<Record<Key, string>> = { ew: "Equal weight", gmv: "Minimum variance", tan: "Maximum Sharpe" };
+// The names Your basket gives the same three constructions.
+const LABEL: Readonly<Record<Key, string>> = { ew: "Equal weight", gmv: "Minimum variance (GMV)", tan: "Maximum Sharpe (Tangency)" };
 // Where each construction's published string sits in published.ts.
 const FIELD: Readonly<Record<Key, "ew" | "gmv" | "tangency">> = { ew: "ew", gmv: "gmv", tan: "tangency" };
 // The two constructions whose weights a solver chose; equal weight is fixed in advance.
 const FITTED_KEYS: readonly Key[] = ["gmv", "tan"];
 
 // The fitted head's variant for weights chosen afresh before every hold, and the head of a hold's own figure.
-const FITTED_EACH = "weights chosen on each fold's fit window";
+const FITTED_EACH = "weights chosen on the fit window before each hold";
 const HELD = "Sharpe ratio of the held days";
 
 // The published figures of a run, paired by the run's tickers in order.
@@ -84,7 +88,7 @@ function SolverNote() {
   return (
     <p className="wfp-foot" data-note="solver">
       Solver note: the published run's weights are where the app's solver stopped at its default tolerance, a little short of
-      the exact optimum. Solved exactly on the same prices, {format(differs.length, "int")} of the {format(total, "int")}{" "}
+      the exact solution. Solved exactly on the same prices, {format(differs.length, "int")} of the {format(total, "int")}{" "}
       figures print differently:{" "}
       {differs.map((d, i) => (
         <span key={`${d.set} ${d.label}`} data-differs={`${d.set}|${d.label}`}>
@@ -149,7 +153,7 @@ function Decay() {
           </dd>
         </div>
         <div className="wfp-decay-item">
-          <dt>Out of sample</dt>
+          <dt>Out-of-sample</dt>
           <dd>
             <span className="wfp-decay-figure num">{pub.tangency}</span>
             <span className="wfp-decay-what">
@@ -198,7 +202,7 @@ function FoldTable({ run, name }: { run: PublishedRun; name: string }) {
     ...KEYS.map((k): Column => ({ key: k, label: LABEL[k], format: "num3" })),
   ];
   const rows: TableRow[] = run.folds.map((f, i) => ({
-    hold: String(i + 1),
+    hold: `Hold ${i + 1}`,
     fitRows: f.fitRows,
     holdFirst: f.holdFirst,
     holdLast: f.holdLast,
@@ -225,7 +229,7 @@ function WeightsTable({ run, name, k }: { run: PublishedRun; name: string; k: Ke
   ];
   const aggAt = run.key === "cross" && k === "gmv" ? run.tickers.indexOf(WALK_AGG.ticker) : -1;
   const rows: TableRow[] = run.folds.map((f, i) => ({
-    hold: String(i + 1),
+    hold: `Hold ${i + 1}`,
     fitLast: f.fitLast,
     ...Object.fromEntries(
       run.tickers.map((t, j) => {
@@ -284,21 +288,24 @@ function SetSection({ run, pub, rerun }: { run: PublishedRun; pub: PublishedSet;
       </div>
       <FoldTable run={run} name={pub.name} />
       {FITTED_KEYS.map((k) => (
-        <WeightsTable key={k} run={run} name={pub.name} k={k} />
+        <div key={k}>
+          <WeightsTable run={run} name={pub.name} k={k} />
+          {k === "gmv" && run.key === "cross" && into ? (
+            <p className="wfp-text" data-note="agg">
+              The {WALK_AGG.ticker} weight in hold {format(WALK_AGG.fold + 1, "int")} of the minimum-variance table above, held
+              from {day(into.holdFirst)}, is the figure the published note gives for the minimum-variance portfolio going into{" "}
+              {into.holdFirst.slice(0, 4)}.
+            </p>
+          ) : null}
+        </div>
       ))}
-      {run.key === "cross" && into ? (
-        <p className="wfp-text">
-          The {WALK_AGG.ticker} weight in hold {format(WALK_AGG.fold + 1, "int")}, held from {day(into.holdFirst)}, is the
-          figure the published note gives for the minimum-variance portfolio going into {into.holdFirst.slice(0, 4)}.
-        </p>
-      ) : null}
       {run.key === "megacap5" ? (
         <>
           <p className="wfp-text">
             The published note's other measured figure: how far the maximum-Sharpe weight in AAPL moves with the lookback alone,
             at the Sensitivity tab's {format(WALK_APPLE.length, "int")} lookbacks, each ending {day(run.lastBar)}, at the same{" "}
-            {format(WALK_RF, "pct1")} rate. Fitted again by the app's own solver on the run's frozen prices, each weight rounds
-            to the published figure.
+            {format(WALK_RF, "pct1")} rate. Fitted again by the app's own solver on the run's frozen prices (the stored record of
+            that refit), each weight rounds to the published figure.
           </p>
           <AppleTable lastBar={run.lastBar} />
         </>
@@ -313,21 +320,23 @@ export default function Published({ rerun }: PublishedProps) {
       <p className="wfp-lede">
         The walk-forward test published in {PUBLISHED_WHEN}, replayed from the weights it held. Its figures are quoted as the
         published note prints them; every other number here is read from a stored record of the same run (its schedule, the
-        weights held in each hold and each hold's result), which the app's tests replay on the run's own frozen prices.
+        weights held in each hold and each hold's result), which this page's tests replay on the run's own frozen prices
+        (the Apple lookbacks are held to the stored record of their refit).
         Nothing is fetched and nothing is solved again. <a href={PUBLISHED_URL}>Method note on masonjbennett.com</a>
       </p>
 
-      <Slug>Out of sample, as published</Slug>
+      <Slug>The published figures</Slug>
       <NineTable />
       <SolverNote />
 
-      <Slug>In-sample against out-of-sample</Slug>
+      <Slug>{PAIR_HEADING}</Slug>
       <Decay />
 
       <Slug>How the test was run</Slug>
       <Convention />
       <p className="wfp-text">
-        Each set's button below loads its tickers in the rail with prices through {day(WALK_RUNS[0].lastBar)}, a typed{" "}
+        Each set's button below loads its tickers in the rail with prices from {day(RERUN_START)} through{" "}
+        {day(WALK_RUNS[0].lastBar)}, a typed{" "}
         {format(WALK_RF, "pct1")} risk-free rate and shorting off, then opens Your basket. That segment solves every fit
         exactly, on prices as the source serves them today, so its figures can differ from these in the third decimal: see the
         solver note above.

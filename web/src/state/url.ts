@@ -1,6 +1,6 @@
 // The share link: settings (never the dollar amount, but the scorecard's added columns), custom weights
-// and the tab (with the walk-forward tab's segment, only when it is the published one), as a query string. The app has no share link at all; its sidebar starts over on every
-// visit (645-805).
+// and the tab (with the walk-forward tab's segment, only when it is the published one), as a query
+// string. The app has no share link at all; its sidebar starts over on every visit (645-805).
 //
 // Encoding picks each field BY NAME, never by spreading the object it is given, so an amount
 // passed in by mistake has no way into the string. Decoding trusts nothing: a link is typed,

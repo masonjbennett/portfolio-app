@@ -24,6 +24,7 @@ const W = await import("../src/lib/walkforward.ts");
 const { computeReturns, column } = await import("../src/lib/clean.ts");
 const { format } = await import("../src/format.ts");
 const View = await import("../src/tabs/walkforward/Published.tsx");
+const { RERUN_START } = await import("../src/tabs/walkforward/terms.ts");
 
 const WF = json(new URL("./fixtures/walkforward.json", import.meta.url));
 const MODULE = new URL("../src/content/walkforward.ts", import.meta.url);
@@ -149,7 +150,8 @@ const heads = (tbl) => [...(tbl?.querySelectorAll("thead th") ?? [])].map((th) =
 const nine = byTitle("Out-of-sample Sharpe ratios, as published");
 check(same(cells(nine), P.PUBLISHED_SETS.map((p) => [p.name, p.tickers.join(" "), p.ew, p.gmv, p.tangency])),
   "view: the nine print exactly as published.ts holds them, three sets by three constructions", JSON.stringify(cells(nine)));
-check(same(heads(nine), ["Set", "Tickers", "Equal weight", "Minimum variance", "Maximum Sharpe"]), "view: the nine's columns are the three constructions", heads(nine).join("|"));
+check(same(heads(nine), ["Set", "Tickers", "Equal weight", "Minimum variance (GMV)", "Maximum Sharpe (Tangency)"]),
+  "view: the nine's columns are the three constructions, named as Your basket names them", heads(nine).join("|"));
 
 // 1.107 and its out-of-sample figure, quoted.
 const megaPub = pubFor(WF.sets.megacap5.tickers); // 1.107 is the mega-caps' own figure, whatever order the runs are in
@@ -160,7 +162,7 @@ check(/whole window/.test(decayText) && /held-out years included/.test(decayText
   "view: the in-sample figure says it was fitted on the whole window, held-out years included", decayText);
 
 // Per set: each hold's dates, counts and Sharpe ratios, and the weights held, all formatted from the module.
-const expectFolds = (run) => run.folds.map((f, i) => [String(i + 1), format(f.fitRows, "int"),
+const expectFolds = (run) => run.folds.map((f, i) => [`Hold ${i + 1}`, format(f.fitRows, "int"),
   format(f.holdFirst, "date"), format(f.holdLast, "date"), format(f.rows, "int"), ...KEYS.map((k) => format(run.ship.foldSharpe[k][i], "num3"))]);
 for (const run of M.WALK_RUNS) {
   const pub = pubFor(run.tickers);
@@ -168,7 +170,7 @@ for (const run of M.WALK_RUNS) {
   check(same(cells(folds), expectFolds(run)), `view ${run.key}: the fold table is the module's schedule and fold Sharpe ratios, formatted`, JSON.stringify(cells(folds)[0]));
   for (const [k, word] of [["gmv", "minimum-variance"], ["tan", "maximum-Sharpe"]]) {
     const tbl = byTitle(`${pub.name}: ${word} weights`);
-    const want = run.folds.map((f, i) => [String(i + 1), format(f.fitLast, "date"), ...run.tickers.map((t, j) =>
+    const want = run.folds.map((f, i) => [`Hold ${i + 1}`, format(f.fitLast, "date"), ...run.tickers.map((t, j) =>
       run.key === "cross" && k === "gmv" && i === M.WALK_AGG.fold && t === M.WALK_AGG.ticker ? P.CROSS_AGG_INTO_2022 : format(run.ship.weights[k][i][j], "pct1"))]);
     check(same(cells(tbl), want), `view ${run.key}: the ${word} weights are the module's, formatted`, JSON.stringify(cells(tbl)[0]));
     check(same(heads(tbl).slice(2), [...run.tickers]), `view ${run.key}: the ${word} weights carry one column per ticker`);
@@ -176,13 +178,26 @@ for (const run of M.WALK_RUNS) {
 }
 const aggCell = cells(byTitle(`${pubFor(cross.tickers).name}: minimum-variance weights`))[M.WALK_AGG.fold]?.[2 + cross.tickers.indexOf(M.WALK_AGG.ticker)];
 check(aggCell === P.CROSS_AGG_INTO_2022, `view: the cross-asset AGG weight of the hold from January 2022 reads ${P.CROSS_AGG_INTO_2022}`, aggCell);
+// The sentence that says which weight that is: its hold, the hold's first day and the year it went into, word for
+// word, right under the minimum-variance table it reads from. The year is the one the record's published field
+// is named for, so a sentence built from the wrong day of the hold goes red.
+{
+  const fold = M.WALK_RUNS.find((run) => run.key === "cross")?.folds[M.WALK_AGG.fold] ?? { holdFirst: "(no such hold)" };
+  const year = JSON.stringify(WF.sets.cross).match(/"published_agg_into_(\d{4})"/)?.[1];
+  const sentence = `The ${M.WALK_AGG.ticker} weight in hold ${format(M.WALK_AGG.fold + 1, "int")} of the minimum-variance table above, held from ${format(fold.holdFirst, "date")}, ` +
+    `is the figure the published note gives for the minimum-variance portfolio going into ${fold.holdFirst.slice(0, 4)}.`;
+  const aggNote = r.container.querySelector('[data-note="agg"]');
+  const above = aggNote?.previousElementSibling;
+  check(!!aggNote && text(aggNote) === sentence && fold.holdFirst.slice(0, 4) === year && !!above && text(above.querySelector(".tbl-title") ?? {}) === `${pubFor(cross.tickers).name}: minimum-variance weights`,
+    "view: the AGG sentence names its hold, the hold's first day and the year it went into, under the minimum-variance table", `${aggNote ? text(aggNote) : "(none)"} / ${year}`);
+}
 const apple = byTitle("Maximum-Sharpe weight in AAPL by lookback, as published");
 check(same(cells(apple), M.WALK_APPLE.map((w, i) => [w.label, format(w.rows, "int"), P.MEGA_CAP_APPLE[i]])),
   "view: the Apple weights print exactly as published.ts holds them, beside the module's lookbacks", JSON.stringify(cells(apple)));
 
 // The solver note: exactly the figures an exact solve prints differently, by the oracle's own prints.
 const want = M.WALK_RUNS.flatMap((run) => KEYS.filter((k) => WF.sets[run.key].tight.prints[k] !== WF.sets[run.key].published[k])
-  .map((k) => `${pubFor(run.tickers).name}|${{ ew: "Equal weight", gmv: "Minimum variance", tan: "Maximum Sharpe" }[k]}`));
+  .map((k) => `${pubFor(run.tickers).name}|${{ ew: "Equal weight", gmv: "Minimum variance (GMV)", tan: "Maximum Sharpe (Tangency)" }[k]}`));
 const named = [...r.container.querySelectorAll("[data-note=solver] [data-differs]")].map((s) => s.getAttribute("data-differs"));
 check(want.length > 0 && same(named, want), "view: the solver note names exactly the figures the exact solve prints differently", `${named.join(", ")} / ${want.join(", ")}`);
 const note = text(r.container.querySelector("[data-note=solver]") ?? {});
@@ -195,7 +210,7 @@ check(exactPrinted.every(([fmt, oracle, pub]) => fmt === oracle && note.includes
 // Every figure in the prose is one the module or published.ts gives: nothing typed.
 const allowed = new Set([P.MEGA_CAP_IN_SAMPLE, P.CROSS_AGG_INTO_2022, ...P.MEGA_CAP_APPLE, P.PUBLISHED_WHEN.split(" ").at(-1),
   ...P.PUBLISHED_SETS.flatMap((p) => [p.ew, p.gmv, p.tangency]), format(M.WALK_RF, "pct1"), format(M.WALK_APPLE.length, "int"),
-  format(want.length, "int"), format(KEYS.length * M.WALK_RUNS.length, "int"), format(M.WALK_AGG.fold + 1, "int"),
+  format(want.length, "int"), format(KEYS.length * M.WALK_RUNS.length, "int"), format(M.WALK_AGG.fold + 1, "int"), RERUN_START,
   ...M.WALK_RUNS.flatMap((run) => [run.firstBar, run.lastBar, format(run.folds.length, "int"), ...KEYS.map((k) => format(run.tight.sharpe[k], "num3")),
     ...run.folds.flatMap((f) => [f.fitFirst, f.fitLast, f.holdFirst, f.holdLast, f.holdFirst.slice(0, 4), format(f.fitRows, "int"), format(f.rows, "int")])])]);
 const prose = root.cloneNode(true);
@@ -210,6 +225,8 @@ check([format(f0.fitRows, "int"), f0.fitFirst, f0.fitLast, format(f0.rows, "int"
   .every((x) => conv.includes(x)) && M.WALK_RUNS.every((run) => same(run.folds, M.WALK_RUNS[0].folds)),
   "view: the convention states the first fit, the hold length, the count of holds, the partial last hold and the rate, from the module (one schedule for all three sets)");
 check(conv.includes("These are the weights the app's own solver fitted at the time."), "view: it says the weights are the ones the app's own solver fitted at the time");
+check(conv.includes(`with prices from ${RERUN_START} through ${M.WALK_RUNS[0].lastBar}, a typed ${format(M.WALK_RF, "pct1")} risk-free rate`),
+  "view: the rerun paragraph gives the rerun's first and last day and its rate", conv.match(/Each set's button[^.]*\./)?.[0] ?? "(none)");
 
 // The rerun buttons: one per set, each with that set's tickers.
 const buttons = [...r.container.querySelectorAll(".wfp-rerun-button")];
