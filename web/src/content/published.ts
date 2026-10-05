@@ -45,3 +45,18 @@ export const PUBLISHED_SETS: readonly PublishedSet[] = [
  * held out, so label it as fitted on the whole window, not as any one fold's in-sample figure.
  */
 export const MEGA_CAP_IN_SAMPLE = "1.107";
+
+/**
+ * The method note's figure for the cross-asset minimum-variance portfolio going into 2022: its weight in AGG
+ * through the hold that began in January 2022, as the note prints it. test/fixtures/walkforward.json carries
+ * the same string beside the weight the run held, and CI holds the one to the other.
+ */
+export const CROSS_AGG_INTO_2022 = "95.1%";
+
+/**
+ * The method note's other measured figure: the five mega-caps' maximum-Sharpe weight in AAPL at the
+ * Sensitivity tab's five lookbacks (one, two, three and five years, and the full sample, each ending on the
+ * run's last bar), in that order, as the note prints them. The same five strings are in
+ * test/fixtures/walkforward.json beside the weights they round.
+ */
+export const MEGA_CAP_APPLE: readonly string[] = ["41.7%", "3.8%", "6.4%", "21.0%", "44.8%"];

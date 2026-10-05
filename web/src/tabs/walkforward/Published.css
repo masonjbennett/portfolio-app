@@ -1,0 +1,119 @@
+/* "As published": prose, the nine, the in-sample and out-of-sample pair, then one block per set. One column no
+   wider than the panel; every table scrolls sideways inside its own box (Table.css), never the page. */
+.wfp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.wfp .slug {
+  margin-bottom: 0;
+}
+
+.wfp-lede,
+.wfp-text,
+.wfp-foot {
+  margin: 0;
+  max-width: 60em;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  color: var(--color-ink2);
+}
+
+.wfp-lede {
+  color: var(--color-ink);
+}
+
+.wfp-foot {
+  font-size: 0.9rem;
+}
+
+.wfp-lede a {
+  color: var(--color-teal);
+}
+
+/* The in-sample figure and the out-of-sample figure, side by side on a wide screen, stacked on a phone. Both
+   figures are set alike: neither is marked as the one to look at. */
+.wfp-decay {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  max-width: 60em;
+}
+
+.wfp-decay-item {
+  min-width: 0;
+  border-top: var(--line-hair) solid var(--color-hairline);
+  padding-top: var(--space-2);
+}
+
+.wfp-decay dt {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
+.wfp-decay dd {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+}
+
+.wfp-decay-figure {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  line-height: 1.1;
+  color: var(--color-ink);
+}
+
+.wfp-decay-what {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--color-ink2);
+}
+
+.wfp-set {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.wfp-rerun {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+}
+
+.wfp-rerun-button {
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 6px;
+  background: var(--color-paper);
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-teal);
+  cursor: pointer;
+}
+
+.wfp-rerun-button:hover,
+.wfp-rerun-button:focus-visible {
+  border-color: var(--color-teal);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone. */
+@media (max-width: 760px) {
+  .wfp-decay {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wfp-decay-figure {
+    font-size: 28px;
+  }
+}

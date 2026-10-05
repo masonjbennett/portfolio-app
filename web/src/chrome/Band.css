@@ -53,7 +53,8 @@
   color: var(--color-ink2);
 }
 
-.band-published-source a {
+.band-published-source a,
+.band-published-source .band-published-open {
   color: var(--color-ink);
 }
 

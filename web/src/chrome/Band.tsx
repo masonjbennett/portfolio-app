@@ -5,6 +5,8 @@
 // Above all of it, in every state, sits the published walk-forward result (src/content/published.ts):
 // the figures under it are fitted to the window on screen, and that result is what the same
 // constructions earned on years they had not seen. It is quoted, needs no prices, and links one place.
+// The words "Walk-forward test" on its source line open the Walk-forward tab on the published test,
+// replayed in this page; they were already on the line, so the strip is exactly as tall as before.
 //
 // The app's Snapshot shows the EQUAL-WEIGHT figures under the "Tangency" labels when the tangency
 // solve fails (1200-1202). Here a failed tangency is null (src/state/analyze.ts), its two plates
@@ -20,12 +22,13 @@
 //
 // While a shorting or rate change is still being worked into the analysis, `settling` marks the figures
 // as the previous settings' (aria-busy, dimmed), as the tab below them is.
+import { useContext } from "react";
 import Plate from "../components/Plate.tsx";
 import { CARD_SENTENCE, MEGA_CAP_IN_SAMPLE, PUBLISHED_SETS, PUBLISHED_URL, PUBLISHED_WHEN } from "../content/published.ts";
 import { format } from "../format.ts";
 import { portfolioReturns } from "../lib/portfolio.ts";
 import { sharpeSE } from "../lib/stats.ts";
-import { publishedPresetOf } from "../state/defaults.ts";
+import { TabContext } from "../state/useWorkbench.ts";
 import type { Analysis, BandProps, FormatId, TipKey } from "../types.ts";
 import { usePhone } from "./usePhone.ts";
 import { monthYear } from "./when.ts";
@@ -69,10 +72,11 @@ export function snapshotPlates(a: Analysis): SnapshotPlate[] {
 // requested one). The tangency weights are picked knowing the whole period's returns, so the
 // sentence says "with hindsight" rather than implying a strategy anyone could have held. It opens
 // by naming what it describes, these assets with hindsight, so it cannot be read as the published
-// result above it. On one of the published baskets the figure is also marked as recomputed here, on the
-// prices loaded, because it is not the published in-sample figure and must not be read as one.
+// result above it. The figure is also marked as in-sample and recomputed here, on the prices loaded, on
+// every basket: on a published one because it is not the published in-sample figure and must not be read
+// as one, and on any other because the same sentence should not carry the mark on some baskets and not others.
 function recomputed(a: Analysis): string {
-  return publishedPresetOf(a.tickers) ? ` (in-sample, recomputed on prices through ${format(a.asOf, "date")})` : "";
+  return ` (in-sample, recomputed on prices through ${format(a.asOf, "date")})`;
 }
 
 export function finding(a: Analysis): string {
@@ -111,6 +115,21 @@ export function finding(a: Analysis): string {
 export function PublishedResult() {
   const mega = PUBLISHED_SETS[0];
   const phone = usePhone();
+  // Inside the page the line's first words open the published test in the Walk-forward tab; rendered on
+  // its own, outside the page, they are plain text. Either way the line reads the same.
+  const page = useContext(TabContext);
+  const test = page ? (
+    <button
+      type="button"
+      className="text-button band-published-open"
+      title="Open the published test, replayed, in the Walk-forward tab"
+      onClick={() => page.setTab("walkforward", "published")}
+    >
+      Walk-forward test
+    </button>
+  ) : (
+    "Walk-forward test"
+  );
   const quote = (
     <blockquote className="band-published-quote" cite={PUBLISHED_URL}>
       <p>{CARD_SENTENCE}</p>
@@ -132,7 +151,7 @@ export function PublishedResult() {
         {mega.tangency} ({MEGA_CAP_IN_SAMPLE} in-sample).
       </p>
       <figcaption className="band-published-source">
-        Walk-forward test, published {PUBLISHED_WHEN} · <a href={PUBLISHED_URL}>Method note on masonjbennett.com</a>
+        {test}, published {PUBLISHED_WHEN} · <a href={PUBLISHED_URL}>Method note on masonjbennett.com</a>
       </figcaption>
     </figure>
   );

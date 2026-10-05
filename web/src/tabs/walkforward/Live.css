@@ -1,0 +1,260 @@
+/* "Your basket": the label line, the option rows, the dumbbells and the notes. One column no wider than
+   the page; tables scroll inside their own box (Table.css), and every row here wraps rather than pushing
+   the page sideways. Every colour is a token, and no row is coloured apart from another. */
+.wfl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.wfl-label p,
+.wfl-cannot {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--color-ink2);
+}
+
+.wfl-label p + p {
+  margin-top: var(--space-2);
+}
+
+.wfl-options {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.wfl-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.wfl-row > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wfl-row-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+  white-space: nowrap;
+}
+
+.wfl-toggle {
+  max-width: 100%;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-ink2);
+  background: var(--color-paper);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: normal;
+  text-align: left;
+}
+
+.wfl-toggle:hover {
+  border-color: var(--color-ink2);
+}
+
+.wfl-toggle[aria-pressed="true"] {
+  color: var(--color-ink);
+  font-weight: 600;
+  border-color: var(--color-ink);
+  box-shadow: inset 0 0 0 1px var(--color-ink);
+}
+
+.wfl-toggle:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+.wfl-results {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.wfl-section {
+  min-width: 0;
+}
+
+.wfl-finding {
+  margin: var(--space-3) 0;
+  max-width: 60ch;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  line-height: 1.35;
+  color: var(--color-ink);
+}
+
+.wfl-note {
+  margin: var(--space-3) 0 0;
+  max-width: 72ch;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-ink2);
+}
+
+.wfl-note--missing {
+  padding-left: var(--space-2);
+  border-left: var(--line-bar) solid var(--color-claret);
+  color: var(--color-ink);
+}
+
+.wfl-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 var(--space-2);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink2);
+}
+
+/* The dumbbells: name, strip, the two values; on a phone the name and values share a line over the strip.
+   The axis under them repeats the rows' columns in rem, so its smaller type cannot narrow them. */
+.wfl-bells {
+  margin: var(--space-3) 0;
+  min-width: 0;
+}
+
+.wfl-bells-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-ink2);
+}
+
+.wfl-bells-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wfl-key-dot {
+  width: 12px;
+  height: 12px;
+}
+
+.wfl-bell-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wfl-bell {
+  display: grid;
+  grid-template-columns: minmax(8rem, 15rem) minmax(0, 1fr) 9rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 2px 0;
+  border-bottom: var(--line-hair) solid var(--color-hairline2);
+}
+
+.wfl-bell-name {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.wfl-bell-values {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--color-ink2);
+}
+
+.wfl-bell-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.wfl-bell-grid {
+  stroke: var(--color-hairline2);
+  stroke-width: 1;
+}
+
+.wfl-bell-zero {
+  stroke: var(--color-hairline);
+  stroke-width: 1.5;
+}
+
+.wfl-bell-bar {
+  stroke: var(--color-ink2);
+  stroke-width: 2;
+}
+
+.wfl-bell-in {
+  fill: var(--color-paper);
+  stroke: var(--color-ink);
+  stroke-width: 2;
+}
+
+.wfl-bell-out {
+  fill: var(--color-ink);
+  stroke: var(--color-ink);
+  stroke-width: 2;
+}
+
+.wfl-bell-axis {
+  display: grid;
+  grid-template-columns: minmax(8rem, 15rem) minmax(0, 1fr) 9rem;
+  gap: var(--space-3);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-ink2);
+}
+
+.wfl-bell-axis-name {
+  font-family: var(--font-sans);
+}
+
+.wfl-bell-ends {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
+@media (max-width: 760px) {
+  .wfl-bell,
+  .wfl-bell-axis {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name values"
+      "strip strip";
+    row-gap: 2px;
+  }
+
+  .wfl-bell-name,
+  .wfl-bell-axis-name {
+    grid-area: name;
+  }
+
+  .wfl-bell-values {
+    grid-area: values;
+  }
+
+  .wfl-bell-svg,
+  .wfl-bell-ends {
+    grid-area: strip;
+  }
+}

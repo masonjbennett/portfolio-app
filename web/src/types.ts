@@ -3,11 +3,12 @@
 // never redefined. Line numbers cite portfolio_app.py.
 import type { ReactNode } from "react";
 import type { CleanError, CleanEvent, Frame, RequestError } from "./lib/clean.ts";
-import type { AddedId } from "./lib/constructions.ts";
+import type { AddedId } from "./lib/added.ts";
 import type { Mat, Vec } from "./lib/num.ts";
 import type { FrontierPoint, Solution, Tangency } from "./lib/optimize.ts";
 import type { AnnualStats } from "./lib/stats.ts";
 import type { ScoreTipKey } from "./content/tooltips.ts";
+import type { RfBasis, RfPoint, RfSeries } from "./state/rfwindow.ts";
 
 // ---- explanation level -----------------------------------------------------------------------
 
@@ -63,6 +64,8 @@ export interface ShareState {
   weights: CustomWeights | null;
   /** The tab the link opens on, or null for the default. */
   tab: TabId | null;
+  /** The walk-forward tab's segment: "published" only when the link names it beside that tab, else null (the first segment). */
+  view?: WalkView | null;
 }
 
 /** What this browser remembers in localStorage: never shared, never in a URL. */
@@ -75,10 +78,10 @@ export interface Prefs {
 
 // ---- tabs ----------------------------------------------------------------------------------------
 
-/** The six tabs, in the app's order (1213-1220). */
-export type TabId = "returns" | "risk" | "correlation" | "optimization" | "custom" | "sensitivity";
+/** The six tabs, in the app's order (1213-1220), then the one the app does not have: the walk-forward test. */
+export type TabId = "returns" | "risk" | "correlation" | "optimization" | "custom" | "sensitivity" | "walkforward";
 
-/** Tab labels, the app's text with its two-space padding trimmed (1213-1220). */
+/** Tab labels, the app's text with its two-space padding trimmed (1213-1220), then the page's own seventh. */
 export const TAB_LABELS: Readonly<Record<TabId, string>> = {
   returns: "Returns & Statistics",
   risk: "Risk Analysis",
@@ -86,10 +89,17 @@ export const TAB_LABELS: Readonly<Record<TabId, string>> = {
   optimization: "Portfolio Optimization",
   custom: "Custom Portfolio",
   sensitivity: "Sensitivity",
+  walkforward: "Walk-forward",
 };
 
 /** The tab ids in display order. */
-export const TAB_IDS: readonly TabId[] = ["returns", "risk", "correlation", "optimization", "custom", "sensitivity"];
+export const TAB_IDS: readonly TabId[] = ["returns", "risk", "correlation", "optimization", "custom", "sensitivity", "walkforward"];
+
+/**
+ * The walk-forward tab's two segments: the test run on the basket in the rail ("basket", what the tab
+ * opens on) and the published test replayed ("published"). Only the second ever reaches a link.
+ */
+export type WalkView = "basket" | "published";
 
 /**
  * Raw custom weights by ticker, exactly as typed in the Custom tab (tab 5, divided by their total at 1732); the
@@ -287,8 +297,52 @@ export interface Workbench {
   setWeights: (next: CustomWeights) => void;
   /** The active tab. */
   tab: TabId;
-  /** Switch tabs. */
-  setTab: (tab: TabId) => void;
+  /** Switch tabs. The walk-forward tab opens on `view`, its first segment when none is named. */
+  setTab: (tab: TabId, view?: WalkView) => void;
+  /** The walk-forward tab's segment. */
+  view: WalkView;
+  /** The daily 3-month Treasury series held, and what the analysis on screen is scored against. */
+  rfHistory: RfHistory;
+}
+
+/** The daily 3-month Treasury bill series the page holds, for a figure that scores each day at its own rate. */
+export interface RfHistory {
+  /** What the analysis on screen is scored against (src/state/rfwindow.ts); "manual" is a rate set in the rail. */
+  basis: RfBasis;
+  /** FRED's daily DGS3MO as held: null while the first lookup is out, or after it failed with nothing held. */
+  series: RfSeries | null;
+  /** A lookup for the series is out. */
+  loading: boolean;
+}
+
+/**
+ * The rate input of the walk-forward test on the reader's basket. With `points`, each refit and each
+ * held day takes the rate of its own time; without them the test runs flat at the analysis' own rate,
+ * and `flat` says why.
+ */
+export interface WalkRates {
+  /** What the analysis on screen is scored against (src/state/rfwindow.ts). */
+  basis: RfBasis;
+  /** FRED's daily DGS3MO observations, ascending (decimal, annual), when the series held covers the analysis'
+   *  first and last price day and no rate is set in the rail; null otherwise. */
+  points: readonly RfPoint[] | null;
+  /** Why `points` is null: "typed" (a rate is set in the rail), "loading" (the series is on its way),
+   *  "unavailable" (it could not be had), "uncovered" (the series held does not reach back over the window).
+   *  null when `points` are held. */
+  flat: "typed" | "loading" | "unavailable" | "uncovered" | null;
+}
+
+/**
+ * What a tab may read from the page beyond its props (src/state/useWorkbench.ts TabContext, provided by
+ * the page): the walk-forward tab's segment, a way to another tab, and the rate history.
+ */
+export interface TabContextValue {
+  /** The walk-forward tab's segment. */
+  view: WalkView;
+  /** Switch tabs, as Workbench.setTab. */
+  setTab: (tab: TabId, view?: WalkView) => void;
+  /** As Workbench.rfHistory. */
+  rfHistory: RfHistory;
 }
 
 /** What every tab component receives. Tabs render only with a ready analysis. */

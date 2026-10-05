@@ -1,0 +1,22 @@
+/* The Walk-forward tab: the heading, one line saying what the test is, the segment switch, then the
+   segment. One column no wider than the page; a wide table inside a segment scrolls in its own box. */
+.wf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.wf-dek {
+  margin: 0;
+  max-width: 46em;
+  color: var(--color-ink2);
+}
+
+.wf-panel {
+  min-width: 0;
+}
+
+.wf-line {
+  margin: 0;
+  color: var(--color-ink2);
+}

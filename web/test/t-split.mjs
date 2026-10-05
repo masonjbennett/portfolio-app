@@ -1,4 +1,4 @@
-// The first chunk carries the page, not the charts. Recharts is most of the bundle and only the six
+// The first chunk carries the page, not the charts. Recharts is most of the bundle and only the
 // tabs draw with it, so App reaches each tab through a dynamic import (TAB_LOADERS) and the masthead,
 // rail and band paint without it. Measured Sep 28 2026: one 717 KB chunk (219 KB gzip) before the
 // split, and Vite warned on it; after it, a 202 KB entry (68 KB gzip).
@@ -7,6 +7,7 @@
 // vite.config.ts, so what this suite reads is what `vite build` writes to dist/. A static import of
 // a tab, of a chart, or of recharts from anything the entry reaches puts it back in the first chunk,
 // and this suite names the module.
+import { readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { check, done } from "./_assert.mjs";
@@ -46,8 +47,21 @@ check(tabsEarly.length === 0, "split: no tab and no chart module is in the first
 check(firstIds.some((id) => id === "web/src/chrome/Band.tsx") && firstIds.some((id) => id === "web/src/App.tsx"),
   "split: the first chunk does carry the page (App and the band), so the checks above read the right chunk");
 
+// The walk-forward tab and everything only it reads (the published test's stored weights, the engine that
+// re-runs the test) stay out of the first chunk too, whichever directory they live in.
+const WALK = /^web\/src\/(tabs\/WalkForward\.tsx|tabs\/walkforward\/|content\/walkforward\.ts|lib\/walkforward\.ts)/;
+const walkEarly = firstIds.filter((id) => WALK.test(id));
+check(walkEarly.length === 0, "split: nothing of the walk-forward tab, its data or its engine is in the first chunk", walkEarly.join(", "));
+// The share link names the scorecard's added constructions from their ids module, which imports nothing, not
+// from the module that solves them.
+{
+  const url = readFileSync(new URL("../src/state/url.ts", import.meta.url), "utf8");
+  check(/from "\.\.\/lib\/added\.ts"/.test(url) && !/lib\/constructions\.ts/.test(url) && firstIds.includes("web/src/lib/added.ts"),
+    "split: the share link reads the added ids from lib/added.ts, never from lib/constructions.ts");
+}
+
 // Each tab is reached, and reached only, through the entry's dynamic imports.
-for (const tab of ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensitivity"]) {
+for (const tab of ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensitivity", "WalkForward"]) {
   const home = chunks.filter((c) => c.moduleIds.map(rel).includes(`web/src/tabs/${tab}.tsx`));
   const lazy = home.length === 1 && !first.has(home[0]) && [...first].some((c) => c.dynamicImports.includes(home[0].fileName));
   check(lazy, `split: the ${tab} tab is its own chunk, loaded on demand`, home.map((c) => c.fileName).join());

@@ -489,6 +489,21 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(notes.length === 1 && link && link.getAttribute("href") === PUBLISHED_URL && PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method" &&
     /in-sample/.test(text(notes[0])) && /what happened next/.test(text(notes[0])),
     "fitted-heads: one note says reviews like this print in-sample figures and links the walk-forward on the method card", notes[0] ? text(notes[0]) : "none");
+  // Inside the page the same words open the Walk-forward tab on the published test instead of leaving it.
+  {
+    const { TabContext } = await import("../src/state/useWorkbench.ts");
+    const went = [];
+    const ctx = { view: "basket", setTab: (t, v) => went.push(`${t}:${v}`), rfHistory: { basis: "window", series: null, loading: false } };
+    const inPage = quiet(() => render(h(TabContext.Provider, { value: ctx }, h(Optimization, props))));
+    const note = inPage.container.querySelector('[data-note="in-sample"]');
+    const open = note?.querySelector("button.text-button");
+    if (open) open.click();
+    check(!!open && text(open) === "The walk-forward test" && !note.querySelector("a") && went.join() === "walkforward:published" &&
+      text(note) === text(notes[0]),
+      "fitted-heads: in the page the note's words switch to the Walk-forward tab on the published test, and the note reads the same",
+      `${went.join()} / ${note ? text(note) : "none"}`);
+    inPage.unmount();
+  }
   const wt = M.weightTable(a).value;
   check(csvText(wt.columns, wt.rows).split("\n")[0] === "Asset,GMV,Tangency,Equal-Weight",
     "fitted-heads: the weights CSV keeps the app's plain header; the note is the page's", csvText(wt.columns, wt.rows).split("\n")[0]);

@@ -34,6 +34,7 @@ const quietly = (fn) => {
 
 function Harness({ analysis, settings }) {
   const [tab, setTab] = useState("returns");
+  const [view, setView] = useState("basket");
   const [weights, setWeights] = useState({});
   const wb = {
     settings,
@@ -47,7 +48,12 @@ function Harness({ analysis, settings }) {
     weights,
     setWeights,
     tab,
-    setTab,
+    setTab: (t, v) => {
+      setTab(t);
+      setView(v ?? "basket");
+    },
+    view,
+    rfHistory: { basis: "manual", series: null, loading: false },
   };
   return h(AppView, { wb, tabs: TABS });
 }
@@ -72,7 +78,7 @@ const cases = [
   ["a failed tangency", fixtureAnalysis("cross", { allowShort: true, rf: 5 }), null],
 ];
 
-const seen = { prose: 0, plates: 0, cells: 0 };
+const seen = { prose: 0, plates: 0, cells: 0, basket: 0 };
 const wrong = [];
 const branches = new Set();
 for (const [name, a, given] of cases) {
@@ -85,47 +91,70 @@ for (const [name, a, given] of cases) {
     // Sensitivity scores the custom mix only when asked, as the app does (its checkbox).
     const include = [...r.container.querySelectorAll("label")].find((l) => /Include Custom Portfolio/i.test(text(l)))?.querySelector("input");
     if (include && !include.checked) quietly(() => act(() => include.click()));
-    const where = `${name}, ${TAB_LABELS[id]}`;
-    // Prose. Nested blocks are read once, at the innermost element that holds the words.
-    for (const el of r.container.querySelectorAll("h1, h2, h3, h4, p, figcaption, li")) {
-      if (el.closest("table, .plate, [role=tooltip], [role=dialog]")) continue;
-      if (el.querySelector("h1, h2, h3, h4, p, li")) continue;
-      const t = visible(el);
-      if (!SHARPE.test(t)) continue;
-      for (const m of t.matchAll(DECIMAL)) {
-        seen.prose += 1;
-        branches.add(t.slice(0, 40));
-        if (m[1].length !== 3) wrong.push(`${where}: "${m[0]}" in "${t.slice(0, 110)}"`);
+    // The walk-forward tab is read on both of its segments.
+    const segs = id === "walkforward" ? ["Your basket", "As published"] : [null];
+    for (const seg of segs) {
+      if (seg) {
+        const sp = [...r.container.querySelectorAll('[role=tablist][aria-label="Walk-forward"] button')].find((b) => text(b) === seg);
+        if (sp) quietly(() => act(() => sp.click()));
+        else wrong.push(`${name}: the walk-forward tab has no ${seg} segment to read`);
       }
-    }
-    // Plates.
-    for (const plate of r.container.querySelectorAll(".plate")) {
-      const label = visible(plate.querySelector(".plate-label") ?? document.createElement("i"));
-      if (!SHARPE.test(label)) continue;
-      const v = text(plate.querySelector(".plate-value") ?? plate.querySelector(".plate-na") ?? {});
-      if (NA.has(v)) continue;
-      seen.plates += 1;
-      if (!THREE.test(v)) wrong.push(`${where}: plate "${label}" shows ${v}`);
-    }
-    // Table columns.
-    for (const table of r.container.querySelectorAll("table")) {
-      const heads = [...table.querySelectorAll("thead th")].map(visible);
-      heads.forEach((head, k) => {
-        if (!SHARPE.test(head)) return;
-        for (const tr of table.querySelectorAll("tbody tr")) {
-          const v = text(tr.children[k] ?? {});
-          if (NA.has(v)) continue;
-          seen.cells += 1;
-          if (!THREE.test(v)) wrong.push(`${where}: column "${head}" shows ${v}`);
+      // Your basket is solved after paint, a slice of work per macrotask: let it land before reading it.
+      if (seg === "Your basket") {
+        const { error, warn } = console;
+        console.error = console.warn = () => {};
+        try {
+          await act(async () => {
+            for (let i = 0; i < 40; i += 1) await new Promise((res) => setTimeout(res, 0));
+          });
+        } finally {
+          Object.assign(console, { error, warn });
         }
-      });
+        if (r.container.querySelector('[data-segment="basket"] .tbl')) seen.basket += 1;
+        else wrong.push(`${name}: the walk-forward tab's Your basket figures never landed to be read`);
+      }
+      const where = `${name}, ${TAB_LABELS[id]}${seg ? ` (${seg})` : ""}`;
+      // Prose. Nested blocks are read once, at the innermost element that holds the words.
+      for (const el of r.container.querySelectorAll("h1, h2, h3, h4, p, figcaption, li")) {
+        if (el.closest("table, .plate, [role=tooltip], [role=dialog]")) continue;
+        if (el.querySelector("h1, h2, h3, h4, p, li")) continue;
+        const t = visible(el);
+        if (!SHARPE.test(t)) continue;
+        for (const m of t.matchAll(DECIMAL)) {
+          seen.prose += 1;
+          branches.add(t.slice(0, 40));
+          if (m[1].length !== 3) wrong.push(`${where}: "${m[0]}" in "${t.slice(0, 110)}"`);
+        }
+      }
+      // Plates.
+      for (const plate of r.container.querySelectorAll(".plate")) {
+        const label = visible(plate.querySelector(".plate-label") ?? document.createElement("i"));
+        if (!SHARPE.test(label)) continue;
+        const v = text(plate.querySelector(".plate-value") ?? plate.querySelector(".plate-na") ?? {});
+        if (NA.has(v)) continue;
+        seen.plates += 1;
+        if (!THREE.test(v)) wrong.push(`${where}: plate "${label}" shows ${v}`);
+      }
+      // Table columns.
+      for (const table of r.container.querySelectorAll("table")) {
+        const heads = [...table.querySelectorAll("thead th")].map(visible);
+        heads.forEach((head, k) => {
+          if (!SHARPE.test(head)) return;
+          for (const tr of table.querySelectorAll("tbody tr")) {
+            const v = text(tr.children[k] ?? {});
+            if (NA.has(v)) continue;
+            seen.cells += 1;
+            if (!THREE.test(v)) wrong.push(`${where}: column "${head}" shows ${v}`);
+          }
+        });
+      }
     }
   }
   r.unmount();
 }
 
-check(seen.prose >= 8 && seen.plates >= 4 && seen.cells >= 10,
-  "sharpe: the suite reads Sharpe ratios in sentences, plates and tables across the six tabs and the band",
+check(seen.prose >= 8 && seen.plates >= 4 && seen.cells >= 10 && seen.basket === cases.length,
+  "sharpe: the suite reads Sharpe ratios in sentences, plates and tables across the seven tabs (both walk-forward segments) and the band",
   JSON.stringify(seen));
 check(wrong.length === 0, "sharpe: every Sharpe ratio the page prints has three decimal places, the app's :.3f",
   wrong.slice(0, 6).join(" | ") + (wrong.length > 6 ? ` | and ${wrong.length - 6} more` : ""));

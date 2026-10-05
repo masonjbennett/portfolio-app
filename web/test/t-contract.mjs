@@ -55,6 +55,8 @@ const EXPORTS = {
   "src/tabs/Optimization.tsx": { default: "function" },
   "src/tabs/Custom.tsx": { default: "function" },
   "src/tabs/Sensitivity.tsx": { default: "function" },
+  "src/tabs/WalkForward.tsx": { default: "function", walkRates: "function", rerunSettings: "function" },
+  "src/lib/added.ts": { ADDED_IDS: "object", isAddedId: "function" },
   "api/prices.ts": { GET: "function" },
   "api/rf.ts": { GET: "function" },
 };
@@ -87,8 +89,19 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const ANALYSIS = fields("Analysis");
 const WORKBENCH = fields("Workbench");
 const TABPROPS = fields("TabProps");
-check(ANALYSIS.length === 23 && WORKBENCH.length === 12 && TABPROPS.length === 6,
+check(ANALYSIS.length === 23 && WORKBENCH.length === 14 && TABPROPS.length === 6,
   "types: the field reader finds Analysis, Workbench and TabProps", `${ANALYSIS.length} / ${WORKBENCH.length} / ${TABPROPS.length}`);
+// The walk-forward tab's wiring, by name: the page's segment and rate history on Workbench, what reaches a
+// tab through TabContext, the rate history itself and the rate input the test on the reader's basket gets.
+// TabProps stays as it was: nothing of the walk-forward tab is handed to the other six.
+check(WORKBENCH.includes("view") && WORKBENCH.includes("rfHistory") && WORKBENCH.includes("setTab") &&
+  /setTab: \(tab: TabId, view\?: WalkView\) => void;/.test(src("src/types.ts")),
+  "types: Workbench carries the walk-forward segment (view), the rate history (rfHistory), and setTab names a segment", WORKBENCH.join(","));
+check(same(fields("TabContextValue"), ["view", "setTab", "rfHistory"]) && same(fields("RfHistory"), ["basis", "series", "loading"]) &&
+  same(fields("WalkRates"), ["basis", "points", "flat"]) &&
+  same(TABPROPS, ["analysis", "settings", "level", "weights", "setWeights", "requestSettings"]),
+  "types: TabContextValue, RfHistory and WalkRates have exactly their fields, and TabProps is unchanged",
+  `${fields("TabContextValue")} / ${fields("RfHistory")} / ${fields("WalkRates")} / ${TABPROPS}`);
 
 // ---- (c) analyze() on both layouts, against the engine called directly ------------------------------
 const ex = exampleAnalysis();
@@ -179,8 +192,10 @@ try {
 check(wb && same(Object.keys(wb), WORKBENCH), "hook: useWorkbench returns exactly the fields Workbench declares", wb && Object.keys(wb).sort().join(","));
 check(wb && ["loading", "empty", "error", "ready"].includes(wb.analysis?.status) && T.TAB_IDS?.includes(wb.tab), "hook: analysis is a LoadState and tab a TabId");
 check(same(Object.keys(tabProps(ex)), TABPROPS), "tabs: the test's props are exactly TabProps", Object.keys(tabProps(ex)).sort().join(","));
+// Each tab's file is its id capitalised, except the one whose name is two words.
+const TAB_FILE = { walkforward: "src/tabs/WalkForward.tsx" };
 for (const id of T.TAB_IDS ?? []) {
-  const file = `src/tabs/${id[0].toUpperCase()}${id.slice(1)}.tsx`;
+  const file = TAB_FILE[id] ?? `src/tabs/${id[0].toUpperCase()}${id.slice(1)}.tsx`;
   let html = "";
   try {
     html = renderToStaticMarkup(h(m(file).default, tabProps(ex)));
@@ -310,8 +325,12 @@ check(T.LEVELS?.find((l) => l.id === D.DEFAULT_LEVEL)?.oracle === knowledge, "de
 const points = Number(grab(/def efficient_frontier\([^)]*n_points=(\d+)/, "efficient_frontier's n_points")[1]);
 check(D.FRONTIER_POINTS === points, "defaults: FRONTIER_POINTS (948)", `${D.FRONTIER_POINTS} vs ${points}`);
 const tabs = grab(/st\.tabs\(\[([\s\S]*?)\]\)/, "the tab labels")[1]?.match(/"([^"]+)"/g)?.map((s) => s.slice(1, -1).trim());
-check(JSON.stringify(T.TAB_IDS?.map((id) => T.TAB_LABELS[id])) === JSON.stringify(tabs) && D.DEFAULT_TAB === T.TAB_IDS?.[0],
-  "types: TAB_LABELS are the app's six, trimmed, in order (1213-1220)", JSON.stringify(tabs));
+check(tabs?.length === 6 && JSON.stringify(T.TAB_IDS?.slice(0, 6).map((id) => T.TAB_LABELS[id])) === JSON.stringify(tabs) && D.DEFAULT_TAB === T.TAB_IDS?.[0],
+  "types: the first six TAB_LABELS are the app's six, trimmed, in order (1213-1220)", JSON.stringify(tabs));
+// The seventh is the page's own, which the app does not have: last, so the app's six keep their places.
+check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?.walkforward === "Walk-forward" &&
+  Object.keys(T.TAB_LABELS ?? {}).length === 7,
+  "types: a seventh tab, walkforward, labelled Walk-forward, comes after the app's six", JSON.stringify(T.TAB_IDS));
 
 // ---- (h) the published sets come first in the rail; the app's own follow -----------------------------
 {

@@ -1,5 +1,5 @@
 // The share link: settings (never the dollar amount, but the scorecard's added columns), custom weights
-// and the tab, as a query string. The app has no share link at all; its sidebar starts over on every
+// and the tab (with the walk-forward tab's segment, only when it is the published one), as a query string. The app has no share link at all; its sidebar starts over on every
 // visit (645-805).
 //
 // Encoding picks each field BY NAME, never by spreading the object it is given, so an amount
@@ -9,19 +9,19 @@
 // Nothing here throws.
 import { SYMBOL } from "../data/prices.ts";
 import { MAX_TICKERS, parseTickers } from "../lib/clean.ts";
-import { ADDED_IDS, type AddedId } from "../lib/constructions.ts";
+import { ADDED_IDS, type AddedId } from "../lib/added.ts";
 import { BENCHMARKS } from "./defaults.ts";
 import { TAB_IDS } from "../types.ts";
-import type { CustomWeights, ShareSettings, ShareState, TabId } from "../types.ts";
+import type { CustomWeights, ShareSettings, ShareState, TabId, WalkView } from "../types.ts";
 
 // Query keys. Short, because people read and paste the link.
-const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", cols: "cols", w: "w", tab: "tab" };
+const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", cols: "cols", w: "w", tab: "tab", view: "view" };
 
 // The app does not validate ticker characters (1007); a URL is hostile input, so a symbol is held
 // to the pattern the price endpoint accepts (Yahoo's alphabet: BRK-B, ^GSPC, EURUSD=X), and a link
 // can never carry a ticker the endpoint would refuse.
 // Longer than any honest value (ten tickers, ten weights, all four added columns); a longer one is not
-// parsed at all.
+// parsed at all. It bounds each value, not the link: view=published adds a key of its own, not length to one.
 export const MAX_PARAM = 400;
 // The rate field has no bounds in the app (717). A link gets a sane one: -100% to 100%.
 const MAX_RF = 1;
@@ -49,6 +49,9 @@ export function encodeShare(state: ShareState): string {
   const w = state.weights ? Object.entries(state.weights).filter(([t, v]) => SYMBOL.test(t) && Number.isFinite(v)) : [];
   if (w.length) put(K.w, w.map(([t, v]) => `${t}:${v}`).join(","));
   if (state.tab) put(K.tab, state.tab);
+  // The walk-forward tab's second segment is the one view a link carries, and only beside that tab: the
+  // first segment is what the tab opens on anyway, and no other tab has segments.
+  if (state.tab === "walkforward" && state.view === "published") put(K.view, "published");
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
@@ -103,6 +106,7 @@ export function decodeShare(search: string): ShareState {
   const settings: Partial<ShareSettings> = {};
   let w: CustomWeights | null = null;
   let tab: TabId | null = null;
+  let view: WalkView | null = null;
   try {
     const q = new URLSearchParams(typeof search === "string" ? search : "");
     const get = (k: string) => {
@@ -133,9 +137,11 @@ export function decodeShare(search: string): ShareState {
     w = wv === null ? null : weights(wv);
     const tb = get(K.tab);
     tab = tb !== null && (TAB_IDS as readonly string[]).includes(tb) ? (tb as TabId) : null;
+    // "published" beside the walk-forward tab, exactly; any other value, or the key on any other tab, is ignored.
+    view = tab === "walkforward" && get(K.view) === "published" ? "published" : null;
   } catch {
     // URLSearchParams does not throw on a malformed escape today; if a runtime ever does, the link
     // is simply not read.
   }
-  return { settings, weights: w, tab };
+  return { settings, weights: w, tab, view };
 }

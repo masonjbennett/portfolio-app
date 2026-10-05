@@ -116,7 +116,11 @@ const Boom = () => {
 
 // ---- SegControl -------------------------------------------------------------------------------
 
-const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensitivity"].map((l) => ({ value: l.toLowerCase(), label: l }));
+// The page's tab row, seven pills: the app's six and the walk-forward tab after them.
+const OPTS = [
+  ["returns", "Returns"], ["risk", "Risk"], ["correlation", "Correlation"], ["optimization", "Optimization"], ["custom", "Custom"],
+  ["sensitivity", "Sensitivity"], ["walkforward", "Walk-forward"],
+].map(([value, label]) => ({ value, label }));
 {
   let value = "returns";
   const picks = [];
@@ -125,11 +129,11 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   // No idPrefix: a choice that controls no panel, so a radio group, never a tablist with no panels.
   const list = r.container.querySelector("[role=radiogroup]");
   const tabs = [...r.container.querySelectorAll("[role=radio]")];
-  check(list?.getAttribute("aria-label") === "Analysis tabs" && tabs.length === 6 && !r.container.querySelector("[role=tablist], [role=tab]"),
-    "segcontrol: with no idPrefix, a named radio group of six, and no tab roles", `${tabs.length}`);
-  check(tabs.map((t) => t.getAttribute("aria-checked")).join() === "true,false,false,false,false,false" && tabs.every((t) => !t.hasAttribute("aria-selected")),
+  check(list?.getAttribute("aria-label") === "Analysis tabs" && tabs.length === 7 && !r.container.querySelector("[role=tablist], [role=tab]"),
+    "segcontrol: with no idPrefix, a named radio group of seven, and no tab roles", `${tabs.length}`);
+  check(tabs.map((t) => t.getAttribute("aria-checked")).join() === "true,false,false,false,false,false,false" && tabs.every((t) => !t.hasAttribute("aria-selected")),
     "segcontrol: aria-checked marks only the chosen option", tabs.map((t) => t.getAttribute("aria-checked")).join());
-  check(tabs.map((t) => t.tabIndex).join() === "0,-1,-1,-1,-1,-1", "segcontrol: one tab stop, on the chosen tab", tabs.map((t) => t.tabIndex).join());
+  check(tabs.map((t) => t.tabIndex).join() === "0,-1,-1,-1,-1,-1,-1", "segcontrol: one tab stop, on the chosen tab", tabs.map((t) => t.tabIndex).join());
 
   const key = (k) => act(() => {
     document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true }));
@@ -142,11 +146,11 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   check(tabs[1].getAttribute("aria-checked") === "true" && tabs[1].tabIndex === 0, "segcontrol: the selection follows the value prop");
   tabs[0].focus();
   key("ArrowLeft");
-  check(picks.at(-1) === "sensitivity" && document.activeElement === tabs[5], "segcontrol: ArrowLeft from the first wraps to the last", `${picks.at(-1)}`);
+  check(picks.at(-1) === "walkforward" && document.activeElement === tabs[6], "segcontrol: ArrowLeft from the first wraps to the last", `${picks.at(-1)}`);
   key("Home");
   check(picks.at(-1) === "returns" && document.activeElement === tabs[0], "segcontrol: Home goes to the first", `${picks.at(-1)}`);
   key("End");
-  check(picks.at(-1) === "sensitivity" && document.activeElement === tabs[5], "segcontrol: End goes to the last", `${picks.at(-1)}`);
+  check(picks.at(-1) === "walkforward" && document.activeElement === tabs[6], "segcontrol: End goes to the last", `${picks.at(-1)}`);
   const before = picks.length;
   key("a");
   check(picks.length === before, "segcontrol: other keys do nothing");
@@ -156,8 +160,8 @@ const OPTS = ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensi
   // With an idPrefix, every pill has an id and names the panel it controls.
   const p = render(h(SegControl, { options: OPTS, value: "risk", onChange: () => {}, ariaLabel: "Analysis tabs", idPrefix: "x" }));
   const pills = [...p.container.querySelectorAll("[role=tab]")];
-  check(p.container.querySelector("[role=tablist]")?.getAttribute("aria-label") === "Analysis tabs" && pills.length === 6 &&
-    pills.map((t) => t.getAttribute("aria-selected")).join() === "false,true,false,false,false,false" && pills.every((t) => !t.hasAttribute("aria-checked")),
+  check(p.container.querySelector("[role=tablist]")?.getAttribute("aria-label") === "Analysis tabs" && pills.length === 7 &&
+    pills.map((t) => t.getAttribute("aria-selected")).join() === "false,true,false,false,false,false,false" && pills.every((t) => !t.hasAttribute("aria-checked")),
     "segcontrol: an idPrefix makes it a tablist, aria-selected on the chosen tab", pills.map((t) => t.getAttribute("aria-selected")).join());
   check(pills.map((t) => t.id).join() === OPTS.map((o) => `x-tab-${o.value}`).join() &&
     pills.map((t) => t.getAttribute("aria-controls")).join() === OPTS.map((o) => `x-panel-${o.value}`).join(),

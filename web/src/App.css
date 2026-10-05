@@ -25,7 +25,7 @@
   min-width: 0;
 }
 
-/* The tab switch scrolls sideways and never wraps: six labels do not fit a phone. */
+/* The tab switch scrolls sideways and never wraps: seven labels do not fit a phone. */
 .app-tabs {
   margin: var(--space-5) 0 var(--space-4);
   overflow-x: auto;
@@ -48,6 +48,26 @@
 
 .app-tab {
   min-width: 0;
+}
+
+/* A button that sits in a sentence and reads as a link: it switches the page in place rather than going
+   anywhere, so it is a button, but it takes the words around it exactly (face, size, line height), so a
+   line that gains one is no wider and no taller than before. */
+.text-button {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: inherit;
+  color: var(--color-teal);
+  text-decoration: underline;
+  text-align: inherit;
+  vertical-align: baseline;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 
 /* The tab being left while the next one's chunk loads (App's transition): readable, plainly waiting. */

@@ -1,5 +1,5 @@
 // The page's state in one hook: settings, level, the analysis, the live rate, custom weights and
-// the active tab.
+// the active tab, with the walk-forward tab's segment.
 //
 // The app computes nothing until Run is pressed, and then freezes the rate with the prices
 // (1087, read back at 1158), so an edited rate does nothing until the next Run. Here there is no
@@ -17,7 +17,7 @@
 // (src/state/rfwindow.ts), fetched again when the start date moves earlier than the series held. The example keeps the rate it
 // was baked at until live prices replace it, and live prices wait for the rate over their own window
 // when it is on its way, so a cold load changes the numbers on screen once, not two or three times.
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { parseTickers, validateRequest } from "../lib/clean.ts";
 import { isExample } from "../data/payload.ts";
 import { analyze, isPricePayload, MESSAGES, priceSpan } from "./analyze.ts";
@@ -26,8 +26,8 @@ import { isIsoDay, readRfSeries, windowRate, type RfResolved, type RfSeries, typ
 import { loadPrefs, loadSettings, savePrefs, saveSettings } from "./storage.ts";
 import { decodeShare, encodeShare } from "./url.ts";
 import type {
-  Analysis, AnalysisError, CustomWeights, Level, LoadState, PricePayload, RfChoice, RfRate, Settings,
-  ShareSettings, TabId, Workbench,
+  Analysis, AnalysisError, CustomWeights, Level, LoadState, PricePayload, RfChoice, RfHistory, RfRate, Settings,
+  ShareSettings, TabContextValue, TabId, WalkView, Workbench,
 } from "../types.ts";
 
 export const EXAMPLE_URL = "/example-cross.json";
@@ -45,6 +45,12 @@ export const RF_WAIT_MS = 12000;
 export const RF_HOLD_MS = 3000;
 // The address bar is rewritten at most this often (browsers throttle history.replaceState).
 export const URL_DELAY_MS = 250;
+
+// What a tab may read from the page beyond its props: the walk-forward tab's segment, the way to another
+// tab, and the rate history. The page provides it (src/App.tsx); a tab rendered on its own, outside the
+// page, reads null. A context rather than three more props on every tab, because the note that links to
+// the walk-forward tab sits deep inside another tab's cards.
+export const TabContext = createContext<TabContextValue | null>(null);
 
 // The settings the page opens with when neither the link nor this browser names any: the app's
 // sidebar (defaults.ts) with the tickers of the example on the first screen, the Cross-asset preset
@@ -155,14 +161,15 @@ function initialState() {
   const share = decodeShare(currentSearch());
   const prefs = loadPrefs();
   const settings: Settings = { ...FIRST_SETTINGS, ...loadSettings(), ...share.settings, amount: prefs.amount };
-  return { settings, level: prefs.level, weights: share.weights ?? {}, tab: share.tab ?? DEFAULT_TAB };
+  return { settings, level: prefs.level, weights: share.weights ?? {}, tab: share.tab ?? DEFAULT_TAB, view: share.view ?? "basket" };
 }
 
-function shareSearch(settings: Settings, weights: CustomWeights, tab: TabId): string {
+function shareSearch(settings: Settings, weights: CustomWeights, tab: TabId, view: WalkView): string {
   return encodeShare({
     settings: shareOf(settings),
     weights: Object.keys(weights).length ? weights : null,
     tab: tab === DEFAULT_TAB ? null : tab,
+    view,
   });
 }
 
@@ -171,7 +178,14 @@ export function useWorkbench(): Workbench {
   const [settings, setSettingsState] = useState<Settings>(init.settings);
   const [level, setLevel] = useState<Level>(init.level);
   const [weights, setWeights] = useState<CustomWeights>(init.weights);
-  const [tab, setTab] = useState<TabId>(init.tab);
+  const [tab, setTabState] = useState<TabId>(init.tab);
+  const [view, setView] = useState<WalkView>(init.view);
+  // Every way into a tab opens the walk-forward tab on its first segment, except one that names the
+  // other: the published strip, the in-sample note and a link carrying view=published.
+  const setTab = useCallback((next: TabId, nextView: WalkView = "basket") => {
+    setTabState(next);
+    setView(nextView);
+  }, []);
   // The prices on screen: only a payload analyze() accepted ever lands here.
   const [payload, setPayload] = useState<PricePayload | null>(null);
   const [exampleFailed, setExampleFailed] = useState(false);
@@ -346,8 +360,8 @@ export function useWorkbench(): Workbench {
   useEffect(() => saveSettings(JSON.parse(shareKey) as ShareSettings), [shareKey]);
 
   // The address bar carries the share link once the visitor changes something (never the amount).
-  const search = shareSearch(settings, weights, tab);
-  const written = useRef(shareSearch(init.settings, init.weights, init.tab));
+  const search = shareSearch(settings, weights, tab, view);
+  const written = useRef(shareSearch(init.settings, init.weights, init.tab, init.view));
   useEffect(() => {
     if (search === written.current) return;
     written.current = search;
@@ -372,7 +386,13 @@ export function useWorkbench(): Workbench {
     // The window by value, not by identity: it is rebuilt on every render.
   }, [rf, win?.rate, win?.from, win?.to, win?.days, inUse.basis, inUse.choice.rate, rfPending]);
 
+  // The series itself, for a figure that scores each day at its own rate (the walk-forward test), with the
+  // basis of the analysis on screen: a rate set in the rail means every figure uses that one rate.
+  const series = rf.status === "ready" ? rf.value : null;
+  const rfHistory = useMemo<RfHistory>(() => ({ basis: inUse.basis, series, loading: rfPending }), [inUse.basis, series, rfPending]);
+
   return {
     settings, setSettings, level, setLevel, analysis, fetching: fetching || hold, failure, rf: rfView, weights, setWeights, tab, setTab,
+    view, rfHistory,
   };
 }

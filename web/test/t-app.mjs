@@ -72,7 +72,7 @@ const LIVE = { rate: 0.0412, date: "2026-09-25", source: "FRED DGS3MO" };
 const EX_SETTINGS = settingsFor(examplePayload(), { rf: EX.rf });
 
 function stand(over = {}) {
-  const calls = { settings: [], level: [], tab: [] };
+  const calls = { settings: [], level: [], tab: [], view: [] };
   const wb = {
     settings: EX_SETTINGS,
     setSettings: (p) => calls.settings.push(p),
@@ -85,7 +85,12 @@ function stand(over = {}) {
     weights: {},
     setWeights() {},
     tab: "returns",
-    setTab: (t) => calls.tab.push(t),
+    setTab: (t, v) => {
+      calls.tab.push(t);
+      calls.view.push(v ?? "basket");
+    },
+    view: "basket",
+    rfHistory: { basis: "example", series: null, loading: false },
     ...over,
   };
   return { wb, calls };
@@ -93,14 +98,18 @@ function stand(over = {}) {
 // The workbench with a live tab and level, as useWorkbench would hold them.
 function Harness({ wb, tabs }) {
   const [tab, setTab] = useState(wb.tab);
+  const [view, setView] = useState(wb.view);
   const [level, setLevel] = useState(wb.level);
   const live = {
     ...wb,
     tab,
+    view,
     level,
-    setTab: (t) => {
-      wb.setTab(t);
+    // As useWorkbench: every way into a tab opens the walk-forward tab's first segment unless one is named.
+    setTab: (t, v) => {
+      wb.setTab(t, v);
       setTab(t);
+      setView(v ?? "basket");
     },
     setLevel: (l) => {
       wb.setLevel(l);
@@ -237,6 +246,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     const first = panel?.querySelector("h1, h2, h3, h4, h5, h6");
     const finding = first ? text(first) : "";
     seen.push(`${id}: ${first?.tagName}.${first?.className} "${finding.slice(0, 40)}"`);
+    // The walk-forward tab is the one exception, by name: it opens on its section heading and the switch
+    // between its two segments, and each segment states its own finding under them.
+    if (id === "walkforward") {
+      check(first?.tagName === "H2" && first.classList.contains("slug-text") && finding === "Walk-forward test",
+        "tabs: the walkforward tab's first heading is its section heading, Walk-forward test, above its two segments", seen.at(-1));
+      continue;
+    }
     check(first?.tagName === "H2" && first.classList.contains("tab-finding") && /[.?]$/.test(finding) && !/NaN|undefined/.test(finding),
       `tabs: the ${id} tab's first heading is its finding, an h2.tab-finding that ends as a sentence`, seen.at(-1));
   }
@@ -290,7 +306,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(sentence.startsWith(`On these ${EX.tickers.length} assets, with hindsight, `),
     "band: the sentence names itself, these assets with hindsight, before any figure", sentence);
   // On a published basket the live tangency figure is recomputed in-sample, never the published one, and
-  // the sentence says so right after it; on any other basket it says nothing of the kind.
+  // the sentence says so right after it; on any other basket it says the same, so the mark never comes and goes.
   const through = `(in-sample, recomputed on prices through ${format(EX.asOf, "date")})`;
   const onSet = (a, set) => finding({ ...a, tickers: [...set.tickers].reverse() });
   const high = exampleAnalysis({ rf: 0.4 });
@@ -298,8 +314,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(EX.tangency?.beatsRf === true && high.tangency?.beatsRf === false &&
     marked.every((s, i) => s.includes(`${format((i % 2 ? high : EX).tangency.sharpe, "num3")}${i % 2 ? " " : " of annual excess return per unit of volatility "}${through}`)),
     "band: on a published basket the tangency Sharpe is marked in-sample and recomputed, with the last price day", marked.join(" | "));
-  check(!finding({ ...EX, tickers: ["AAPL", "MSFT"] }).includes("recomputed") && !finding({ ...high, tickers: ["AAPL", "MSFT"] }).includes("recomputed"),
-    "band: on any other basket the sentence carries no recomputed mark");
+  // Ten tickers that are neither the default basket nor any preset, published or not.
+  const tenOther = ["AAPL", "MSFT", "JPM", "XOM", "KO", "PG", "V", "UNH", "HD", "CAT"];
+  const presetKeys = [...PRESETS.map((p) => p.tickers), ...P.PUBLISHED_SETS.map((x) => x.tickers.join(", "))].map((t) => parseTickers(t).sort().join(","));
+  const other = [finding({ ...EX, tickers: tenOther }), finding({ ...high, tickers: tenOther })];
+  check(!presetKeys.includes([...tenOther].sort().join(",")) &&
+    other.every((s, i) => s.includes(`${format((i ? high : EX).tangency.sharpe, "num3")}${i ? " " : " of annual excess return per unit of volatility "}${through}`)),
+    "band: on a ten-ticker basket that is no preset the tangency Sharpe carries the same in-sample, recomputed mark", other.join(" | "));
   r.unmount();
 }
 
@@ -313,8 +334,10 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     ["Seven sector ETFs", "XLK XLF XLV XLE XLI XLP XLY", "0.915", "0.450", "0.661"],
     ["Cross-asset", "VTI AGG GLD VNQ EFA", "0.704", "\u22120.247", "0.883"],
   ]) && P.MEGA_CAP_IN_SAMPLE === "1.107" && P.PUBLISHED_WHEN === "Sep 2026" &&
-    P.PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method",
-    "published: the constants are the nine published Sharpe ratios, 1.107, the date and the method note's address", JSON.stringify(nine));
+    P.PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method" &&
+    P.CROSS_AGG_INTO_2022 === "95.1%" && JSON.stringify(P.MEGA_CAP_APPLE) === JSON.stringify(["41.7%", "3.8%", "6.4%", "21.0%", "44.8%"]),
+    "published: the constants are the nine published Sharpe ratios, 1.107, the AGG and Apple weights, the date and the method note's address",
+    JSON.stringify([nine, P.CROSS_AGG_INTO_2022, P.MEGA_CAP_APPLE]));
   check(P.CARD_SENTENCE.includes(`${P.MEGA_CAP_IN_SAMPLE} in-sample Sharpe became ${P.PUBLISHED_SETS[0].tangency} out of sample`) &&
     P.CARD_SENTENCE.includes("over six rolling one-year holding periods"),
     "published: the site's sentence carries 1.107, 0.659 and the six one-year holds", P.CARD_SENTENCE);
@@ -373,6 +396,64 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(!!strip && !!wait && !!(strip.compareDocumentPosition(wait) & window.Node.DOCUMENT_POSITION_FOLLOWING) && text(strip).includes(P.CARD_SENTENCE),
     "published: the page shows the published result while prices are still loading, above the loading line", text(main ?? {}));
   r.unmount();
+}
+
+// ---- (d2b) the walk-forward tab: its two segments, and the two ways in that open the published one ------
+{
+  const { DEFAULT_START } = await import("../src/state/defaults.ts");
+  const WF = await import("../src/tabs/WalkForward.tsx");
+  const r = page({}, TABS);
+  const row = r.container.querySelector(".app-tabs [role=tablist]");
+  const panel = () => r.container.querySelector("[role=tabpanel]");
+  const segment = () => panel()?.querySelector("[data-segment]")?.getAttribute("data-segment") ?? null;
+  const segRow = () => panel()?.querySelector('[role=tablist][aria-label="Walk-forward"]');
+  const source = () => r.container.querySelector(".band-published-source");
+
+  // The strip's source line: the words that were already on it open the tab on the published test, and the
+  // line reads exactly as before, so it is no wider and no taller. Its one link is still the method note.
+  const bare = render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
+  const before = text(bare.container.querySelector(".band-published-source") ?? {});
+  bare.unmount();
+  const open = source()?.querySelector("button.text-button");
+  const links = [...(source()?.querySelectorAll("a") ?? [])];
+  check(!!open && text(open) === "Walk-forward test" && text(source()) === before && before.startsWith("Walk-forward test, published ") &&
+    source().children.length === 2 && links.length === 1 && links[0].getAttribute("href") === P.PUBLISHED_URL,
+    "walk-forward: the strip's source line turns its own first words into the control, reads as before, and keeps its one link", `${text(source() ?? {})} / ${before}`);
+
+  click(byLabel(row, TAB_LABELS.walkforward));
+  check(segment() === "basket" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "Your basket",
+    "walk-forward: the tab opens on Your basket", `${segment()}`);
+  click(byLabel(segRow(), "As published"));
+  check(segment() === "published" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "As published",
+    "walk-forward: the switch shows As published", `${segment()}`);
+  click(byLabel(row, TAB_LABELS.returns));
+  click(byLabel(row, TAB_LABELS.walkforward));
+  check(segment() === "basket", "walk-forward: leaving the tab and coming back by its pill opens Your basket again", `${segment()}`);
+  click(byLabel(row, TAB_LABELS.returns));
+  click(source().querySelector("button.text-button"));
+  check(segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "analysis-tab-walkforward",
+    "walk-forward: the strip's control switches to the tab on As published, without a reload", `${segment()}`);
+  click(byLabel(row, TAB_LABELS.optimization));
+  const note = panel()?.querySelector('[data-note="in-sample"] button.text-button');
+  // The note itself must not link out to the method note; As published, which it opens, carries that link.
+  const linksOut = !!panel()?.querySelector(`[data-note="in-sample"] a[href="${P.PUBLISHED_URL}"]`);
+  if (note) click(note);
+  check(!!note && segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "analysis-tab-walkforward" &&
+    !linksOut,
+    "walk-forward: the Optimization tab's in-sample note switches to the tab on As published", `${segment()}`);
+  r.unmount();
+
+  // "Rerun this set on fresh prices": the set's tickers on the published run's own terms, held to the test's
+  // record (test/fixtures/walkforward.json): from the default start, an end the day after the last bar (the
+  // price request's end is exclusive), the record's rate typed into the rail, shorting off.
+  const record = JSON.parse(readFileSync(new URL("./fixtures/walkforward.json", import.meta.url), "utf8"));
+  const next = (iso) => new Date(Date.parse(`${iso}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const asked = Object.values(record.sets).map((set) => [set, WF.rerunSettings(set.tickers)]);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  check(asked.length === 3 && asked.every(([set, x]) => same(x, { tickers: set.tickers, start: DEFAULT_START, end: next(set.last_bar), rf: record.rf, allowShort: false }) &&
+    DEFAULT_START <= set.first_bar && set.last_bar === WF.PUBLISHED_LAST_BAR) && WF.PUBLISHED_RF === record.rf,
+    "walk-forward: a rerun asks for the set's tickers from the default start through the day after its last bar, at the record's rate, long-only",
+    JSON.stringify(asked.map(([, x]) => x)));
 }
 
 // ---- (d3) plain words: no "best" or "optimal" as a label in the band, masthead or footer ----------
@@ -618,7 +699,8 @@ function rail(over = {}) {
   const dialog = () => r.container.querySelector('[aria-label="Command palette"]');
   check(!dialog(), "palette: closed until asked for");
   key(document.body, "k", { ctrlKey: true });
-  check(!!dialog() && clickables(dialog()).length === 9, "palette: Ctrl+K opens the three levels and six tabs", dialog() ? String(clickables(dialog()).length) : "closed");
+  check(!!dialog() && clickables(dialog()).length === 10 && clickables(dialog()).some((b) => text(b).endsWith(TAB_LABELS.walkforward)),
+    "palette: Ctrl+K opens the three levels and seven tabs, Walk-forward among them", dialog() ? clickables(dialog()).map(text).join(" | ") : "closed");
   const input = dialog()?.querySelector("input");
   if (input) {
     setValue(input, "formula");
@@ -711,7 +793,7 @@ function rail(over = {}) {
   r.unmount();
 
   // The shipped map: every tab is a lazy component, and App's own default reaches the real finding.
-  check(TAB_IDS.every((id) => AppTabs[id]?.$$typeof === Symbol.for("react.lazy")), "lazy: App ships each of the six tabs as React.lazy");
+  check(TAB_IDS.every((id) => AppTabs[id]?.$$typeof === Symbol.for("react.lazy")), "lazy: App ships each of the seven tabs as React.lazy");
   const shipped = quietly(() => render(h(Harness, { wb: stand().wb })));
   const found = await until(() => !!panel(shipped)?.querySelector("h2.tab-finding"));
   check(found, "lazy: App's default tabs load and draw the Returns finding", text(shipped.container.querySelector(".app-main") ?? {}).slice(0, 120));

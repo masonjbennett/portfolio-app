@@ -15,15 +15,11 @@ import { cholSolve, dot, sum, type Mat, type Vec } from "./num.ts";
 import { riskParity, tangency, tangencyCapped, type Solution } from "./optimize.ts";
 import { windowMoments } from "./portfolio.ts";
 import { loadVerdict, TRADING_DAYS } from "./stats.ts";
+import type { AddedId } from "./added.ts";
 
-export type AddedId = "tan.1y" | "tan.bs" | "tan.cap" | "rp";
-
-/** The added constructions, in the order the scorecard offers them. */
-export const ADDED_IDS: readonly AddedId[] = ["tan.1y", "tan.bs", "tan.cap", "rp"];
-
-export function isAddedId(x: string): x is AddedId {
-  return (ADDED_IDS as readonly string[]).includes(x);
-}
+// The ids, their order and the guard live in ./added.ts, which imports nothing; they are re-exported
+// here so every import of them from this module stays as it was.
+export { ADDED_IDS, isAddedId, type AddedId } from "./added.ts";
 
 /** The last-year window: 252 daily return rows, ending on the window's last day. */
 export const YEAR_ROWS = TRADING_DAYS;

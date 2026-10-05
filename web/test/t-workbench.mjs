@@ -198,6 +198,34 @@ await later();
 check(location.search.includes("cols=tan.1y,rp") && !/cols/.test(localStorage.getItem(SETTINGS_KEY) ?? "") && ready() === a && priceCalls().length === n0,
   "columns: added columns reach the link in the fixed order and not this browser's storage, with no fetch and the same analysis", location.search);
 
+// The walk-forward tab's segment: "published" reaches the link only while it shows, and every other way into
+// a tab opens the first segment. The rate history carries the series held and the basis of the figures on screen.
+{
+  const step = async (fn) => {
+    await act(async () => {
+      fn();
+      await sleep(0);
+    });
+    await later();
+  };
+  await step(() => wb.setTab("walkforward", "published"));
+  const shown = `${wb.tab}/${wb.view} ${location.search}`;
+  const okShown = wb.view === "published" && /[?&]tab=walkforward&view=published(&|$)/.test(location.search);
+  await step(() => wb.setTab("walkforward", "basket"));
+  const first = `${wb.tab}/${wb.view} ${location.search}`;
+  const okFirst = wb.view === "basket" && location.search.includes("tab=walkforward") && !/view=/.test(location.search);
+  await step(() => wb.setTab("walkforward", "published"));
+  await step(() => wb.setTab("risk"));
+  const left = `${wb.tab}/${wb.view} ${location.search}`;
+  const okLeft = wb.view === "basket" && location.search.includes("tab=risk") && !/view=/.test(location.search);
+  check(okShown && okFirst && okLeft,
+    "url: view=published is in the link only while the walk-forward tab shows that segment; leaving the tab opens the first next time",
+    [shown, first, left].join(" | "));
+  check(wb.rfHistory.series?.series.length > 0 && wb.rfHistory.basis === "manual" && ready()?.rfSource === "manual" && wb.rfHistory.loading === false,
+    "rate history: the hook hands on the daily series it holds, and the basis of the figures on screen (a typed rate here)",
+    `${wb.rfHistory.basis} ${wb.rfHistory.series?.series.length} ${wb.rfHistory.loading}`);
+}
+
 // ---- the window moves: the rate is asked for again from an earlier start, never a later one -----------------
 {
   const n = rfCalls().length;
@@ -465,6 +493,16 @@ view.unmount();
   const b = ready();
   check(b?.source === "live" && Math.abs(b.rf - meanOver(b)) < 1e-15 && wb.rf.value.basis === "window" && changes().length === 2,
     "window later, rate still out: when it lands the live prices show at their own window's rate, in one change", changes().join(" | "));
+  v.unmount();
+}
+
+// The walk-forward segment a link opens: published only beside the walk-forward tab.
+for (const [search, want] of [["?tab=walkforward&view=published", "walkforward/published"], ["?view=published", "returns/basket"], ["?tab=risk&view=published", "risk/basket"]]) {
+  fresh(search);
+  routes = {};
+  const v = render(h(Probe));
+  await settle();
+  check(`${wb.tab}/${wb.view}` === want, `url: ${search} opens ${want}`, `${wb.tab}/${wb.view}`);
   v.unmount();
 }
 

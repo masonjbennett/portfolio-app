@@ -228,7 +228,10 @@ function pickLevel(root) {
 for (const tab of TAB_IDS) {
   const { root, first, unmount } = mount(tab);
   let now = chartsOn(root);
-  check(now.length > 0 && first.charts.size === new Set(now.map((c) => c.title)).size, `${tab}: the hook sees each of the tab's charts drawn on the first mount`, list(first.charts));
+  // The walk-forward tab may open on no chart at all (its first segment can say it cannot run); every chart it
+  // does draw is held like the others'. Every other tab opens on at least one.
+  check((now.length > 0 || tab === "walkforward") && first.charts.size === new Set(now.map((c) => c.title)).size,
+    `${tab}: the hook sees each of the tab's charts drawn on the first mount`, list(first.charts));
   let before = now;
   const lv = record(() => pickLevel(root).off.click());
   let o = outcome(before, (now = chartsOn(root)), lv);
@@ -240,6 +243,31 @@ for (const tab of TAB_IDS) {
     o = outcome(before, (now = chartsOn(root)), am);
     check(o.changed.size > 0 && same(o.drew, o.changed), `${tab}, amount: the charts drawn from the amount render again, and only they`, `drew ${names(o, o.drew)}; changed ${names(o, o.changed)}`);
   }
+  unmount();
+}
+
+// ---- Walk-forward tab: a repaint never solves the test again; an option does, once ---------------------------
+// Your basket solves after paint, a slice of work per macrotask (src/tabs/walkforward/liveSolve.ts), and keeps
+// each run per analysis and options. The counter is the segment's own count of finished solves.
+{
+  const { SOLVES } = await import("../src/tabs/walkforward/live.ts");
+  const settle = () => act(async () => {
+    for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 0));
+  });
+  const { root, unmount } = mount("walkforward");
+  await settle();
+  const landed = !!root.querySelector('[data-segment="basket"] .tbl');
+  let n = SOLVES.count;
+  const lv = record(() => pickLevel(root).off.click());
+  await settle();
+  check(landed && lv.components.has("Tip") && SOLVES.count === n,
+    "walkforward, explanation level: the tooltips render again and the walk-forward test is not solved again", `landed ${landed}, solves ${SOLVES.count - n}`);
+  check(!lv.components.has("Holds") && !lv.components.has("Table"), "walkforward, explanation level: no table renders again", list(lv.components));
+  n = SOLVES.count;
+  const hold = [...root.querySelectorAll('[role=radiogroup][aria-label="Hold for"] [role=radio]')].find((b) => b.getAttribute("aria-checked") === "false");
+  record(() => hold.click());
+  await settle();
+  check(SOLVES.count === n + 1 && !!root.querySelector('[data-segment="basket"] .tbl'), "walkforward, an option: the walk-forward test is solved again, once, and lands", `solves ${SOLVES.count - n}`);
   unmount();
 }
 
