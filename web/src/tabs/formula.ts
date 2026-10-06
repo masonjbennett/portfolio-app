@@ -13,6 +13,10 @@
 // return 252 x w'mu and volatility sqrt(252 x w'Sigma w) on the daily means mu and the sample covariance
 // Sigma; Sharpe = (annual return - rate) / annual volatility.
 //
+// A ratio is printed from its rounded operands, so the arithmetic a reader redoes from them can land a
+// digit away from the ratio the tab prints; there the line says "≈" instead of "=". The Sharpe ratios
+// of a fit scored on the window it was fitted to say in-sample, as the findings do.
+//
 // Only types are imported from the tabs' own modules: each tab is its own chunk, and a value import here
 // would pull every tab's model into whichever tab loaded first.
 import { format, MINUS } from "../format.ts";
@@ -42,8 +46,21 @@ const EXCESS_SHARPE = `Sharpe = ${D} × mean(e) / (√${D} × sd(e)), e = r ${MI
 /** The bounds every weight is held to, as the optimiser holds them. */
 const bounds = (allowShort: boolean) => `weights summing to 1, each in [${allowShort ? `${MINUS}1` : "0"}, 1]`;
 
-/** (return − rate) / volatility = Sharpe, each at the format the tab prints it in. */
-const ratio = (p: Performance, rf: number) => `(${pct2(p.mu)} ${MINUS} ${pct2(rf)}) / ${pct2(p.sigma)} = ${num3(p.sharpe)}`;
+/** A printed figure read back as the number it shows: "−2.85%" -> -2.85, "0.998" -> 0.998. */
+export function printedNumber(s: string): number {
+  return Number(s.replace(MINUS, "-").replace(/[%,$]/g, ""));
+}
+
+/**
+ * (return − rate) / volatility, then the Sharpe ratio the tab prints, each at the format the tab prints
+ * it in: "=" when the printed operands give the printed ratio at its three places, "≈" when their
+ * rounding moves it.
+ */
+export function ratio(p: Performance, rf: number): string {
+  const [mu, r, sigma, sharpe] = [pct2(p.mu), pct2(rf), pct2(p.sigma), num3(p.sharpe)];
+  const redo = (printedNumber(mu) - printedNumber(r)) / printedNumber(sigma);
+  return `(${mu} ${MINUS} ${r}) / ${sigma} ${num3(redo) === sharpe ? "=" : "≈"} ${sharpe}`;
+}
 
 // ---- Returns ---------------------------------------------------------------------------------------
 
@@ -107,15 +124,15 @@ export function optimizationFormula(
   if (!t) {
     if (gmv) {
       if (!Number.isFinite(gmv.sigma)) return null;
-      return `Volatility = √(${D} × wᵀΣw), Σ the daily covariance, at its lowest over ${bounds(allowShort)}: ${pct2(gmv.sigma)}`;
+      return `Volatility = √(${D} × wᵀΣw), Σ the daily covariance, at its lowest in-sample over ${bounds(allowShort)}: ${pct2(gmv.sigma)}`;
     }
     if (![ew.mu, ew.sigma, ew.sharpe].every(Number.isFinite)) return null;
-    return `${SHARPE}, ${moments}, at equal weights: ${ratio(ew, rf)}`;
+    return `${SHARPE}, ${moments}, at equal weights, in-sample: ${ratio(ew, rf)}`;
   }
   if (![t.mu, t.sigma, t.sharpe].every(Number.isFinite)) return null;
-  if (!t.beatsRf) return `${SHARPE}, ${moments}, at its highest over ${bounds(allowShort)}: ${ratio(t, rf)}`;
+  if (!t.beatsRf) return `${SHARPE}, ${moments}, at its highest in-sample over ${bounds(allowShort)}: ${ratio(t, rf)}`;
   if (![ew.mu, ew.sigma, ew.sharpe].every(Number.isFinite)) return null;
-  return `${SHARPE}, ${moments}; maximum Sharpe, over ${bounds(allowShort)}: ${ratio(t, rf)}; equal weights: ${ratio(ew, rf)}`;
+  return `${SHARPE}, ${moments}; in-sample, maximum Sharpe over ${bounds(allowShort)}: ${ratio(t, rf)}; equal weights: ${ratio(ew, rf)}`;
 }
 
 // ---- Custom ----------------------------------------------------------------------------------------
@@ -127,10 +144,10 @@ export function optimizationFormula(
 export function customFormula(ok: boolean, p: Performance | null, rf: number, tangencySharpe: number | null): string | null {
   if (!ok || !p || !Number.isFinite(p.mu) || !Number.isFinite(p.sigma)) return null;
   if (!Number.isFinite(p.sharpe)) {
-    return `Return = ${D} × wᵀμ = ${pct2(p.mu)}, volatility = √(${D} × wᵀΣw) = ${pct2(p.sigma)}, so (return ${MINUS} r_f) / volatility has no value`;
+    return `In-sample, return = ${D} × wᵀμ = ${pct2(p.mu)}, volatility = √(${D} × wᵀΣw) = ${pct2(p.sigma)}, so (return ${MINUS} r_f) / volatility has no value`;
   }
-  const line = `${SHARPE} at the custom weights, μ and Σ the daily means and covariance: ${ratio(p, rf)}`;
-  return tangencySharpe !== null && Number.isFinite(tangencySharpe) ? `${line}; at the tangency weights: ${num3(tangencySharpe)}` : line;
+  const line = `${SHARPE} at the custom weights, μ and Σ the daily means and covariance, in-sample: ${ratio(p, rf)}`;
+  return tangencySharpe !== null && Number.isFinite(tangencySharpe) ? `${line}; at the tangency weights, in-sample: ${num3(tangencySharpe)}` : line;
 }
 
 // ---- Sensitivity -----------------------------------------------------------------------------------
@@ -147,6 +164,9 @@ export function sensitivityFormula(windows: number, tan: Swing | null, gmv: Swin
 
 // ---- Walk-forward ----------------------------------------------------------------------------------
 
+/** Which weights each walk-forward figure scores: one whole-window fit, then a fit before each hold. */
+const WALK_R = "r the daily returns of the maximum-Sharpe weights, fitted on the whole window for the first figure and refitted before each hold for the second";
+
 /**
  * Your basket: the maximum-Sharpe row's two figures, the whole window and the held-out days joined, each
  * one Sharpe ratio of that series under the run's rate convention.
@@ -156,7 +176,7 @@ export function liveFormula(rows: readonly LiveRow[], convention: Convention): s
   if (!tan || tan.inSample === null || tan.oos === null || !Number.isFinite(tan.inSample) || !Number.isFinite(tan.oos)) return null;
   const head = convention === "per-period" ? EXCESS_SHARPE : SERIES_SHARPE;
   return (
-    `${head}, r the maximum-Sharpe weights' daily returns: ${num3(tan.inSample)} over the whole window, ` +
+    `${head}, ${WALK_R}: ${num3(tan.inSample)} in-sample, over the whole window, and ` +
     `${num3(tan.oos)} over the held-out days joined`
   );
 }
@@ -165,7 +185,48 @@ export function liveFormula(rows: readonly LiveRow[], convention: Convention): s
 export function publishedFormula(inSample: string, oos: string, rf: number): string | null {
   if (!inSample || !oos || !Number.isFinite(rf)) return null;
   return (
-    `${SERIES_SHARPE}, r_f = ${pct1(rf)}, r the maximum-Sharpe weights' daily returns: ${inSample} over the whole window, ` +
+    `${SERIES_SHARPE}, r_f = ${pct1(rf)}, ${WALK_R}: ${inSample} in-sample, over the whole window, and ` +
     `${oos} over the held-out days joined`
   );
+}
+
+// ---- the spoken form -------------------------------------------------------------------------------
+
+// Each symbol the lines use, in words, longest first so a compound is read before its parts.
+const SPOKEN: readonly [RegExp, string][] = [
+  [/wᵀΣₖw/g, "w transpose Sigma k w"],
+  [/wᵀΣw/g, "w transpose Sigma w"],
+  [/wᵀμₖ/g, "w transpose mu k"],
+  [/wᵀμ/g, "w transpose mu"],
+  [/μₖ/g, "mu k"],
+  [/Σₖ/g, "Sigma k"],
+  [/μ/g, "mu"],
+  [/Σ/g, "Sigma"],
+  [/W₀/g, "W nought"],
+  [/σᵢ/g, "sigma i"],
+  [/σⱼ/g, "sigma j"],
+  [/rᵢ/g, "r i"],
+  [/rⱼ/g, "r j"],
+  [/ρ/g, "rho"],
+  [/r_f/g, "r f"],
+  [/cov\(/g, "the covariance of ("],
+  [/sd\(/g, "the standard deviation of ("],
+  [/mean\(/g, "the mean of ("],
+  [/√\(/g, "the square root of ("],
+  [/√/g, "the square root of "],
+  [/∏/g, "the product of "],
+  [/(\d+), …, (\d+)/g, "$1 through $2"],
+  [/(?:in )?\[([^,\]]+), ([^\]]+)\]/g, "from $1 to $2"],
+  [/ × /g, " times "],
+  [/ ≈ /g, " is about "],
+  [/ = /g, " equals "],
+  [/ \/ /g, " over "],
+  [/\//g, " over "],
+  [new RegExp(` ${MINUS} `, "g"), " minus "],
+  [new RegExp(MINUS, "g"), "minus "],
+];
+
+/** A formula line in words, for a screen reader: every symbol spelled out, every figure as printed. */
+export function spoken(line: string): string {
+  return SPOKEN.reduce((s, [re, words]) => s.replace(re, words), line);
 }
