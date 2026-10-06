@@ -192,9 +192,9 @@ check(svg.getAttribute("viewBox") === `0 0 ${L.width} ${L.height}` && svg.style.
   check(/overflow-x:\s*auto/.test(rule), "heatmap: a grid that cannot fit even at the floor scrolls sideways inside its own box", rule);
 }
 
-// The grid fits its box: the cell shrinks from CELL to fit, never below CELL_MIN, and below FIGURE_MIN
-// prints no figure (a tap, a pointer or the arrow keys read it). A phone's box at 375 is 343px; 358px
-// is the widest a phone column gets, so both are held.
+// The grid fits its box: the cell shrinks from CELL to fit, never below CELL_MIN, and prints no figure
+// under FIGURE_FONT_MIN (a tap, a pointer or the arrow keys read it). A phone's box at 375 is 343px;
+// 358px is the widest a phone column gets, so both are held.
 {
   const names = (k) => ["SPY", "QQQ", "IWM", "EFA", "EEM", "AGG", "TLT", "GLD", "VNQ", "DBC"].slice(0, k);
   const fits = [];
@@ -207,21 +207,32 @@ check(svg.getAttribute("viewBox") === `0 0 ${L.width} ${L.height}` && svg.style.
   const free = M.heatLayout(names(10));
   check(desk.cell === M.CELL && desk.font === M.FONT && desk.figures && JSON.stringify(desk) === JSON.stringify(free),
     "heatmap fit: on a desktop's box ten tickers keep the 48px cell and 12px figures, the layout unchanged", JSON.stringify(desk));
-  // The box whose cell is exactly FIGURE_MIN, and one px narrower per cell.
+  // The font floor, both ways, in the narrowest box whose cell is each size: five-character figures ("-0.24")
+  // reach 10px in a 34px cell ((34 - 4) / 3) and four-character ones ("0.86") in a 28px cell ((28 - 4) / 2.4).
   const left = free.left;
-  const at = M.heatLayout(names(10), left + 10 * M.FIGURE_MIN);
-  const under = M.heatLayout(names(10), left + 10 * M.FIGURE_MIN - 1);
-  check(at.cell === M.FIGURE_MIN && at.figures && under.cell === M.FIGURE_MIN - 1 && !under.figures,
-    "heatmap fit: figures are printed at a 29px cell and dropped just below it", `${at.cell} ${at.figures} / ${under.cell} ${under.figures}`);
+  const boxFor = (cell) => {
+    let box = left;
+    while (box < left + 10 * M.CELL && M.heatLayout(names(10), box).cell < cell) box++;
+    return box;
+  };
+  const edge = [[5, 34], [5, 33], [4, 28], [4, 27]].map(([chars, cell]) => M.heatLayout(names(10), boxFor(cell), chars));
+  const [at5, under5, at4, under4] = edge;
+  check(at5.cell === 34 && at5.figures && at5.font === 10 && under5.cell === 33 && !under5.figures &&
+    at4.cell === 28 && at4.figures && at4.font === 10 && under4.cell === 27 && !under4.figures,
+    "heatmap fit: figures print at 10px and drop under it, five characters at a 34px cell and not 33, four at 28 and not 27",
+    edge.map((H) => `${H.cell} ${H.figures} ${H.font}`).join(" / "));
   // A figure is never wider than its cell less 2px a side (JetBrains Mono's advance is 0.6 em).
   const wide = [];
-  for (let box = left + 10 * M.CELL_MIN; box <= left + 10 * M.CELL + 40; box += 7) {
-    const H = M.heatLayout(names(10), box, 5);
-    if (H.figures && !(5 * 0.6 * H.font <= H.cell - 4 + 1e-9 && H.font <= M.FONT)) wide.push(`${box}: ${H.font}px in ${H.cell}`);
+  const small = [];
+  for (let box = left + 10 * M.CELL_MIN; box <= left + 10 * M.CELL + 40; box += 7) for (const chars of [4, 5]) {
+    const H = M.heatLayout(names(10), box, chars);
+    if (H.figures && !(chars * 0.6 * H.font <= H.cell - 4 + 1e-9 && H.font <= M.FONT)) wide.push(`${box}: ${H.font}px in ${H.cell}`);
+    if (H.figures && H.font < 10) small.push(`${box}, ${chars} characters: ${H.font}px in ${H.cell}`);
   }
   check(wide.length === 0, "heatmap fit: a printed figure shrinks with its cell and stays inside it, never above 12px", wide.join("; "));
-  check(M.CELL_MIN === 26 && M.FIGURE_MIN === 29 && M.CELL === 48,
-    "heatmap fit: the decided numbers, a 48px cell, a 26px floor and no figure below 29px", `${M.CELL} ${M.CELL_MIN} ${M.FIGURE_MIN}`);
+  check(small.length === 0, "heatmap fit: every printed figure is at least 10px, at every width", small.join("; "));
+  check(M.CELL_MIN === 26 && M.FIGURE_FONT_MIN === 10 && M.CELL === 48,
+    "heatmap fit: the decided numbers, a 48px cell, a 26px floor and no figure under 10px", `${M.CELL} ${M.CELL_MIN} ${M.FIGURE_FONT_MIN}`);
   // Four-letter tickers turn their column labels once the cell shrinks; the last one, turned up and right
   // from its column's centre, must end inside the grid's width. Its reach is worked out here from the glyph
   // box (0.6 em an advance, the em box's 0.3 em descent below the baseline), rotated 45 degrees.
@@ -243,22 +254,25 @@ check(svg.getAttribute("viewBox") === `0 0 ${L.width} ${L.height}` && svg.style.
 
   // Drawn in a box too narrow for figures: no cell prints one, a tap reads a cell, and the keys walk it.
   const real = window.HTMLElement.prototype.getBoundingClientRect;
-  // Cells of FIGURE_MIN - 2 turn the labels, so the box also holds the last label's reach past the grid.
-  const narrow = M.heatLayout(cross.tickers).left + n * (M.FIGURE_MIN - 2) + Math.ceil(M.turnReach(3) - (M.FIGURE_MIN - 2) / 2) + 1;
-  window.HTMLElement.prototype.getBoundingClientRect = function () {
-    return this.classList?.contains("corr-heat-scroll") ? { x: 0, y: 0, top: 0, left: 0, width: narrow, height: 0, right: narrow, bottom: 0 } : real.call(this);
+  const drawIn = (width) => {
+    window.HTMLElement.prototype.getBoundingClientRect = function () {
+      return this.classList?.contains("corr-heat-scroll") ? { x: 0, y: 0, top: 0, left: 0, width, height: 0, right: width, bottom: 0 } : real.call(this);
+    };
+    try {
+      return render(h(Correlation, tabProps(cross)));
+    } finally {
+      window.HTMLElement.prototype.getBoundingClientRect = real;
+    }
   };
-  let s;
-  try {
-    s = render(h(Correlation, tabProps(cross)));
-  } finally {
-    window.HTMLElement.prototype.getBoundingClientRect = real;
-  }
+  // At CELL_MIN the labels turn, so the box also holds the last label's reach past the grid. The cross
+  // basket's figures are four characters (no correlation is negative), under 10px in a 26px cell.
+  const narrow = M.heatLayout(cross.tickers).left + n * M.CELL_MIN + Math.ceil(M.turnReach(3) - M.CELL_MIN / 2) + 1;
+  const s = drawIn(narrow);
   const grid = s.container.querySelector("svg.corr-heat-svg");
   const read = () => text(s.container.querySelector(".corr-readout"));
-  const nb = M.heatLayout(cross.tickers, narrow);
-  check(grid.getAttribute("viewBox") === `0 0 ${nb.width} ${nb.height}` && nb.width <= narrow && grid.querySelectorAll("g.corr-cell text").length === 0 &&
-    s.container.querySelectorAll("g.corr-cell").length === n * n,
+  const nb = M.heatLayout(cross.tickers, narrow, 4);
+  check(grid.getAttribute("viewBox") === `0 0 ${nb.width} ${nb.height}` && nb.width <= narrow && nb.cell === M.CELL_MIN && nb.turned && !nb.figures &&
+    grid.querySelectorAll("g.corr-cell text").length === 0 && s.container.querySelectorAll("g.corr-cell").length === n * n,
     "heatmap fit: drawn in a narrow box, the grid takes the fitted layout and its cells print no figure", `${grid.getAttribute("viewBox")} in ${narrow}`);
   act(() => {
     s.container.querySelector('g.corr-cell[data-cell="1,2"]').dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -273,6 +287,14 @@ check(svg.getAttribute("viewBox") === `0 0 ${L.width} ${L.height}` && svg.style.
     grid.getAttribute("tabindex") === "0",
     "heatmap fit: with no figure printed, a tap reads the cell and the arrow keys move the reading on a focusable grid", `${tapped} / ${stepped}`);
   s.unmount();
+  // Whether a cell prints at all now turns on the widest figure, which the grid reads off the matrix: a
+  // 28px cell is too small for five characters at 10px but holds the cross basket's four.
+  const at28 = M.heatLayout(cross.tickers).left + n * 28;
+  const w = drawIn(at28);
+  const figs = [...w.container.querySelectorAll("g.corr-cell text")];
+  check(M.heatLayout(cross.tickers, at28).cell === 28 && figs.length === n * n && figs.every((f) => f.getAttribute("font-size") === "10"),
+    "heatmap fit: the grid sizes figures by the matrix's widest, so a 28px cell prints four-character figures at 10px", `${figs.length} at ${figs[0]?.getAttribute("font-size")}`);
+  w.unmount();
 }
 
 // The heatmap's hover. The app: style_chart runs AFTER the heatmap's layout (1435) and sets hovermode
