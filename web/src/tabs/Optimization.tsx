@@ -22,6 +22,7 @@ import { usePhone } from "../chrome/usePhone.ts";
 import AddColumns from "../components/AddColumns.tsx";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
+import FormulaLine from "../components/FormulaLine.tsx";
 import Plate from "../components/Plate.tsx";
 import Scorecard from "../components/Scorecard.tsx";
 import SegControl from "../components/SegControl.tsx";
@@ -34,6 +35,7 @@ import type { Custom } from "../lib/portfolio.ts";
 import type { Analysis, Level, LoadState, TabProps } from "../types.ts";
 import { FITTED, fittedSubs, tableSpan } from "./caption.ts";
 import FittedNote from "./FittedNote.tsx";
+import { optimizationFormula } from "./formula.ts";
 import Bars from "./optimization/Bars.tsx";
 import DotStrips from "./optimization/DotStrips.tsx";
 import { seedOf, useAddedStrips, useRedraws } from "./optimization/redraws.ts";
@@ -49,6 +51,7 @@ import {
   frontierTitle,
   headline,
   METRICS,
+  portRow,
   prcTable,
   SHARE_LABEL,
   SHARE_PORTS,
@@ -129,8 +132,13 @@ const spanOf = (a: Analysis) => tableSpan(a.dates[0], a.asOf);
 
 const shortNote = `Shorting is on: each weight is bounded to [${MINUS}100%, 100%], and the weights sum to 100%.`;
 
-const Headline = memo(function Headline({ a }: { a: Analysis }) {
-  return <h2 className="tab-finding opt-headline">{headline(a)}</h2>;
+const Headline = memo(function Headline({ a, level }: { a: Analysis; level: Level }) {
+  return (
+    <>
+      <h2 className="tab-finding opt-headline">{headline(a)}</h2>
+      <FormulaLine level={level} build={() => optimizationFormula(a.tangency, a.gmv, portRow(a, a.ew), a.rf, a.allowShort)} />
+    </>
+  );
 });
 
 /** An added construction as the frontier takes it: its id, its head, its weights. */
@@ -398,7 +406,7 @@ export default function Optimization({ analysis: a, settings, level, weights, re
   return (
     <div className="opt" data-tab="optimization">
       <Boundary name="The headline" resetKey={a}>
-        <Headline a={a} />
+        <Headline a={a} level={level} />
       </Boundary>
       <Boundary name="Efficient frontier" resetKey={c}>
         <FrontierSection a={a} custom={custom} added={marks} />

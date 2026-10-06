@@ -28,6 +28,7 @@
 // tab has painted, on the first draw set's seed, the same one the Optimization tab opens on.
 import { memo, useCallback, useId, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
+import FormulaLine from "../components/FormulaLine.tsx";
 import Plate from "../components/Plate.tsx";
 import Scorecard from "../components/Scorecard.tsx";
 import Slug from "../components/Slug.tsx";
@@ -60,6 +61,7 @@ import {
   type CustomView,
 } from "./custom/model.ts";
 import "./custom/Custom.css";
+import { customFormula } from "./formula.ts";
 import { SIDE_FRONTIER_HEIGHT, useSideBySide } from "./custom/layout.ts";
 import { finiteSE } from "./optimization/model.ts";
 import { seedOf, useRedraws } from "./optimization/redraws.ts";
@@ -67,8 +69,13 @@ import { scorecard, type RedrawState } from "./optimization/scorecard.ts";
 
 const TABLE_TITLE = "Normalized Weights";
 
-const Headline = memo(function Headline({ a, v }: { a: Analysis; v: CustomView }) {
-  return <h2 className="tab-finding cust-headline">{headline(a, v)}</h2>;
+const Headline = memo(function Headline({ a, v, level }: { a: Analysis; v: CustomView; level: Level }) {
+  return (
+    <>
+      <h2 className="tab-finding cust-headline">{headline(a, v)}</h2>
+      <FormulaLine level={level} build={() => customFormula(v.custom.ok, v.custom.ok ? customMetrics(a, v.custom.w) : null, a.rf, a.tangency ? a.tangency.sharpe : null)} />
+    </>
+  );
 });
 
 // One asset's weight: a slider for dragging on the app's 0.01 grid (1720) and a field for typing any
@@ -255,7 +262,7 @@ export default function Custom({ analysis: a, settings, level, weights, setWeigh
   return (
     <div className="cust" data-tab="custom">
       <Boundary name="The headline" resetKey={v}>
-        <Headline a={a} v={v} />
+        <Headline a={a} v={v} level={level} />
       </Boundary>
       <Slug>Custom Portfolio Builder</Slug>
       {/* Weights, figures, frontier: the keyboard order at every width, and the reading order below the

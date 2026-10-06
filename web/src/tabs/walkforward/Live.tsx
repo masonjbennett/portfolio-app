@@ -24,12 +24,14 @@
 // sentence with a number in it live in ./live.ts.
 import { memo, useMemo, useState } from "react";
 import Boundary from "../../components/Boundary.tsx";
+import FormulaLine from "../../components/FormulaLine.tsx";
 import SegControl from "../../components/SegControl.tsx";
 import Slug from "../../components/Slug.tsx";
 import Table from "../../components/Table.tsx";
 import Tip from "../../components/Tip.tsx";
 import { DEFAULT_WALK, type Construction, type FitMode, type HoldRows, type Walk, type WalkOptions } from "../../lib/walkforward.ts";
 import type { Analysis, Level, Settings, WalkRates } from "../../types.ts";
+import { liveFormula } from "../formula.ts";
 import Dumbbell from "./Dumbbell.tsx";
 import {
   belowRateNote,
@@ -92,6 +94,7 @@ const Figures = memo(function Figures({ a, w, level, terms }: { a: Analysis; w: 
     <section className="wfl-section" aria-labelledby="wfl-figures">
       <Slug id="wfl-figures">{PAIR_HEADING}</Slug>
       {decay ? <p className="wfl-finding">{decay}</p> : null}
+      {decay ? <FormulaLine level={level} build={() => liveFormula(rows, w.convention)} /> : null}
       <Bells rows={rows} />
       <p className="wfl-key">
         <span className="wfl-key-name">About the columns below:</span>

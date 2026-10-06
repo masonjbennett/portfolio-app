@@ -18,6 +18,7 @@
 //     replay.
 // The solver note is worked out here, not written: it names whichever of the nine the exact solve prints
 // differently, so a regenerated record cannot leave it saying the wrong thing.
+import FormulaLine from "../../components/FormulaLine.tsx";
 import Slug from "../../components/Slug.tsx";
 import Table from "../../components/Table.tsx";
 import {
@@ -33,6 +34,7 @@ import { WALK_AGG, WALK_APPLE, WALK_RF, WALK_RUNS, type ByConstruction, type Pub
 import { format } from "../../format.ts";
 import type { Column, Level, TableRow } from "../../types.ts";
 import { FITTED, tableSpan, windowsSpan } from "../caption.ts";
+import { publishedFormula } from "../formula.ts";
 import { PAIR_HEADING, RERUN_START } from "./terms.ts";
 import "./Published.css";
 
@@ -129,7 +131,7 @@ function NineTable() {
   );
 }
 
-function Decay() {
+function Decay({ level }: { level: Level }) {
   // 1.107 belongs to the mega-caps' run alone: found by its key, never by position.
   const mega = PAIRS.find((p) => p.run.key === "megacap5");
   if (!mega) return null;
@@ -163,6 +165,7 @@ function Decay() {
           </dd>
         </div>
       </dl>
+      <FormulaLine level={level} build={() => publishedFormula(MEGA_CAP_IN_SAMPLE, pub.tangency, WALK_RF)} />
     </>
   );
 }
@@ -314,7 +317,7 @@ function SetSection({ run, pub, rerun }: { run: PublishedRun; pub: PublishedSet;
   );
 }
 
-export default function Published({ rerun }: PublishedProps) {
+export default function Published({ level, rerun }: PublishedProps) {
   return (
     <div className="wfp" data-segment="published">
       <p className="wfp-lede">
@@ -330,7 +333,7 @@ export default function Published({ rerun }: PublishedProps) {
       <SolverNote />
 
       <Slug>{PAIR_HEADING}</Slug>
-      <Decay />
+      <Decay level={level} />
 
       <Slug>How the test was run</Slug>
       <Convention />

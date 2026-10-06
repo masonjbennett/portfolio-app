@@ -10,6 +10,7 @@
 import { memo, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
+import FormulaLine from "../components/FormulaLine.tsx";
 import Plate from "../components/Plate.tsx";
 import SegControl from "../components/SegControl.tsx";
 import Slug from "../components/Slug.tsx";
@@ -18,6 +19,7 @@ import Tip from "../components/Tip.tsx";
 import { format } from "../format.ts";
 import { tableSpan } from "./caption.ts";
 import type { Analysis, CustomWeights, Level, TabProps } from "../types.ts";
+import { riskFormula } from "./formula.ts";
 import { customWeights } from "./optimization/model.ts";
 import type { ScoreColId } from "./optimization/scorecard.ts";
 import { portfolioSeries, seriesOptions, seriesSubs } from "./returns/years.ts";
@@ -65,8 +67,13 @@ interface SectionProps {
   allowShort: boolean;
 }
 
-const Headline = memo(function Headline({ a }: { a: Analysis }) {
-  return <h2 className="tab-finding risk-headline">{headline(a)}</h2>;
+const Headline = memo(function Headline({ a, level }: { a: Analysis; level: Level }) {
+  return (
+    <>
+      <h2 className="tab-finding risk-headline">{headline(a)}</h2>
+      <FormulaLine level={level} build={() => riskFormula(worstDrawdown(tickerDrawdowns(a)))} />
+    </>
+  );
 });
 
 // The portfolios in a fall: a pill picks one of the scorecard's columns and the table lists its deepest
@@ -256,7 +263,7 @@ export default function Risk({ analysis: a, level, weights }: TabProps) {
   return (
     <div className="risk" data-tab="risk">
       <Boundary name="The headline" resetKey={a}>
-        <Headline a={a} />
+        <Headline a={a} level={level} />
       </Boundary>
       <Boundary name="The portfolios in a fall" resetKey={a}>
         <Falls a={a} weights={weights} />

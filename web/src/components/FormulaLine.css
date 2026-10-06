@@ -1,0 +1,11 @@
+/* The formula line under a tab's finding: the data face at the body's size, in the second ink, at a
+   reading measure. A long symbol run breaks rather than pushing the page sideways on a phone. */
+.formula-line {
+  max-width: 680px;
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-ink2);
+  overflow-wrap: anywhere;
+}

@@ -206,10 +206,12 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
           Explanation level
         </h2>
         <SegControl options={LEVEL_OPTIONS} value={level} onChange={setLevel} ariaLabel="Explanation level" />
-        {/* The app's caption (657-663), with the port's names for the three levels. */}
+        {/* The app's caption (657-663), with the port's names for the three levels. The port's Formula level
+            also adds a visible line under each tab's finding, so the caption says so. */}
         <p className="rail-note">
           How much the info marks beside each figure explain. Plain = plain English. Finance = finance terms. Formula =
-          formulas.
+          formulas, and one more line under each tab's finding: the formula behind its figure, with this basket's numbers
+          in it.
         </p>
       </section>
 

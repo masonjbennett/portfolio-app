@@ -12,6 +12,7 @@
 import { memo } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
+import FormulaLine from "../components/FormulaLine.tsx";
 import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import Tip from "../components/Tip.tsx";
@@ -19,6 +20,7 @@ import type { Analysis, Level, TabProps } from "../types.ts";
 import { tableSpan } from "./caption.ts";
 import Heatmap from "./correlation/Heatmap.tsx";
 import Rolling from "./correlation/Rolling.tsx";
+import { correlationFormula } from "./formula.ts";
 import {
   CORR_FORMAT,
   corrView,
@@ -36,7 +38,7 @@ export default function Correlation({ analysis, level }: TabProps) {
   return (
     <section className="corr-tab" aria-labelledby="corr-headline">
       <Boundary name="Correlation headline" resetKey={analysis}>
-        <Headline analysis={analysis} />
+        <Headline analysis={analysis} level={level} />
       </Boundary>
       <Boundary name="Correlation heatmap" resetKey={analysis}>
         <HeatCard analysis={analysis} />
@@ -53,13 +55,15 @@ export default function Correlation({ analysis, level }: TabProps) {
   );
 }
 
-const Headline = memo(function Headline({ analysis }: { analysis: Analysis }) {
+const Headline = memo(function Headline({ analysis, level }: { analysis: Analysis; level: Level }) {
+  const v = corrView(analysis);
   return (
     <header className="corr-head">
       <p className="corr-kicker">How the assets move together</p>
       <h2 className="tab-finding corr-headline" id="corr-headline">
-        {headline(corrView(analysis))}
+        {headline(v)}
       </h2>
+      <FormulaLine level={level} build={() => correlationFormula(v)} />
     </header>
   );
 });

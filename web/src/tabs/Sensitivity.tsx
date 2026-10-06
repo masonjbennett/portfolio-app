@@ -10,14 +10,16 @@
 import { memo, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
+import FormulaLine from "../components/FormulaLine.tsx";
 import SegControl from "../components/SegControl.tsx";
 import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import Tip from "../components/Tip.tsx";
 import { ROLE } from "../charts/theme.ts";
 import { format, MINUS } from "../format.ts";
-import type { Column, LoadState, TableRow, TabProps } from "../types.ts";
+import type { Column, Level, LoadState, TableRow, TabProps } from "../types.ts";
 import { windowsSpan } from "./caption.ts";
+import { sensitivityFormula } from "./formula.ts";
 import GroupedBars, { type Series } from "./sensitivity/GroupedBars.tsx";
 import {
   belowRf,
@@ -33,6 +35,7 @@ import {
   PORT_NAME,
   sharpeChartTitle,
   sharpeGroups,
+  swing,
   tableState,
   weightChartTitle,
   weightColumns,
@@ -130,7 +133,7 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
   return (
     <section className="sens" aria-label="Sensitivity">
       <Boundary name="The headline" resetKey={fitted}>
-        <Finding fits={fits} tickers={a.tickers} />
+        <Finding fits={fits} tickers={a.tickers} rf={a.rf} allowShort={a.allowShort} level={level} />
       </Boundary>
       <Slug>Estimation Window Sensitivity</Slug>
       <p className="sens-caption">
@@ -176,8 +179,18 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
   );
 }
 
-const Finding = memo(function Finding({ fits, tickers }: { fits: WindowFit[]; tickers: string[] }) {
-  return <h2 className="tab-finding sens-finding">{headline(fits, tickers)}</h2>;
+const Finding = memo(function Finding(
+  { fits, tickers, rf, allowShort, level }: { fits: WindowFit[]; tickers: string[]; rf: number; allowShort: boolean; level: Level },
+) {
+  return (
+    <>
+      <h2 className="tab-finding sens-finding">{headline(fits, tickers)}</h2>
+      <FormulaLine
+        level={level}
+        build={() => sensitivityFormula(fits.length, swing(fits, "tan", tickers), swing(fits, "gmv", tickers), rf, allowShort)}
+      />
+    </>
+  );
 });
 
 const WeightChart = memo(function WeightChart({ fits, port, setPort, tickers }: { fits: WindowFit[]; port: Port; setPort: (p: Port) => void; tickers: string[] }) {

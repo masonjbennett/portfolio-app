@@ -10,6 +10,7 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
+import FormulaLine from "../components/FormulaLine.tsx";
 import SegControl from "../components/SegControl.tsx";
 import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
@@ -18,6 +19,7 @@ import AmountField from "../charts/AmountField.tsx";
 import { format } from "../format.ts";
 import type { Analysis, CustomWeights, Level, TabProps } from "../types.ts";
 import { tableSpan } from "./caption.ts";
+import { returnsFormula } from "./formula.ts";
 import { customWeights } from "./optimization/model.ts";
 import type { ScoreColId } from "./optimization/scorecard.ts";
 import { HistChart, QQChart } from "./returns/DistCharts.tsx";
@@ -28,7 +30,7 @@ import {
   YEARS_FILE, YEARS_TITLE,
 } from "./returns/years.ts";
 import {
-  dek, growth, GROWTH_COLUMNS, GROWTH_FILE, growthRows, growthState, growthTitle, headline, histogram, histTitle,
+  amountOk, dek, growth, GROWTH_COLUMNS, GROWTH_FILE, growthRows, growthState, growthTitle, headline, histogram, histTitle,
   linesOf, qqState, qqTitle, SUMMARY_COLUMNS, SUMMARY_FILE, summaryRows, BINS,
 } from "./returns/model.ts";
 import { useWidth } from "./returns/useWidth.ts";
@@ -37,12 +39,13 @@ import "./returns/Returns.css";
 const GROWTH_H = 420;
 const DIST_H = 360;
 
-const Lead = memo(function Lead({ a, amount }: { a: Analysis; amount: number }) {
+const Lead = memo(function Lead({ a, amount, level }: { a: Analysis; amount: number; level: Level }) {
   const g = useMemo(() => growth(a, amount), [a, amount]);
   return (
     <header className="ret-lead">
       <p className="ret-kicker">Growth, summary statistics and the shape of daily returns</p>
       <h2 className="tab-finding ret-finding">{headline(g)}</h2>
+      <FormulaLine level={level} build={() => returnsFormula(g, amountOk(g.amount))} />
       <p className="ret-dek">{dek(a)}</p>
     </header>
   );
@@ -252,7 +255,7 @@ export default function Returns({ analysis, settings, level, weights, requestSet
   return (
     <div className="ret">
       <Boundary name="Returns headline" resetKey={analysis}>
-        <Lead a={analysis} amount={amount} />
+        <Lead a={analysis} amount={amount} level={level} />
       </Boundary>
       <Boundary name="Cumulative growth" resetKey={analysis}>
         <GrowthCard a={analysis} amount={amount} onAmount={onAmount} />
