@@ -391,9 +391,10 @@ const NAME_INK = 0.72 * 12;
 
 /**
  * Which end-of-line names are drawn, the last step after endLabels: each sits right of the plot at its
- * spread value, its box the ink of a capital, and is left off when that box leaves the chart, top or
- * bottom (`chartPx` tall), or meets a name drawn before it. `ends` are endLabels' values on [0, yMax].
- * The ends are spread apart already, so this leaves a name off only when the stack outgrows the chart.
+ * spread value, its box the ink of a capital, and is left off when that box leaves the chart's top, sinks
+ * below a name centred on the plot's foot (under it, in the right margin, the x axis' last year can sit),
+ * or meets a name drawn before it. `ends` are endLabels' values on [0, yMax]; the chart is `chartPx` tall.
+ * The ends are spread apart already, so this leaves a name off only when the stack outgrows the plot.
  */
 export function volEndsDrawn(ends: readonly number[], yMax: number, plot: PlotArea, chartPx: number): boolean[] {
   const py = (v: number) => plot.y + (yMax > 0 ? (1 - v / yMax) * plot.height : 0);
@@ -401,7 +402,8 @@ export function volEndsDrawn(ends: readonly number[], yMax: number, plot: PlotAr
     const mid = py(v);
     return Number.isFinite(mid) ? [{ lo: 0, hi: 1, top: mid - NAME_INK / 2, bot: mid + NAME_INK / 2 }] : [];
   });
-  return cullLabels(spots, [], { lo: 0, hi: 1, top: 0, bot: chartPx }).map((k) => k >= 0);
+  const foot = Math.min(chartPx, plot.y + plot.height + NAME_INK / 2);
+  return cullLabels(spots, [], { lo: 0, hi: 1, top: 0, bot: foot }).map((k) => k >= 0);
 }
 
 /** The market line's name on the beta chart. */

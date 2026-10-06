@@ -599,9 +599,17 @@ const W0 = o.w0;
     const stops = [...rr.container.querySelectorAll("g.culled-name")];
     const line = rr.container.querySelector(".chart-cull");
     const drawnNames = [...rr.container.querySelectorAll(".frontier-labels .direct-label")].map((g) => g.getAttribute("data-label"));
-    check(stops.length > 0 && line && line.textContent === F.frontierCull(stops.length) && stops.every((g) => sec.tickers.includes(g.getAttribute("aria-label")) && !drawnNames.includes(g.getAttribute("aria-label"))),
+    // A stop is spoken as its asset and its point's two figures: "XLRE: volatility 21.99%, return 9.87%".
+    const tickerOf = (g) => (g.getAttribute("aria-label") ?? "").split(":")[0];
+    check(stops.length > 0 && line && line.textContent === F.frontierCull(stops.length) && stops.every((g) => sec.tickers.includes(tickerOf(g)) && !drawnNames.includes(tickerOf(g))),
       "frontier cull: drawn at 150px, the asset names left off are counted in one line under the chart and none is also drawn", `${stops.length} | ${line ? line.textContent : "no line"}`);
-    const name = stops[0]?.getAttribute("aria-label");
+    const points = F.frontierData(sec, sec.ew).assets;
+    const spokenOk = stops.every((g) => {
+      const p = points.find((x) => x.ticker === tickerOf(g));
+      return !!p && g.getAttribute("aria-label") === `${p.ticker}: volatility ${format(p.sigma, "pct2")}, return ${format(p.mu, "pct2")}`;
+    });
+    check(spokenOk, "frontier cull: each stop names its asset and its point's volatility and return", stops.map((g) => g.getAttribute("aria-label")).join(" / "));
+    const name = stops[0] ? tickerOf(stops[0]) : null;
     const before = stops[0]?.querySelector("text");
     if (stops[0]) act(() => stops[0].dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
     const during = rr.container.querySelector("g.culled-name text");

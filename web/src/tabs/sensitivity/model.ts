@@ -260,12 +260,31 @@ export function labelLayout(groups: Group[], labelPx: number, plotPx: number): {
 export const BAR_SPACING = { categoryGap: 0.16, barGap: 1 } as const;
 
 /**
- * Which series names are drawn on the label group, the last step after labelLayout. Each name runs up
- * from 4px over its own bar's top edge (the zero line for a bar that points down), its box across the
- * ink of its letters (the face's cap height, 0.70 em; 0.90 em with a descender) centred on its bar; it
- * is left off when that box
+ * Where Recharts sets `k` bars side by side in a band `band` px wide (recharts 3's getBarPositions, for
+ * bars with no size of their own): a gap of BAR_SPACING.categoryGap of the band each side, the rest less
+ * the 1px gaps shared out and rounded to whole px once over 1px; the 1px gaps dropped when they leave no
+ * room. `at(i)` is bar i's left edge from the band's left.
+ */
+export function barSlots(band: number, k: number): { size: number; at: (i: number) => number } {
+  const gap = BAR_SPACING.categoryGap * band;
+  const between = band - 2 * gap - (k - 1) * BAR_SPACING.barGap <= 0 ? 0 : BAR_SPACING.barGap;
+  const share = (band - 2 * gap - (k - 1) * between) / k;
+  const size = share > 1 ? Math.round(share) : share;
+  return { size, at: (i) => gap + i * (size + between) };
+}
+
+// The ink of a name's letters across the bar: the face's cap height, measured as 8.00px at 11px in
+// Chromium (canvas actualBoundingBoxAscent of "1Y"), and 0.2 em more for a descender.
+const CAP_EM = 8 / 11;
+const DESCENDER_EM = 0.2;
+
+/**
+ * Which series names are drawn on the label group, the last step after labelLayout: true drawn, false
+ * left off, null for a series with no bar there to name (its value is missing), which is neither drawn
+ * nor counted. Each name runs up from 4px over its own bar's top edge (the zero line for a bar that
+ * points down), its box across the ink of its letters centred on its bar; it is left off when that box
  * meets a name drawn before it, another bar of the group, or runs out of the chart's top. `plot` is the
- * plot's box in px and [lo, hi] the y axis' domain; bars sit in their band as Recharts sets them.
+ * plot's box in px and [lo, hi] the y axis' domain; bars sit in their band as Recharts sets them (barSlots).
  */
 export function namesDrawn(
   groups: readonly Group[],
@@ -275,31 +294,36 @@ export function namesDrawn(
   lo: number,
   hi: number,
   fontPx = 11,
-): boolean[] {
+): (boolean | null)[] {
   const g = groups[host];
   const k = labels.length;
-  if (!g || !k || !(plot.width > 0) || !(plot.height > 0) || !(hi > lo)) return labels.map(() => true);
-  const band = plot.width / groups.length;
-  const gap = BAR_SPACING.categoryGap * band;
-  // Recharts' own sizing, measured in the drawn chart: the band less its gaps, shared, floored to whole
-  // px once over 1px; the 1px between bars is added after (at 1,440 px with ten groups a bar is 11px at a 12px pitch).
-  const share = (band - 2 * gap) / k;
-  const size = share > 1 ? Math.floor(share) : share;
-  const py = (v: number) => plot.y + ((hi - v) / (hi - lo)) * plot.height;
-  const left = (i: number) => plot.x + host * band + gap + i * (size + BAR_SPACING.barGap);
-  const v = (i: number) => {
-    const x = g.values[i];
-    return x !== null && x !== undefined && Number.isFinite(x) ? x : 0;
+  const has = (i: number) => {
+    const x = g?.values[i];
+    return x !== null && x !== undefined && Number.isFinite(x);
   };
-  const bars: Rect[] = labels.map((_, i) => ({ lo: left(i), hi: left(i) + size, top: py(Math.max(0, v(i))), bot: py(Math.min(0, v(i))) }));
+  if (!g || !k || !(plot.width > 0) || !(plot.height > 0) || !(hi > lo)) return labels.map((_, i) => (has(i) ? true : null));
+  const band = plot.width / groups.length;
+  const slot = barSlots(band, k);
+  const py = (v: number) => plot.y + ((hi - v) / (hi - lo)) * plot.height;
+  const left = (i: number) => plot.x + host * band + slot.at(i);
+  const v = (i: number) => (has(i) ? (g.values[i] as number) : 0);
+  // Only the bars drawn are in the way: a missing value draws none.
+  const bars: Rect[] = labels.flatMap((_, i) =>
+    has(i) ? [{ lo: left(i), hi: left(i) + slot.size, top: py(Math.max(0, v(i))), bot: py(Math.min(0, v(i))) }] : [],
+  );
+  const own = (i: number) => {
+    const b = { lo: left(i), hi: left(i) + slot.size };
+    return bars.filter((r) => r.lo !== b.lo || r.hi !== b.hi);
+  };
   const spots = labels.map((t, i) => {
-    const cx = left(i) + size / 2;
-    const ink = (/[gjpqy,]/.test(t) ? 0.9 : 0.7) * fontPx;
+    if (!has(i)) return [];
+    const cx = left(i) + slot.size / 2;
+    const ink = (CAP_EM + (/[gjpqy,]/.test(t) ? DESCENDER_EM : 0)) * fontPx;
     const bot = py(Math.max(0, v(i))) - 4;
     return [{ lo: cx - ink / 2, hi: cx + ink / 2, top: bot - textWidth(t, fontPx), bot }];
   });
-  const at = cullLabels(spots, (i) => bars.filter((_, j) => j !== i), { lo: -Infinity, hi: Infinity, top: 0, bot: Infinity });
-  return at.map((x) => x >= 0);
+  const at = cullLabels(spots, own, { lo: -Infinity, hi: Infinity, top: 0, bot: Infinity });
+  return at.map((x, i) => (has(i) ? x >= 0 : null));
 }
 
 /**

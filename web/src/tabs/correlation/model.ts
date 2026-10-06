@@ -304,14 +304,30 @@ export function heatLayout(tickers: string[], box?: number, figureChars = 5): He
   const longest = Math.max(1, ...tickers.map((t) => t.length));
   const left = Math.ceil(longest * CHAR) + 12;
   const n = tickers.length;
-  const fit = box !== undefined && box > 0 && n > 0 ? Math.floor((box - left) / n) : CELL;
-  const cell = Math.max(CELL_MIN, Math.min(CELL, fit));
-  const turned = longest * CHAR > cell - 6;
+  const measured = box !== undefined && box > 0 && n > 0;
+  let cell = Math.max(CELL_MIN, Math.min(CELL, measured ? Math.floor((box - left) / n) : CELL));
+  let turned = longest * CHAR > cell - 6;
+  if (turned && measured) {
+    // A turned label runs up and right from its column's centre, so the last one reaches past the grid by
+    // turnReach less half a cell: room the box must hold too (and 1px for rounding that reach up), so
+    // the cell is fitted again with that room taken off.
+    cell = Math.max(CELL_MIN, Math.min(cell, Math.floor((box - left - turnReach(longest) - 1) / (n - 0.5))));
+    turned = longest * CHAR > cell - 6;
+  }
+  const reach = turned ? Math.max(0, Math.ceil(turnReach(longest) - cell / 2)) : 0;
   const top = turned ? Math.ceil(longest * CHAR * Math.SQRT1_2) + 14 : FONT + 12;
   const figures = cell >= FIGURE_MIN;
   // JetBrains Mono's advance is 0.6 em: the widest figure keeps 2px clear each side of its cell.
   const font = Math.min(FONT, Math.floor(((cell - 4) / (Math.max(1, figureChars) * 0.6)) * 10) / 10);
-  return { left, top, turned, width: left + n * cell, height: top + n * cell, cell, figures, font };
+  return { left, top, turned, width: left + n * cell + reach, height: top + n * cell, cell, figures, font };
+}
+
+/**
+ * How far right of its column's centre a label turned 45 degrees reaches: its run of `chars` characters
+ * at the labels' size (FONT - 1, 0.6 em an advance) and the depth of its glyphs, each across by √½.
+ */
+export function turnReach(chars: number): number {
+  return (chars * (FONT - 1) * 0.6 + (FONT - 1) * 0.75) * Math.SQRT1_2;
 }
 
 /** The cell an arrow key moves the reading to from `at` (the first cell when nothing is read yet), or null for any other key. */

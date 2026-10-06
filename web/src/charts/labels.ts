@@ -64,29 +64,21 @@ const within = (a: Rect, b: Rect) => a.lo >= b.lo && a.hi <= b.hi && a.top >= b.
 
 /**
  * Which spot each label is drawn at, or -1 for a label left off. `spots[i]` is label i's candidate
- * boxes, its packer's choice first. A label marked by `keep` is always drawn, at its first spot, and is
- * taken before the rest; every other label is taken in order and drawn at its first spot that meets no
+ * boxes, its packer's choice first. Labels are taken in order, each drawn at its first spot that meets no
  * label drawn before it and no mark (a bar, a marker, a reference line's name) and, given `bounds`,
  * stays inside them. A label is left off only when every one of its spots fails. `marks` may be a
- * function of the label, for a label that may sit on its own mark (a value inside its own bar).
+ * function of the label, for a label that may sit on its own mark (a value inside its own bar). A name
+ * that must never be left off is not given to it: it goes in `marks`, as the beta chart's market line does.
  */
 export function cullLabels(
   spots: readonly (readonly Rect[])[],
   marks: readonly Rect[] | ((i: number) => readonly Rect[]) = [],
   bounds?: Rect,
-  keep: (i: number) => boolean = () => false,
 ): number[] {
   const at = spots.map(() => -1);
   const drawn: Rect[] = [];
   const marksOf = typeof marks === "function" ? marks : () => marks;
   spots.forEach((s, i) => {
-    if (keep(i) && s.length) {
-      at[i] = 0;
-      drawn.push(s[0]);
-    }
-  });
-  spots.forEach((s, i) => {
-    if (keep(i)) return;
     const own = marksOf(i);
     const k = s.findIndex((r) => (!bounds || within(r, bounds)) && !own.some((m) => meets(m, r)) && !drawn.some((d) => meets(d, r)));
     if (k >= 0) {
@@ -133,14 +125,21 @@ const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eig
 /**
  * The one line under a chart that left names off, or null when it left none: how many, and how to read
  * them. `what` names what was left off and `how` says how to read it, each as [one, many]: ["value",
- * "values"], ["hover or tap its bar to read it", "hover or tap a bar to read one"].
+ * "values"], ["hover or tap its bar to read it", "hover or tap a bar to read one"]. `why` is the cause in
+ * the chart's own terms, [one, many]: names that collide "would overlap"; a chart that also leaves off a
+ * name for running out of the chart says "would not fit".
  */
-export function cullNote(count: number, what: readonly [string, string], how: readonly [string, string]): string | null {
+export function cullNote(
+  count: number,
+  what: readonly [string, string],
+  how: readonly [string, string],
+  why: readonly [string, string] = ["would overlap", "would overlap"],
+): string | null {
   if (!(count > 0)) return null;
   const n = Number.isInteger(count) && count < COUNT.length ? COUNT[count] : String(count);
   return count === 1
-    ? `${n} ${what[0]} that would overlap is left off; ${how[0]}.`
-    : `${n} ${what[1]} that would overlap are left off; ${how[1]}.`;
+    ? `${n} ${what[0]} that ${why[0]} is left off; ${how[0]}.`
+    : `${n} ${what[1]} that ${why[1]} are left off; ${how[1]}.`;
 }
 
 /** The note's face: the sans at 12px in ink2, as the frontier's key line under its chart. */

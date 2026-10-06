@@ -270,6 +270,22 @@ for (const set of ["cross", "megacap"]) {
     each(M.sharpeGroups(ef, ex.tickers.map(() => 1 / ex.tickers.length), ex.rf), ["GMV", "Tangency", "Custom"], w, 380, 1);
   }
   check(ef.length === 5 && lost.length === 0, "cull: at the default example no bar name is left off on either chart, at any width", lost.join("; "));
+  // On a 360px phone the chart is 328px: Recharts draws the default's bars 6px wide at a 7px pitch, under
+  // the names' 8px ink, so every other window name is left off (at 343px the pitch is 8 and all are drawn).
+  const narrow = [];
+  for (const port of ["tan", "gmv"]) {
+    const g = M.weightGroups(ef, port, ex.tickers);
+    const L = M.labelLayout(g, room(windowNames), 400 - 46);
+    const tk = M.niceTicks(L.lo, L.hi, 100).ticks;
+    narrow.push(M.namesDrawn(g, L.host, windowNames, plotAt(328), tk[0], tk.at(-1), 11).map((d) => (d ? "on" : "off")).join(","));
+  }
+  check(M.barSlots((328 - 64) / 5, 5).size === 6 && narrow.every((d) => d === "on,off,on,off,on"),
+    "cull: at a 360px phone the default's window names, 7px apart under 8px of ink, are drawn every other one", narrow.join(" | "));
+  // A missing value draws no bar: its series has no name to leave off, is not counted, and is in no one's way.
+  const gap = [{ name: "A", values: [0.1, null, 0.12, 0.08, 0.1] }, { name: "B", values: [0.3, null, 0.2, 0.25, 0.3] }];
+  const gd = M.namesDrawn(gap, 0, five, plotAt(343), 0, 0.5, 11);
+  check(gd[1] === null && gd.filter((d) => d === null).length === 1 && gd.filter((d) => d !== null).every((d) => typeof d === "boolean"),
+    "cull: a series with no bar in the label group is neither drawn nor left off", gd.join());
 }
 
 
@@ -515,9 +531,66 @@ const page = () => text(r.container);
   const before = stops[0]?.querySelector("text");
   act(() => stops[0].dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
   const during = r.container.querySelector("g.gbars-name-off text");
-  check(stops.every((g) => g.getAttribute("tabindex") === "0") && !before && during && text(during) === name && five.includes(name) && !shown.includes(name),
-    "cull: a name left off is a keyboard stop that draws the name while it has focus", `${name} ${during ? text(during) : "none"}`);
+  const drawnName = during ? text(during) : "";
+  check(stops.every((g) => g.getAttribute("tabindex") === "0") && !before && !!during && five.includes(drawnName) && !shown.includes(drawnName) &&
+    new RegExp(String.raw`^${drawnName}, T\d+: \d+\.\d{2}%$`).test(name ?? ""),
+    "cull: a name left off is a keyboard stop that names its bar, its group and its value, and draws the name while it has focus", `${name} ${drawnName || "none"}`);
   r.unmount();
+}
+
+// Drawn at a width where Recharts' sizing and a floored share part ways (ten groups in a 590px chart: 6px
+// bars, where flooring the share before the 1px gaps gives 7): the model's bars are the bars Recharts draws.
+{
+  const GroupedBars = (await import("../src/tabs/sensitivity/GroupedBars.tsx")).default;
+  const five = ["1Y", "2Y", "3Y", "5Y", "Full"];
+  const at = (w, groups, series) => {
+    const real = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      return this.classList?.contains("recharts-responsive-container")
+        ? { x: 0, y: 0, top: 0, left: 0, right: w, bottom: 400, width: w, height: 400, toJSON() {} }
+        : real.call(this);
+    };
+    try {
+      return render(h(GroupedBars, { groups, series, valueFormat: "pct2", axis: "pct", height: 400 }));
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = real;
+    }
+  };
+  const series = five.map((label) => ({ name: `${label} window`, label, color: ROLE.tangency }));
+  const ten = Array.from({ length: 10 }, (_, g) => ({ name: `T${g}`, values: five.map((_, k) => 0.1 + 0.02 * ((g + k) % 3)) }));
+  const W = 590;
+  const r = at(W, ten, series);
+  const band = (W - 64) / ten.length;
+  const slot = M.barSlots(band, five.length);
+  const bars = [...r.container.querySelectorAll(".recharts-bar-rectangle path")]
+    .map((p) => ({ x: Number(p.getAttribute("x")), w: Number(p.getAttribute("width")) }))
+    .filter((b) => Number.isFinite(b.x) && Number.isFinite(b.w));
+  const first = bars.filter((b) => b.x < 56 + band).sort((p, q) => p.x - q.x);
+  const want = five.map((_, i) => ({ x: 56 + slot.at(i), w: slot.size }));
+  const floored = Math.floor((band - 2 * M.BAR_SPACING.categoryGap * band) / five.length);
+  check(first.length === 5 && slot.size !== floored && first.every((b, i) => Math.abs(b.x - want[i].x) < 1e-6 && b.w === want[i].w),
+    "cull: the bars the model places are the bars Recharts draws, at a width where a floored share would not be",
+    `drawn ${JSON.stringify(first)} | model ${JSON.stringify(want)} | floored ${floored}`);
+  r.unmount();
+
+  // A series with no value in any group draws no bar: the line counts only the names really left off,
+  // each a keyboard stop, and the stand-in names its window, its group and the value.
+  const none = Array.from({ length: 16 }, (_, g) => ({ name: `T${g}`, values: five.map((_, k) => (k === 1 ? null : 0.05 + 0.04 * ((g + 2 * k) % 5))) }));
+  const { namesCull } = await import("../src/tabs/sensitivity/GroupedBars.tsx");
+  const counted = [];
+  for (const w of [343, 330, 300]) {
+    const q = at(w, none, series);
+    const stops = [...q.container.querySelectorAll("g.gbars-name-off")];
+    const line = q.container.querySelector(".chart-cull");
+    const ok = line ? text(line) === namesCull(stops.length) : stops.length === 0;
+    const named = stops.every((g) => /^\S+ window, T\d+: \d+\.\d{2}%$/.test(g.getAttribute("aria-label") ?? ""));
+    const phantom = stops.some((g) => (g.getAttribute("aria-label") ?? "").startsWith("2Y"));
+    if (!ok || !named || phantom) counted.push(`${w}: ${stops.length} stops, ${line ? text(line) : "no line"}, ${stops.map((g) => g.getAttribute("aria-label")).join(" / ")}`);
+    q.unmount();
+  }
+  check(counted.length === 0, "cull: the line counts the names left off and nothing else, each a stop naming its bar and value; a series with no bar has none",
+    counted.join(" | "));
+  check(namesCull(2).includes("subtitle's order"), "cull: the line points at the bars' order, since a bar a few px wide is hard to tap", namesCull(2));
 }
 
 HTMLElement.prototype.getBoundingClientRect = rect;

@@ -7,8 +7,10 @@
 // Hover names the one bar under the pointer (closest point, src/charts/theme.ts).
 //
 // A name that cannot be set clear of the other names and bars (namesDrawn in ./model.ts) is left off,
-// and one line under the chart says how many; the hover box reads the bar, on a tap as on a pointer,
-// and from the keyboard each name left off is a stop that draws it while it has focus (NameOff).
+// and one line under the chart says how many and that each group's bars run in the subtitle's order; the
+// hover box reads the bar, on a tap as on a pointer, and from the keyboard each name left off is a stop
+// that names its bar and its value and draws the name while it has focus (NameOff). A series with no bar
+// in the label group has no name to leave off, and is not counted.
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, usePlotArea, XAxis, YAxis } from "recharts";
 import { CULL_STYLE, cullNote } from "../../charts/labels.ts";
@@ -60,16 +62,20 @@ type Box = { x?: unknown; y?: unknown; width?: unknown; height?: unknown };
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
 
-/** The line under the chart when names are left off, from the count. */
-export const namesCull = (n: number) => cullNote(n, ["bar name", "bar names"], ["hover or tap a bar to read its name", "hover or tap a bar to read its name"]);
+/** The line under the chart when names are left off, from the count. Bars a few px wide are hard to tap, so it points at their order first. */
+export const namesCull = (n: number) =>
+  cullNote(n, ["bar name", "bar names"], [
+    "each group's bars run in the subtitle's order, and hovering or tapping a bar reads it",
+    "each group's bars run in the subtitle's order, and hovering or tapping a bar reads it",
+  ]);
 
 // A name left off, for the keyboard: a stop in the tab order that names its bar to a screen reader and,
 // while it has focus, draws the name where it would have run, over whatever is there, as a hover box
 // would. Its state is its own, so focusing it redraws nothing else.
-function NameOff({ label, color, cx, top }: { label: string; color: string; cx: number; top: number }) {
+function NameOff({ label, spoken, color, cx, top }: { label: string; spoken: string; color: string; cx: number; top: number }) {
   const [on, setOn] = useState(false);
   return (
-    <g className="gbars-name-off" tabIndex={0} role="img" aria-label={label} onFocus={() => setOn(true)} onBlur={() => setOn(false)}>
+    <g className="gbars-name-off" tabIndex={0} role="img" aria-label={spoken} onFocus={() => setOn(true)} onBlur={() => setOn(false)}>
       {on ? (
         <text
           x={cx}
@@ -96,7 +102,7 @@ function NameSpots({ groups, host, labels, lo, hi, onDrawn }: {
   labels: readonly string[];
   lo: number;
   hi: number;
-  onDrawn: (drawn: readonly boolean[]) => void;
+  onDrawn: (drawn: readonly (boolean | null)[]) => void;
 }) {
   const plot = usePlotArea();
   const key = plot ? [plot.x, plot.y, plot.width, plot.height].join(",") : "";
@@ -114,10 +120,10 @@ export default function GroupedBars({ groups, series, valueFormat, axis, height 
   const { ticks, decimals } = niceTicks(lo, hi, axis === "pct" ? 100 : 1);
   const labels = useMemo(() => series.map((s) => s.label), [series]);
   // Until the plot's box is known every name is drawn.
-  const [drawn, setDrawn] = useState<readonly boolean[] | null>(null);
-  const onDrawn = useCallback((next: readonly boolean[]) => setDrawn((was) => (was && was.join() === next.join() ? was : next)), []);
+  const [drawn, setDrawn] = useState<readonly (boolean | null)[] | null>(null);
+  const onDrawn = useCallback((next: readonly (boolean | null)[]) => setDrawn((was) => (was && was.join() === next.join() ? was : next)), []);
   const live = drawn && drawn.length === series.length ? drawn : null;
-  const off = live ? live.filter((d) => !d).length : 0;
+  const off = live ? live.filter((d) => d === false).length : 0;
   const data = groups.map((g) => {
     const row: Record<string, string | number | null> = { name: g.name };
     g.values.forEach((v, i) => (row[`s${i}`] = v));
@@ -144,7 +150,11 @@ export default function GroupedBars({ groups, series, valueFormat, axis, height 
       // The top edge of the bar whichever way it points; the text starts 4px above it.
       const top = Math.min(y, y + h) - 4;
       const cx = x + w / 2;
-      if (live && !live[k]) return <NameOff label={s.label} color={s.color} cx={cx} top={top} />;
+      if (live && live[k] === false) {
+        const v = groups[host]?.values[k];
+        const spoken = `${s.name}, ${hostName}: ${format(typeof v === "number" ? v : null, valueFormat)}`;
+        return <NameOff label={s.label} spoken={spoken} color={s.color} cx={cx} top={top} />;
+      }
       return (
         <text
           x={cx}

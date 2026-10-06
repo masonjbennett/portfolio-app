@@ -220,6 +220,20 @@ check(svg.getAttribute("viewBox") === `0 0 ${L.width} ${L.height}` && svg.style.
     if (H.figures && !(5 * 0.6 * H.font <= H.cell - 4 + 1e-9 && H.font <= M.FONT)) wide.push(`${box}: ${H.font}px in ${H.cell}`);
   }
   check(wide.length === 0, "heatmap fit: a printed figure shrinks with its cell and stays inside it, never above 12px", wide.join("; "));
+  check(M.CELL_MIN === 26 && M.FIGURE_MIN === 29 && M.CELL === 48,
+    "heatmap fit: the decided numbers, a 48px cell, a 26px floor and no figure below 29px", `${M.CELL} ${M.CELL_MIN} ${M.FIGURE_MIN}`);
+  // Four-letter tickers turn their column labels once the cell shrinks; the last one, turned up and right
+  // from its column's centre, must end inside the grid's width. Its reach is worked out here from the glyph
+  // box (0.6 em an advance, the em box's 0.3 em descent below the baseline), rotated 45 degrees.
+  const four = ["SCHD", "VTEB", "VNQI", "BNDX", "IEMG", "VTWO", "VGIT", "IAU", "USMV", "QUAL"];
+  const clipped = [];
+  for (const box of [343, 358]) {
+    const H = M.heatLayout(four, box);
+    const px = M.FONT - 1;
+    const right = H.left + (four.length - 0.5) * H.cell + Math.SQRT1_2 * (4 * 0.6 * px + 0.3 * px);
+    if (!H.turned || right > H.width || H.width > box) clipped.push(`${box}: turned ${H.turned}, label to ${right.toFixed(1)}, grid ${H.width}`);
+  }
+  check(clipped.length === 0, "heatmap fit: turned four-letter labels end inside the grid, and the grid inside a phone's box", clipped.join("; "));
   const tiny = M.heatLayout(names(10), 120);
   check(tiny.cell === M.CELL_MIN && tiny.width > 120 && !tiny.figures,
     "heatmap fit: the cell never goes below the 26px floor; a grid that still does not fit is wider than its box (and scrolls in it)", `${tiny.cell} ${tiny.width}`);
@@ -229,7 +243,8 @@ check(svg.getAttribute("viewBox") === `0 0 ${L.width} ${L.height}` && svg.style.
 
   // Drawn in a box too narrow for figures: no cell prints one, a tap reads a cell, and the keys walk it.
   const real = window.HTMLElement.prototype.getBoundingClientRect;
-  const narrow = M.heatLayout(cross.tickers).left + n * (M.FIGURE_MIN - 2);
+  // Cells of FIGURE_MIN - 2 turn the labels, so the box also holds the last label's reach past the grid.
+  const narrow = M.heatLayout(cross.tickers).left + n * (M.FIGURE_MIN - 2) + Math.ceil(M.turnReach(3) - (M.FIGURE_MIN - 2) / 2) + 1;
   window.HTMLElement.prototype.getBoundingClientRect = function () {
     return this.classList?.contains("corr-heat-scroll") ? { x: 0, y: 0, top: 0, left: 0, width: narrow, height: 0, right: narrow, bottom: 0 } : real.call(this);
   };
@@ -251,6 +266,9 @@ check(svg.getAttribute("viewBox") === `0 0 ${L.width} ${L.height}` && svg.style.
   const tapped = read();
   act(() => grid.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
   const stepped = read();
+  const label = grid.getAttribute("aria-label") ?? "";
+  check(label.indexOf("table below") >= 0 && label.indexOf("table below") < label.indexOf("arrow keys"),
+    "heatmap fit: the grid's label sends a screen reader to the table first, then names the arrow keys", label);
   check(tapped === `AGG and GLD: ${py(oc.corr[1][2], 2)}` && stepped === `${cross.tickers[1]} and ${cross.tickers[3]}: ${py(oc.corr[1][3], 2)}` &&
     grid.getAttribute("tabindex") === "0",
     "heatmap fit: with no figure printed, a tap reads the cell and the arrow keys move the reading on a focusable grid", `${tapped} / ${stepped}`);

@@ -858,6 +858,7 @@ function FrontierLabels({ items, cal, line, onUnnamed, onCulled }: {
           <CulledName
             key={key}
             l={{ key, text: it.text, color: it.color, x: fits ? px + CULLED_GAP : px - CULLED_GAP, y: py, px, py, anchor: fits ? "start" : "end", width, leader: false }}
+            spoken={`${it.text}: volatility ${format(it.sigma, "pct2")}, return ${format(it.mu, "pct2")}`}
           />
         );
       })}
@@ -871,10 +872,10 @@ const CULLED_GAP = 10;
 // A name left off the chart, for the keyboard: a stop in the tab order that names its point to a screen
 // reader and, while it has focus, draws the name beside the point, over whatever is there, as a hover
 // box would. Its state is its own, so focusing it redraws nothing else.
-function CulledName({ l }: { l: PlacedLabel }) {
+function CulledName({ l, spoken }: { l: PlacedLabel; spoken: string }) {
   const [on, setOn] = useState(false);
   return (
-    <g className="culled-name" tabIndex={0} role="img" aria-label={l.text} onFocus={() => setOn(true)} onBlur={() => setOn(false)}>
+    <g className="culled-name" tabIndex={0} role="img" aria-label={spoken} onFocus={() => setOn(true)} onBlur={() => setOn(false)}>
       {on ? (
         <>
           <circle cx={l.px} cy={l.py} r={8} fill="none" stroke={c.ink} strokeWidth={1.5} pointerEvents="none" />

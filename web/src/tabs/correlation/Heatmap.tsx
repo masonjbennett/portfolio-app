@@ -48,7 +48,7 @@ export default function Heatmap({ view }: { view: CorrView }) {
           viewBox={`0 0 ${L.width} ${L.height}`}
           style={{ minWidth: L.width, maxWidth: L.width * MAX_SCALE, aspectRatio: `${L.width} / ${L.height}` }}
           role="img"
-          aria-label={`Correlation heatmap of ${tickers.join(", ")}. The arrow keys read one cell at a time; the figures are in the table below.`}
+          aria-label={`Correlation heatmap of ${tickers.join(", ")}. The figures are in the table below; with the keyboard, the arrow keys also step through the cells.`}
           tabIndex={0}
           onKeyDown={onKey}
           onFocus={() => setAt((was) => was ?? [0, 0])}

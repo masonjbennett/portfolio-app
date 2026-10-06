@@ -136,21 +136,23 @@ check(lab.fill === tokens.color.ink2 && ROLE.tangency === tokens.color.bronze,
 
 // ---- (c2) leaving off a name that cannot be placed --------------------------------------------------
 // cullLabels is the last step after a chart's own packer: each name at its first spot that meets no
-// name drawn before it and no mark, or left off when every spot fails; a kept name always draws.
+// name drawn before it and no mark, or left off when every spot fails. A name that must always draw is
+// a mark, never a name the cull could leave off.
 {
   const { cullLabels, cullBlocked, cullNote, meets } = await import("../src/charts/labels.ts");
   // Ten names, 12px tall, stacked 8px apart down one column: each may also sit 40px to the right.
   const box = (lo, top) => ({ lo, hi: lo + 30, top, bot: top + 12 });
   const spots = Array.from({ length: 10 }, (_, i) => [box(0, i * 8), box(40, i * 8)]);
   const mark = { lo: 35, hi: 75, top: 40, bot: 48 }; // a reference line's name, across the right column
-  const keep = (i) => i === 9;
-  const at = cullLabels(spots, [mark], undefined, keep);
+  const at = cullLabels(spots, [mark]);
   const drawn = at.flatMap((k, i) => (k >= 0 ? [{ i, r: spots[i][k] }] : []));
   const clash = [];
   drawn.forEach((a, x) => drawn.slice(x + 1).forEach((b) => meets(a.r, b.r) && clash.push(`${a.i}/${b.i}`)));
-  drawn.forEach((a) => !keep(a.i) && meets(a.r, mark) && clash.push(`${a.i}/mark`));
-  check(clash.length === 0, "labels cull: at N = 10, no two drawn names overlap, and none but a kept one meets a mark", clash.join(", "));
-  check(at[9] === 0, "labels cull: a kept name always draws, at its packer's spot, even where it meets something", String(at[9]));
+  drawn.forEach((a) => meets(a.r, mark) && clash.push(`${a.i}/mark`));
+  check(clash.length === 0, "labels cull: at N = 10, no two drawn names overlap, and none meets a mark", clash.join(", "));
+  check(cullNote(2, ["name", "names"], ["read", "read"], ["would not fit", "would not fit"]) === "Two names that would not fit are left off; read." &&
+    cullNote(1, ["name", "names"], ["read", "read"]) === "One name that would overlap is left off; read.",
+    "labels cull: the line names its cause, overlap unless the chart says otherwise");
   // A name is left off only when each of its spots meets something drawn (or a mark).
   const needless = at.flatMap((k, i) => (k >= 0 ? [] : spots[i].some((r) => !meets(r, mark) && !drawn.some((d) => meets(d.r, r))) ? [i] : []));
   check(at.some((k) => k < 0) && needless.length === 0, "labels cull: a name is left off only when every candidate spot collides", `off ${at.flatMap((k, i) => (k < 0 ? [i] : [])).join(",")}; needless ${needless.join(",")}`);

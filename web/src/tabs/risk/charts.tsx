@@ -64,10 +64,20 @@ export function CullLine({ text }: { text: string | null }) {
   ) : null;
 }
 
-/** The wording of that line for the volatility chart and the beta chart, from the count left off. */
+/** The wording of that line for the volatility chart and the beta chart, from the count left off. A line's
+ *  name is also left off for running out of the plot, so the volatility chart says "would not fit". */
 export const volCull = (n: number) =>
-  cullNote(n, ["line name", "line names"], ["hover or tap the chart to read every line by name", "hover or tap the chart to read every line by name"]);
+  cullNote(n, ["line name", "line names"], ["hover or tap the chart to read every line by name", "hover or tap the chart to read every line by name"], [
+    "would not fit",
+    "would not fit",
+  ]);
 export const betaCull = (n: number) => cullNote(n, ["value", "values"], ["hover or tap its bar to read it", "hover or tap a bar to read its value"]);
+
+/** The beta chart's hover box: each value named by its asset, so a value left off reads whole from it. */
+export const betaTip = (v: unknown, _n: unknown, item?: { payload?: unknown }): [string, string] => {
+  const name = (item?.payload as { name?: unknown } | undefined)?.name;
+  return [format(num(v), "num3"), typeof name === "string" && name ? `${name} beta` : "Beta"];
+};
 
 // Each plot below is memo'd: it draws again when its data changes, not when the card around it renders
 // for an explanation level.
@@ -235,7 +245,7 @@ export const BetaPlot = memo(function BetaPlot({ data }: { data: BetaData }) {
         <CartesianGrid {...gridProps} />
         <XAxis dataKey="name" {...axisProps} interval={0} />
         <YAxis {...axisProps} domain={[data.yMin, data.yMax]} tickFormatter={(v: number) => format(v, "num2")} width={44} allowDataOverflow />
-        <Tooltip {...tooltipProps()} content={ReadableTip} formatter={(v) => [format(num(v), "num3"), "Beta"]} />
+        <Tooltip {...tooltipProps()} content={ReadableTip} formatter={betaTip} />
         <ReferenceLine
           y={1}
           stroke={c.ink2}

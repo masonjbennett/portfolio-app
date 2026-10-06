@@ -207,6 +207,17 @@ function fake(returns, tickers = returns.map((_, i) => `T${i}`)) {
     ...M.betaValueSpots(D, betaPlot(w)).flatMap((s, i) => (s === null ? [`beta ${D.bars[i].name} @${w}`] : [])),
   ]).concat(M.volEndsDrawn(M.endLabels(dv.last, dv.yMax, volPlot.height), dv.yMax, volPlot, RC.VOL_HEIGHT).flatMap((d, i) => (d ? [] : [`vol ${dv.names[i]}`])));
   check(D.bars.length === 5 && lost.length === 0, "cull: at the default example no beta value and no line name is left off, at any width", lost.join("; "));
+  const moved = [560, 928, 1240].flatMap((w) => M.betaValueSpots(D, betaPlot(w)).flatMap((s, i) => (s === "past" ? [] : [`${D.bars[i].name} ${s} @${w}`])));
+  check(moved.length === 0, "cull: at the default example every beta value sits past its bar's end at a tablet's and a desktop's width", moved.join("; "));
+  // A stack spread below the plot is held to the plot's foot, where the x axis' last year can sit in the
+  // right margin: no drawn name's ink reaches below a name centred on the foot, even with room in the chart.
+  const footPlot = { x: 0, y: 12, width: 1, height: 238 };
+  const cash = M.endLabels(Array.from({ length: 6 }, () => 0.0005), 0.4, footPlot.height);
+  const sunk = M.volEndsDrawn(cash, 0.4, footPlot, 360);
+  const foot = footPlot.y + footPlot.height;
+  const below = cash.filter((v, i) => sunk[i] && footPlot.y + (1 - v / 0.4) * footPlot.height > foot + 1e-9);
+  check(sunk.some((d) => !d) && sunk.some(Boolean) && below.length === 0,
+    "cull: a line name pushed below the plot's foot is left off, though the chart has room under it", sunk.join());
 }
 
 // ---- (c) ledger entries ---------------------------------------------------------------------------------
@@ -323,6 +334,8 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
   const fills = [...sectionOf(r, "risk-capm").querySelectorAll(".recharts-bar-rectangle path, .recharts-bar-rectangle rect")].map((e) => e.getAttribute("fill"));
   const want = M.capmRows(a).map((c) => (c.beta > 1 ? tokens.color.claret : tokens.color.navy));
   check(JSON.stringify(fills) === JSON.stringify(want), "tab: each bar is claret above 1 and navy below, by its own beta", fills.join(" "));
+  check(!sectionOf(r, "risk-capm").querySelector(".chart-cull") && !sectionOf(r, "risk-volatility").querySelector(".chart-cull"),
+    "tab: at the default example no line under the beta or the volatility chart says anything was left off");
   const volSvg = text(sectionOf(r, "risk-volatility").querySelector(".recharts-surface"));
   check(a.tickers.every((t) => volSvg.includes(t)), "tab: each volatility line is named at its end", volSvg);
   const v60p = M.volChart(a, 60).value.peak;
@@ -388,6 +401,29 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
       "ledger:boundary the headline, the three charts and the other four tables still render");
     r.unmount();
   }
+}
+
+// The beta chart drawn crowded, ten bars at a phone's width: the line under it counts exactly the values
+// not drawn, a value past its bar's end is set in ink and one inside its bar in paper.
+{
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    return { x: 0, y: 0, top: 0, left: 0, right: 343, bottom: RC.BETA_HEIGHT, width: 343, height: RC.BETA_HEIGHT, toJSON() {} };
+  };
+  const B = M.betaChart([0.99, 1.151, 1.106, 0.805, 0.836, 0.05, -0.107, 0.121, 0.858, 0.287].map((b, i) => ({ name: `T${i}`, beta: b }))).value;
+  const r = quiet(() => render(h(RC.BetaPlot, { data: B })));
+  const vals = [...r.container.querySelectorAll("text.beta-value")];
+  const off = B.bars.length - vals.length;
+  const line = r.container.querySelector(".chart-cull");
+  check(off > 0 && !!line && text(line) === RC.betaCull(off), "cull: drawn crowded, the line under the beta chart counts exactly the values not drawn",
+    `${off} off | ${line ? text(line) : "no line"}`);
+  const inside = (t) => t.classList.contains("beta-value--inside");
+  check(vals.some((t) => !inside(t)) && vals.every((t) => t.getAttribute("fill") === (inside(t) ? tokens.color.paper : tokens.color.ink)),
+    "cull: a beta value past its bar is set in ink, one inside its bar in paper", vals.map((t) => `${text(t)} ${t.getAttribute("fill")}`).join(" "));
+  check(JSON.stringify(RC.betaTip(1.1064, "Beta", { payload: { name: "VNQ", beta: 1.1064 } })) === JSON.stringify([format(1.1064, "num3"), "VNQ beta"]),
+    "cull: the beta chart's hover box names the asset beside its value", JSON.stringify(RC.betaTip(1.1064, "Beta", { payload: { name: "VNQ" } })));
+  check(RC.volCull(2) === "Two line names that would not fit are left off; hover or tap the chart to read every line by name.",
+    "cull: the volatility chart's line names its cause, a name that would not fit", RC.volCull(2));
+  r.unmount();
 }
 
 HTMLElement.prototype.getBoundingClientRect = rect;
