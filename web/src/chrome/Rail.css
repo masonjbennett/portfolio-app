@@ -168,6 +168,21 @@
   cursor: pointer;
 }
 
+/* A way out that stands alone under a message: at least a 24px target, as WCAG 2.2 asks (2.5.8). */
+.rail-link--target {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+/* The reason under the too-many message: inside the message (one alert reads both), set as a note. */
+.rail-why {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 0.75rem;
+  color: var(--color-ink2);
+}
+
 .rail-switch {
   display: flex;
   align-items: center;

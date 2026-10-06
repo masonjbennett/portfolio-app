@@ -571,19 +571,35 @@ v3.unmount();
 {
   const { default: Rail, capReason, firstTickers } = await import("../src/chrome/Rail.tsx");
   const { MAX_TICKERS } = await import("../src/lib/clean.ts");
-  const { TN_WARN, TRADING_DAYS } = await import("../src/lib/stats.ts");
+  const { loadVerdict, TN_WARN, TRADING_DAYS } = await import("../src/lib/stats.ts");
   const { text } = await import("./_dom.mjs");
 
-  // The sentence's figures, worked out here from the constants, never typed.
+  // The sentence's figures, worked out here from the constants, never typed. The first count over the cap
+  // that the reason covers is found from the engine's own verdict, so a moved constant moves it too.
   const one = (x) => x.toFixed(1);
   const nums = (s) => (s ?? "").match(/\d+(?:\.\d+)?/g) ?? [];
-  for (const n of [MAX_TICKERS + 1, MAX_TICKERS + 4]) {
+  let over = MAX_TICKERS + 1;
+  while (loadVerdict(TRADING_DAYS, over) === "ok" && over < 1000) over += 1;
+  for (const n of [over, over + 3]) {
     const s = capReason(n);
     const want = [TRADING_DAYS, one(TRADING_DAYS / MAX_TICKERS), MAX_TICKERS, one(TRADING_DAYS / n), n, TN_WARN].map(String);
     check(s !== null && JSON.stringify(nums(s)) === JSON.stringify(want),
       `cap: at ${n} tickers the reason's every figure is computed from the cap, the one-year window and the thin-data line`, `${s} | want ${want}`);
   }
   check([0, 3, MAX_TICKERS - 1, MAX_TICKERS].every((n) => capReason(n) === null), "cap: no reason at the cap or under it");
+  // The reason shows exactly where the engine's verdict calls the one-year window thin and the cap does not.
+  const disagree = [];
+  for (let n = 1; n <= 60; n += 1) {
+    const engine = n > MAX_TICKERS && loadVerdict(TRADING_DAYS, n) !== "ok" && loadVerdict(TRADING_DAYS, MAX_TICKERS) === "ok";
+    if ((capReason(n) !== null) !== engine) disagree.push(n);
+  }
+  check(disagree.length === 0, "cap: the reason shows at every count, and only those, where the engine's verdict calls the one-year window thin", disagree.join(","));
+  // The constants moved: a cap of 6, a 200-day window and a 30-day line. Every figure follows them.
+  const moved = capReason(7, 6, 200, 30);
+  check(JSON.stringify(nums(moved)) === JSON.stringify(["200", one(200 / 6), "6", one(200 / 7), "7", "30"]) &&
+    capReason(6, 6, 200, 30) === null && capReason(7, 6, 200, 25) === null && capReason(9, 8, 200, 30) === null,
+    "cap: with the cap, the window and the thin-data line moved, the sentence's every figure moves with them, and it shows only where they call the window thin",
+    String(moved));
   // Equal figures could still be typed: the sentence's source holds no figure of its own, only the constants'.
   const railSrc = readFileSync(new URL("../src/chrome/Rail.tsx", import.meta.url), "utf8");
   const body = /export function capReason[\s\S]*?\n}\n/.exec(railSrc)?.[0] ?? "";
@@ -591,19 +607,23 @@ v3.unmount();
   check(body.includes("MAX_TICKERS") && body.includes("TN_WARN") && body.includes("TRADING_DAYS") && typedFigures.length === 0,
     "cap: the reason's source types no figure; each is read from MAX_TICKERS, TRADING_DAYS and TN_WARN", typedFigures.join(","));
 
-  // Eleven distinct tickers typed with one repeat: the nine sector funds, AAPL, then MSFT.
-  const typed = `${SECT.tickers.join(", ")}, xlk, AAPL, MSFT`;
-  const TEN = [...SECT.tickers, "AAPL"];
-  check(JSON.stringify(firstTickers(typed)) === JSON.stringify(TEN.slice(0, MAX_TICKERS)),
+  // The tickers the fixtures hold prices for: the nine sector funds, then the mega-caps (the same days).
+  // `over` distinct ones typed, with a repeat in lower case, are refused; the first MAX_TICKERS are kept.
+  const POOL = [...SECT.tickers, ...MEGA.tickers.filter((t) => !SECT.tickers.includes(t))];
+  check(POOL.length >= over, "cap: the fixtures hold prices for enough tickers to type one list over the cap", `${POOL.length} < ${over}`);
+  const TEN = POOL.slice(0, MAX_TICKERS);
+  const typedList = POOL.slice(0, over);
+  const typed = [...typedList.slice(0, 2), typedList[0].toLowerCase(), ...typedList.slice(2)].join(", ");
+  check(JSON.stringify(firstTickers(typed)) === JSON.stringify(TEN),
     "cap: the first N distinct tickers, in the order typed, a repeat counted once", firstTickers(typed).join(","));
 
-  // A ten-ticker answer: the sector fixture with the mega-cap fixture's AAPL column beside it (same days).
-  const aapl = MEGA.columns.indexOf("AAPL") + 1;
+  // The kept list's answer: each kept ticker's column from the fixture that holds it, the sector benchmark.
+  const column = (t, i) => (SECT.tickers.includes(t) ? SECT.rows[i][SECT.columns.indexOf(t) + 1] : MEGA.rows[i][MEGA.columns.indexOf(t) + 1]);
   const tenPx = {
     ...SECT,
     tickers: TEN,
-    columns: [...SECT.tickers, "AAPL", SECT.benchmark],
-    rows: SECT.rows.map((r, i) => [...r.slice(0, SECT.tickers.length + 1), MEGA.rows[i][aapl], r.at(-1)]),
+    columns: [...TEN, SECT.benchmark],
+    rows: SECT.rows.map((r, i) => [r[0], ...TEN.map((t) => column(t, i)), r.at(-1)]),
   };
   fresh();
   routes = {
@@ -623,6 +643,19 @@ v3.unmount();
   const box = root.querySelector('[name="tickers"]');
   const keep = () => [...root.querySelectorAll("button")].find((b) => text(b) === `Keep the first ${MAX_TICKERS}`);
   check(!!box && !keep() && !text(root).includes(MESSAGES["too-many"]), "cap: at the example's five tickers neither the reason nor the button shows");
+  // The level's note: the app's caption at Plain, so the rail keeps its length; the Formula level's line named at Formula.
+  const levelNote = () => text(root.querySelector('[aria-labelledby$="-level"] .rail-note') ?? { textContent: "" });
+  const CAPTION = "How much the info marks beside each figure explain. Plain = plain English. Finance = finance terms. Formula = formulas.";
+  const atPlain = levelNote();
+  act(() => wb.setLevel("formula"));
+  const atFormula = levelNote();
+  act(() => wb.setLevel("finance"));
+  const atFinance = levelNote();
+  act(() => wb.setLevel("plain"));
+  check(atPlain === CAPTION && atFinance === CAPTION && atFormula.startsWith(CAPTION) &&
+    atFormula.includes("a line under each tab's finding: the formula behind its figure, with the numbers that finding shows"),
+    "level note: the app's caption at Plain and Finance; at Formula it adds that each finding gets a formula line with the numbers it shows",
+    `${atPlain} | ${atFormula}`);
 
   const type = (v) => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(box, v);
@@ -634,18 +667,28 @@ v3.unmount();
   const why = capReason(parseCount(typed));
   await settle(FETCH_DELAY_MS + 60);
   check(text(root).includes(MESSAGES["too-many"]) && why !== null && text(root).includes(why) && !!keep() && priceCalls().length === n1,
-    "cap: eleven are refused with the app's message, the computed reason under it and the button; nothing is fetched");
-  check(box.getAttribute("aria-describedby")?.split(" ").length === 2, "cap: the field is described by the message and the reason");
+    `cap: ${over} are refused with the app's message, the computed reason under it and the button; nothing is fetched`);
+  const alert = root.querySelector("[role=alert]");
+  const described = (box.getAttribute("aria-describedby") ?? "").split(" ").map((x) => text(root.ownerDocument.getElementById(x) ?? { textContent: "" })).join(" ");
+  check(!!alert && text(alert).startsWith(MESSAGES["too-many"]) && text(alert).includes(why) && described.includes(MESSAGES["too-many"]) &&
+    described.split(why).length === 2,
+    "cap: the alert that reads the message reads the reason too, and the field is described by both, once each", `${alert ? text(alert) : "no alert"} | ${described}`);
+  const railCss = readFileSync(new URL("../src/chrome/Rail.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const target = /\.rail-link--target\s*\{([^}]*)\}/.exec(railCss)?.[1] ?? "";
+  check(keep().classList.contains("rail-link--target") && /min-height:\s*24px/.test(target),
+    "cap: the button is at least a 24px target", target.replace(/\s+/g, " "));
 
+  act(() => keep().focus());
   act(() => keep().click());
+  check(root.ownerDocument.activeElement === box, "cap: after the button, the keyboard is back in the ticker box", root.ownerDocument.activeElement?.tagName);
   check(box.value === TEN.join(", ") && bits(wb.settings.tickers, TEN) && !keep() && !text(root).includes(MESSAGES["too-many"]),
-    "cap: the button puts the first ten in the box, applies them in order and clears the message", `${box.value} | ${wb.settings.tickers}`);
+    `cap: the button puts the first ${MAX_TICKERS} in the box, applies them in order and clears the message`, `${box.value} | ${wb.settings.tickers}`);
   await later();
   await settle(20);
   const got = ready();
   check(priceCalls().length === n1 + 1 && new URL(priceCalls().at(-1).url, "http://x").searchParams.get("tickers") === TEN.join(",") &&
     got?.source === "live" && bits(got.tickers, TEN),
-    "cap: the analysis runs on the ten kept", `${priceCalls().length - n1} ${got?.source} ${got?.tickers}`);
+    `cap: the analysis runs on the ${MAX_TICKERS} kept`, `${priceCalls().length - n1} ${got?.source} ${got?.tickers}`);
   // Exactly the cap, typed: nothing extra shows.
   type(TEN.join(","));
   check(!keep() && !text(root).includes(MESSAGES["too-many"]) && !root.querySelector(".rail-error"),

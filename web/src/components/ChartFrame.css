@@ -7,7 +7,9 @@
   margin-bottom: var(--space-3);
 }
 
+/* A title is a sentence: on a wide screen it keeps a reading measure in its own face (App.css). */
 .chart-title {
+  max-width: var(--prose-measure, 100%);
   font-family: var(--font-serif);
   font-size: 22px;
   line-height: 1.2;

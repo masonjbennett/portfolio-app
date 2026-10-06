@@ -142,7 +142,9 @@ check(base === "100%" && !!wide && Number(wide[1]) === knee && /^\d+(\.\d+)?ch$/
 // Each paragraph that would otherwise widen with the page opts in. The list is the prose measured at a
 // 1,920 px screen running with the column; a new one is added here when it is given the measure.
 const OPT_IN = [
+  ["src/components/ChartFrame.css", ".chart-title"],
   ["src/components/ChartFrame.css", ".chart-sub"],
+  ["src/chrome/Masthead.css", ".masthead-dek"],
   ["src/tabs/sensitivity/Sensitivity.css", ".sens-caption"],
   ["src/tabs/walkforward/Published.css", ".wfp-lede, .wfp-text, .wfp-foot"],
   ["src/chrome/Footer.css", ".footer p"],

@@ -15,6 +15,7 @@
 }
 
 .masthead-dek {
+  max-width: var(--prose-measure, 100%);
   margin: var(--space-1) 0 0;
   color: var(--color-ink2);
   font-size: 0.95rem;
