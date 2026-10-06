@@ -1,8 +1,22 @@
-/* The page grid: a sticky rail beside the main column on a desktop, one column on a phone. */
+/* The page grid: a sticky rail beside the main column on a desktop, one column on a phone.
+   The page is 1,280 px wide on every screen up to 1,640 px, so nothing on it moves there; past that it
+   widens with the screen, 10 px for every 7, until 1,680 px at a 1,920 px screen, and stays there. The
+   charts measure their own width and take the room; prose does not (--prose-measure, below). */
 .app {
-  max-width: 1280px;
+  max-width: clamp(1280px, calc(1280px + (100vw - 1640px) * 10 / 7), 1680px);
   margin: 0 auto;
   padding: var(--space-5) var(--space-5) var(--space-7);
+  /* A paragraph's longest line. Up to 1,640 px it is the paragraph's whole box (100%), which caps nothing,
+     so every paragraph keeps the line it has; on a screen wide enough for the page to widen, a paragraph
+     stops at a reading measure instead of running with the wider column. A paragraph opts in with
+     max-width: var(--prose-measure, 100%), or min(<its own measure>, var(--prose-measure, 100%)). */
+  --prose-measure: 100%;
+}
+
+@media (min-width: 1641px) {
+  .app {
+    --prose-measure: 72ch;
+  }
 }
 
 .app-body {

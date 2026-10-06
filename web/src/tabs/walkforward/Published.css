@@ -15,7 +15,7 @@
 .wfp-text,
 .wfp-foot {
   margin: 0;
-  max-width: 60em;
+  max-width: min(60em, var(--prose-measure, 100%));
   font-family: var(--font-sans);
   line-height: 1.5;
   color: var(--color-ink2);

@@ -564,4 +564,97 @@ check(wb.analysis.status === "error" && wb.analysis.name === "prices" && wb.anal
 check(wb.rf.status === "error" && wb.rf.message === "FRED did not answer.", "rate: a failed lookup is an error with the endpoint's sentence");
 v3.unmount();
 
+// ---- one ticker too many: the reason, and the way out ---------------------------------------------
+// The rail wired to this hook, as the page wires it: a list over the cap is refused with the app's
+// message, says why in the estimation lines' own terms, and "Keep the first N" applies the first N
+// distinct tickers, in the order typed, as an edit would, so the analysis runs on them.
+{
+  const { default: Rail, capReason, firstTickers } = await import("../src/chrome/Rail.tsx");
+  const { MAX_TICKERS } = await import("../src/lib/clean.ts");
+  const { TN_WARN, TRADING_DAYS } = await import("../src/lib/stats.ts");
+  const { text } = await import("./_dom.mjs");
+
+  // The sentence's figures, worked out here from the constants, never typed.
+  const one = (x) => x.toFixed(1);
+  const nums = (s) => (s ?? "").match(/\d+(?:\.\d+)?/g) ?? [];
+  for (const n of [MAX_TICKERS + 1, MAX_TICKERS + 4]) {
+    const s = capReason(n);
+    const want = [TRADING_DAYS, one(TRADING_DAYS / MAX_TICKERS), MAX_TICKERS, one(TRADING_DAYS / n), n, TN_WARN].map(String);
+    check(s !== null && JSON.stringify(nums(s)) === JSON.stringify(want),
+      `cap: at ${n} tickers the reason's every figure is computed from the cap, the one-year window and the thin-data line`, `${s} | want ${want}`);
+  }
+  check([0, 3, MAX_TICKERS - 1, MAX_TICKERS].every((n) => capReason(n) === null), "cap: no reason at the cap or under it");
+  // Equal figures could still be typed: the sentence's source holds no figure of its own, only the constants'.
+  const railSrc = readFileSync(new URL("../src/chrome/Rail.tsx", import.meta.url), "utf8");
+  const body = /export function capReason[\s\S]*?\n}\n/.exec(railSrc)?.[0] ?? "";
+  const typedFigures = body.replace(/toFixed\(1\)/g, "").match(/\d+/g) ?? [];
+  check(body.includes("MAX_TICKERS") && body.includes("TN_WARN") && body.includes("TRADING_DAYS") && typedFigures.length === 0,
+    "cap: the reason's source types no figure; each is read from MAX_TICKERS, TRADING_DAYS and TN_WARN", typedFigures.join(","));
+
+  // Eleven distinct tickers typed with one repeat: the nine sector funds, AAPL, then MSFT.
+  const typed = `${SECT.tickers.join(", ")}, xlk, AAPL, MSFT`;
+  const TEN = [...SECT.tickers, "AAPL"];
+  check(JSON.stringify(firstTickers(typed)) === JSON.stringify(TEN.slice(0, MAX_TICKERS)),
+    "cap: the first N distinct tickers, in the order typed, a repeat counted once", firstTickers(typed).join(","));
+
+  // A ten-ticker answer: the sector fixture with the mega-cap fixture's AAPL column beside it (same days).
+  const aapl = MEGA.columns.indexOf("AAPL") + 1;
+  const tenPx = {
+    ...SECT,
+    tickers: TEN,
+    columns: [...SECT.tickers, "AAPL", SECT.benchmark],
+    rows: SECT.rows.map((r, i) => [...r.slice(0, SECT.tickers.length + 1), MEGA.rows[i][aapl], r.at(-1)]),
+  };
+  fresh();
+  routes = {
+    [EXAMPLE_URL]: () => Promise.resolve(json(EX)),
+    [RF_URL]: () => Promise.resolve(json(rfAnswer(EX.start))),
+    "/api/prices": (u) => Promise.resolve(json(new URL(u, "http://x").searchParams.get("tickers") === TEN.join(",") ? tenPx : CROSS)),
+  };
+  function Page() {
+    wb = useWorkbenchSafe();
+    return h(Rail, { settings: wb.settings, setSettings: wb.setSettings, level: wb.level, setLevel: wb.setLevel, rf: wb.rf, fetching: wb.fetching });
+  }
+  const pv = render(h(Page));
+  await settle();
+  await later();
+  await settle(20);
+  const root = pv.container;
+  const box = root.querySelector('[name="tickers"]');
+  const keep = () => [...root.querySelectorAll("button")].find((b) => text(b) === `Keep the first ${MAX_TICKERS}`);
+  check(!!box && !keep() && !text(root).includes(MESSAGES["too-many"]), "cap: at the example's five tickers neither the reason nor the button shows");
+
+  const type = (v) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(box, v);
+    act(() => box.dispatchEvent(new window.Event("input", { bubbles: true })));
+    act(() => box.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  };
+  const n1 = priceCalls().length;
+  type(typed);
+  const why = capReason(parseCount(typed));
+  await settle(FETCH_DELAY_MS + 60);
+  check(text(root).includes(MESSAGES["too-many"]) && why !== null && text(root).includes(why) && !!keep() && priceCalls().length === n1,
+    "cap: eleven are refused with the app's message, the computed reason under it and the button; nothing is fetched");
+  check(box.getAttribute("aria-describedby")?.split(" ").length === 2, "cap: the field is described by the message and the reason");
+
+  act(() => keep().click());
+  check(box.value === TEN.join(", ") && bits(wb.settings.tickers, TEN) && !keep() && !text(root).includes(MESSAGES["too-many"]),
+    "cap: the button puts the first ten in the box, applies them in order and clears the message", `${box.value} | ${wb.settings.tickers}`);
+  await later();
+  await settle(20);
+  const got = ready();
+  check(priceCalls().length === n1 + 1 && new URL(priceCalls().at(-1).url, "http://x").searchParams.get("tickers") === TEN.join(",") &&
+    got?.source === "live" && bits(got.tickers, TEN),
+    "cap: the analysis runs on the ten kept", `${priceCalls().length - n1} ${got?.source} ${got?.tickers}`);
+  // Exactly the cap, typed: nothing extra shows.
+  type(TEN.join(","));
+  check(!keep() && !text(root).includes(MESSAGES["too-many"]) && !root.querySelector(".rail-error"),
+    `cap: ${MAX_TICKERS} tickers typed show neither the reason nor the button`);
+  pv.unmount();
+
+  function parseCount(s) {
+    return new Set(s.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean)).size;
+  }
+}
+
 done("t-workbench");

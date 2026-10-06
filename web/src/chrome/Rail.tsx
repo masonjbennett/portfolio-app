@@ -12,7 +12,8 @@ import { useEffect, useId, useState } from "react";
 import SegControl from "../components/SegControl.tsx";
 import { SYMBOL } from "../data/prices.ts";
 import { format } from "../format.ts";
-import { parseTickers, validateRequest } from "../lib/clean.ts";
+import { MAX_TICKERS, parseTickers, validateRequest } from "../lib/clean.ts";
+import { loadVerdict, TN_WARN, TRADING_DAYS } from "../lib/stats.ts";
 import { MESSAGES } from "../state/analyze.ts";
 import { BENCHMARKS, MORE_PRESETS, PUBLISHED_PRESETS, RF_FALLBACK, RF_STEP, type Preset } from "../state/defaults.ts";
 import { isRfView } from "../state/rfwindow.ts";
@@ -35,6 +36,25 @@ export function symbolMessage(symbol: string): string {
   return `"${symbol}" is not a Yahoo Finance symbol. Symbols use letters, digits, ".", "-" and "=", with an optional leading "^" (BRK-B, EURUSD=X, ^GSPC).`;
 }
 
+// Why a list of `n` tickers stops at MAX_TICKERS, in the terms of the what-if panel's estimation lines:
+// the shortest window the page estimates on is one year of trading days, and below TN_WARN days of
+// returns per asset its weights rest on thin data. Every figure is read from those constants and the
+// count, so the sentence follows them if they move. Null within the cap, and null when the cap itself
+// would leave that window thin or one more ticker would not: the window would then not be the reason.
+export function capReason(n: number): string | null {
+  if (n <= MAX_TICKERS || loadVerdict(TRADING_DAYS, n) === "ok" || loadVerdict(TRADING_DAYS, MAX_TICKERS) !== "ok") return null;
+  const perAsset = (k: number) => (TRADING_DAYS / k).toFixed(1);
+  return (
+    `The shortest window the page estimates on, one year, has ${TRADING_DAYS} days of returns: ${perAsset(MAX_TICKERS)} per asset ` +
+    `at ${MAX_TICKERS} tickers, but ${perAsset(n)} at ${n}, under the ${TN_WARN} below which the optimizer's weights rest on thin data.`
+  );
+}
+
+// The first MAX_TICKERS distinct tickers of a typed list, in the order typed.
+export function firstTickers(input: string): string[] {
+  return parseTickers(input).slice(0, MAX_TICKERS);
+}
+
 // A decimal rate as the percent the field shows: 0.0389 -> "3.89".
 function pctText(rate: number): string {
   return String(Number((rate * 100).toFixed(4)));
@@ -49,14 +69,19 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
   const committedTickers = settings.tickers.join(", ");
   const [tickerDraft, setTickerDraft] = useState(committedTickers);
   const [tickerError, setTickerError] = useState<string | null>(null);
+  // How many distinct tickers the last refused list had, when it was refused for having too many: the
+  // reason and the way out show under the app's message only then.
+  const [overCap, setOverCap] = useState<number | null>(null);
   useEffect(() => {
     setTickerDraft(committedTickers);
     setTickerError(null);
+    setOverCap(null);
   }, [committedTickers]);
 
   function commitTickers(input: string) {
     const tickers = parseTickers(input);
     const bad = validateRequest(tickers, settings.start, endValue);
+    setOverCap(bad === "too-many" ? tickers.length : null);
     if (bad === "too-few" || bad === "too-many") {
       setTickerError(MESSAGES[bad]);
       return;
@@ -71,6 +96,15 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
     setTickerError(null);
     if (tickers.join(",") !== settings.tickers.join(",")) setSettings({ tickers });
   }
+
+  // The way out of a list that is too long: the box keeps its first MAX_TICKERS distinct tickers and is
+  // applied exactly as if they had been typed, through the same checks.
+  function keepFirst() {
+    const kept = firstTickers(tickerDraft).join(", ");
+    setTickerDraft(kept);
+    commitTickers(kept);
+  }
+  const reason = overCap === null ? null : capReason(overCap);
 
   // ---- dates (699-704) ----
   const [startDraft, setStartDraft] = useState(settings.start);
@@ -204,7 +238,7 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
             spellCheck={false}
             value={tickerDraft}
             aria-invalid={tickerError !== null}
-            aria-describedby={`${id}-tickers-note`}
+            aria-describedby={reason ? `${id}-tickers-note ${id}-tickers-why` : `${id}-tickers-note`}
             onChange={(e) => setTickerDraft(e.target.value)}
             onBlur={(e) => commitTickers(e.target.value)}
             onKeyDown={(e) => {
@@ -214,6 +248,16 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
           <p className={tickerError ? "rail-error" : "rail-note"} id={`${id}-tickers-note`} role={tickerError ? "alert" : undefined}>
             {tickerError ?? "Example: AAPL, MSFT, GOOGL. Press Enter to apply."}
           </p>
+          {reason ? (
+            <p className="rail-note" id={`${id}-tickers-why`}>
+              {reason}
+            </p>
+          ) : null}
+          {overCap !== null ? (
+            <button type="button" className="rail-link" onClick={keepFirst}>
+              Keep the first {MAX_TICKERS}
+            </button>
+          ) : null}
         </div>
       </section>
 

@@ -7,7 +7,7 @@
 
 .footer p {
   margin: var(--space-2) 0 0;
-  max-width: 60em;
+  max-width: min(60em, var(--prose-measure, 100%));
   font-size: 0.78rem;
   line-height: 1.5;
   color: var(--color-ink2);
@@ -28,7 +28,7 @@
 .footer-method dl {
   display: grid;
   gap: var(--space-2);
-  max-width: 60em;
+  max-width: min(60em, var(--prose-measure, 100%));
   margin: var(--space-3) 0 var(--space-4);
 }
 

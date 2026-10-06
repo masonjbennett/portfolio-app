@@ -13,8 +13,10 @@
   line-height: 1.2;
 }
 
+/* The caption keeps a reading measure on a wide screen while the chart under it takes the width (App.css). */
 .chart-sub {
   margin: var(--space-1) 0 0;
+  max-width: var(--prose-measure, 100%);
   color: var(--color-ink2);
   font-size: 14px;
 }
