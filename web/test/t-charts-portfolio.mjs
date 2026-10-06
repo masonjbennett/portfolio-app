@@ -15,7 +15,7 @@
 import { render, text, act } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, done } from "./_assert.mjs";
-import { fixtureAnalysis, ORACLE_RF } from "./_analysis.mjs";
+import { exampleAnalysis, fixtureAnalysis, ORACLE_RF } from "./_analysis.mjs";
 
 const { createElement: h } = await import("react");
 const oracle = (set) => JSON.parse(readFileSync(new URL(`./fixtures/oracle-${set}.json`, import.meta.url), "utf8"));
@@ -472,6 +472,7 @@ const W0 = o.w0;
   };
 
   let cases = 0;
+  const culledSeen = [];
   const bad = [];
   const strangers = [];
   let sawPhone = false;
@@ -518,6 +519,7 @@ const W0 = o.w0;
           const nearer = ms.filter((m) => Math.hypot(m.cx - own.cx, m.cy - own.cy) > 0.5 && dist(m) < dist(own));
           if (nearer.length) strangers.push(`${set} ${allowShort ? "short" : "long"} @${width}: "${l.text}" is nearer the ${nearer.map((m) => m.name).join(", ")} marker than its own`);
         }
+        if (root.querySelector(".chart-cull, .culled-name")) culledSeen.push(`${set} ${allowShort ? "short" : "long"} @${width}`);
         cases += 1;
         r.unmount();
       }
@@ -558,6 +560,55 @@ const W0 = o.w0;
     if (!e || Math.abs(w - (e.left + e.right)) > 0.1 || Math.abs(hgt - (e.up + e.down)) > 0.1) off.push(`${m.name} drawn ${w.toFixed(2)}x${hgt.toFixed(2)}, modelled ${(e.left + e.right).toFixed(2)}x${(e.up + e.down).toFixed(2)}`);
   }
   check(ms.length >= 6 && off.length === 0, "frontier markers: symbolExtent matches the drawn size of every marker kind", off.join("; "));
+
+  // Leaving off an asset's name the packer cannot place (cullBlocked, the last step). On the thirty
+  // frontiers above and on the default example at a phone's and a desktop's width, nothing is left off.
+  const ex = exampleAnalysis();
+  for (const width of [343, 560, 720, 1240]) {
+    const rr = drawAt(width, ex, F.frontierData(ex, ex.ew));
+    if (rr.container.querySelector(".chart-cull, .culled-name")) culledSeen.push(`example @${width}`);
+    rr.unmount();
+  }
+  check(cases === 30 && culledSeen.length === 0, "frontier cull: no name is left off on the thirty frontiers or on the default example at any width", culledSeen.join("; "));
+  // Ten assets crowded on one spot beside a portfolio's marker: the portfolio's name always draws, every
+  // drawn name is clear, and a name left off could not come back without blocking one.
+  {
+    const { cullBlocked } = await import("../src/charts/labels.ts");
+    const plotBox = { x: 0, y: 0, width: 90, height: 48 };
+    const items = [
+      { key: "mark--gmv", text: "GMV", color: "#262421", px: 45, py: 24, own: F.symbolExtent("diamond", 170) },
+      ...Array.from({ length: 10 }, (_, i) => ({ key: `asset-T${i}`, text: `T${i}`, color: "#33302c", px: 39 + (i % 4) * 3, py: 18 + Math.floor(i / 4) * 4, own: F.symbolExtent("circle", 56) })),
+    ];
+    const markers = items.map((it) => ({ x: it.px, y: it.py, extent: it.own }));
+    const place = (off) => F.placeLabels(items.filter((it) => !off.has(it.key)), plotBox, markers);
+    const { labels, off } = cullBlocked(place, F.isAsset);
+    const back = off.filter((k) => place(new Set(off.filter((o) => o !== k))).some((l) => l.clear === false && F.isAsset(l.key)) === false);
+    check(off.length > 0 && labels.some((l) => l.key === "mark--gmv") && labels.every((l) => l.clear !== false || !F.isAsset(l.key)) && back.length === 0 && off.every(F.isAsset),
+      "frontier cull: at ten crowded assets the portfolio's name always draws, no drawn asset name is blocked, and only asset names are left off",
+      `off ${off.join(",")}; could come back ${back.join(",")}`);
+    check(F.isAsset("asset-SPY") && !F.isAsset("mark--gmv") && !F.isAsset("bench") && !F.isAsset("frontier") && !F.isAsset("cal") && !F.isAsset("added-tan.1y"),
+      "frontier cull: only an asset's name may be left off, never a portfolio's, the benchmark's, an added construction's or a line's");
+    check(F.frontierCull(0) === null && F.frontierCull(2) === "Two asset names that would overlap are left off; hover or tap a point to read it.",
+      "frontier cull: the line under the chart, from the count", String(F.frontierCull(2)));
+  }
+  // Drawn too narrow for the nine sectors: the names left off are counted in the line under the chart,
+  // each is a keyboard stop, and focusing one draws its name.
+  {
+    const sec = fixtureAnalysis("sectors", { allowShort: true });
+    const rr = drawAt(150, sec, F.frontierData(sec, sec.ew));
+    const stops = [...rr.container.querySelectorAll("g.culled-name")];
+    const line = rr.container.querySelector(".chart-cull");
+    const drawnNames = [...rr.container.querySelectorAll(".frontier-labels .direct-label")].map((g) => g.getAttribute("data-label"));
+    check(stops.length > 0 && line && line.textContent === F.frontierCull(stops.length) && stops.every((g) => sec.tickers.includes(g.getAttribute("aria-label")) && !drawnNames.includes(g.getAttribute("aria-label"))),
+      "frontier cull: drawn at 150px, the asset names left off are counted in one line under the chart and none is also drawn", `${stops.length} | ${line ? line.textContent : "no line"}`);
+    const name = stops[0]?.getAttribute("aria-label");
+    const before = stops[0]?.querySelector("text");
+    if (stops[0]) act(() => stops[0].dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+    const during = rr.container.querySelector("g.culled-name text");
+    check(stops.every((g) => g.getAttribute("tabindex") === "0") && !before && during && during.textContent === name,
+      "frontier cull: a name left off is a keyboard stop that draws the name while it has focus", `${name} ${during ? during.textContent : "none"}`);
+    rr.unmount();
+  }
   r.unmount();
 }
 

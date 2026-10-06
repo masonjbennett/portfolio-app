@@ -41,6 +41,117 @@ export function pointLabel(text: string, color: string, side: LabelSide = "right
   } as const;
 }
 
+// ---- leaving off what cannot be placed ----------------------------------------------------------
+//
+// A chart places its names with its own packer (spreadLabels below, the frontier's placeLabels, the
+// grouped bars' label group). Where the packer still cannot find a name a clear spot, the name is left
+// off rather than drawn over something, and the chart says so in one line under it (cullNote). What a
+// name marked stays readable: the chart's hover box, on a tap as on a pointer, and from the keyboard.
+
+/** A box in px: across from `lo` to `hi`, down the page from `top` to `bot`. */
+export interface Rect {
+  lo: number;
+  hi: number;
+  top: number;
+  bot: number;
+}
+
+/** Whether two boxes share any area (boxes that only touch do not). */
+export const meets = (a: Rect, b: Rect) => a.lo < b.hi && b.lo < a.hi && a.top < b.bot && b.top < a.bot;
+
+/** Whether `a` lies wholly inside `b`. */
+const within = (a: Rect, b: Rect) => a.lo >= b.lo && a.hi <= b.hi && a.top >= b.top && a.bot <= b.bot;
+
+/**
+ * Which spot each label is drawn at, or -1 for a label left off. `spots[i]` is label i's candidate
+ * boxes, its packer's choice first. A label marked by `keep` is always drawn, at its first spot, and is
+ * taken before the rest; every other label is taken in order and drawn at its first spot that meets no
+ * label drawn before it and no mark (a bar, a marker, a reference line's name) and, given `bounds`,
+ * stays inside them. A label is left off only when every one of its spots fails. `marks` may be a
+ * function of the label, for a label that may sit on its own mark (a value inside its own bar).
+ */
+export function cullLabels(
+  spots: readonly (readonly Rect[])[],
+  marks: readonly Rect[] | ((i: number) => readonly Rect[]) = [],
+  bounds?: Rect,
+  keep: (i: number) => boolean = () => false,
+): number[] {
+  const at = spots.map(() => -1);
+  const drawn: Rect[] = [];
+  const marksOf = typeof marks === "function" ? marks : () => marks;
+  spots.forEach((s, i) => {
+    if (keep(i) && s.length) {
+      at[i] = 0;
+      drawn.push(s[0]);
+    }
+  });
+  spots.forEach((s, i) => {
+    if (keep(i)) return;
+    const own = marksOf(i);
+    const k = s.findIndex((r) => (!bounds || within(r, bounds)) && !own.some((m) => meets(m, r)) && !drawn.some((d) => meets(d, r)));
+    if (k >= 0) {
+      at[i] = k;
+      drawn.push(s[k]);
+    }
+  });
+  return at;
+}
+
+/**
+ * For a packer that places every name and flags the ones it could not set clear (`clear === false`):
+ * which names to leave off. `place(off)` places every name but those in `off`, their marks still in
+ * the way. While a name that `may` be left off is placed blocked, the last such name is left off and
+ * the rest placed again; then each name left off is tried back, in order, and kept when it and every
+ * other name it may leave off still place clear, and no name it may not leave off is newly blocked.
+ */
+export function cullBlocked<L extends { key: string; clear?: boolean }>(
+  place: (off: ReadonlySet<string>) => L[],
+  may: (key: string) => boolean,
+): { labels: L[]; off: string[] } {
+  const off = new Set<string>();
+  const blocked = (ls: readonly L[]) => ls.filter((l) => l.clear === false && may(l.key));
+  const stuck = (ls: readonly L[]) => ls.filter((l) => l.clear === false && !may(l.key)).length;
+  let labels = place(off);
+  for (let b = blocked(labels); b.length; b = blocked(labels)) {
+    off.add(b[b.length - 1].key);
+    labels = place(off);
+  }
+  for (const key of [...off]) {
+    const without = new Set(off);
+    without.delete(key);
+    const trial = place(without);
+    if (!blocked(trial).length && stuck(trial) <= stuck(labels)) {
+      off.delete(key);
+      labels = trial;
+    }
+  }
+  return { labels, off: [...off] };
+}
+
+const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+
+/**
+ * The one line under a chart that left names off, or null when it left none: how many, and how to read
+ * them. `what` names what was left off and `how` says how to read it, each as [one, many]: ["value",
+ * "values"], ["hover or tap its bar to read it", "hover or tap a bar to read one"].
+ */
+export function cullNote(count: number, what: readonly [string, string], how: readonly [string, string]): string | null {
+  if (!(count > 0)) return null;
+  const n = Number.isInteger(count) && count < COUNT.length ? COUNT[count] : String(count);
+  return count === 1
+    ? `${n} ${what[0]} that would overlap is left off; ${how[0]}.`
+    : `${n} ${what[1]} that would overlap are left off; ${how[1]}.`;
+}
+
+/** The note's face: the sans at 12px in ink2, as the frontier's key line under its chart. */
+export const CULL_STYLE = {
+  margin: `${tokens.space[2]} 0 0`,
+  color: tokens.color.ink2,
+  fontFamily: tokens.font.sans,
+  fontSize: 12,
+  lineHeight: "20px",
+} as const;
+
 // Moves labels apart so no two sit closer than `gap`, disturbing them as little as possible (least
 // squares) and never changing their order. Positions are in any one unit: pixels, or data units with
 // the gap converted. Each run of labels that would collide is packed at `gap` and centred on where

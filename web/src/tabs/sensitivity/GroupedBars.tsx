@@ -5,14 +5,20 @@
 // legend (1940-1943, 2014-2019).
 //
 // Hover names the one bar under the pointer (closest point, src/charts/theme.ts).
-import { Bar, BarChart, CartesianGrid, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+//
+// A name that cannot be set clear of the other names and bars (namesDrawn in ./model.ts) is left off,
+// and one line under the chart says how many; the hover box reads the bar, on a tap as on a pointer,
+// and from the keyboard each name left off is a stop that draws it while it has focus (NameOff).
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, usePlotArea, XAxis, YAxis } from "recharts";
+import { CULL_STYLE, cullNote } from "../../charts/labels.ts";
 import { labelFill } from "../../charts/contrast.ts";
 import { ReadableTip } from "../../charts/ReadableTip.tsx";
 import { axisProps, gridProps, tooltipProps } from "../../charts/theme.ts";
 import { tokens } from "../../styles/tokens.ts";
 import { format } from "../../format.ts";
 import type { FormatId } from "../../types.ts";
-import { labelLayout, niceTicks, tickText, type Group } from "./model.ts";
+import { BAR_SPACING, labelLayout, namesDrawn, niceTicks, tickText, type Group } from "./model.ts";
 
 export interface Series {
   /** The name in the hover box. */
@@ -54,10 +60,64 @@ type Box = { x?: unknown; y?: unknown; width?: unknown; height?: unknown };
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
 
+/** The line under the chart when names are left off, from the count. */
+export const namesCull = (n: number) => cullNote(n, ["bar name", "bar names"], ["hover or tap a bar to read its name", "hover or tap a bar to read its name"]);
+
+// A name left off, for the keyboard: a stop in the tab order that names its bar to a screen reader and,
+// while it has focus, draws the name where it would have run, over whatever is there, as a hover box
+// would. Its state is its own, so focusing it redraws nothing else.
+function NameOff({ label, color, cx, top }: { label: string; color: string; cx: number; top: number }) {
+  const [on, setOn] = useState(false);
+  return (
+    <g className="gbars-name-off" tabIndex={0} role="img" aria-label={label} onFocus={() => setOn(true)} onBlur={() => setOn(false)}>
+      {on ? (
+        <text
+          x={cx}
+          y={top}
+          transform={`rotate(-90 ${cx} ${top})`}
+          dominantBaseline="central"
+          textAnchor="start"
+          fill={labelFill(color)}
+          fontFamily={tokens.font.sans}
+          fontSize={FONT_PX}
+          pointerEvents="none"
+        >
+          {label}
+        </text>
+      ) : null}
+    </g>
+  );
+}
+
+// Works out, inside the chart where the plot's box is known, which names are drawn, and hands it up.
+function NameSpots({ groups, host, labels, lo, hi, onDrawn }: {
+  groups: Group[];
+  host: number;
+  labels: readonly string[];
+  lo: number;
+  hi: number;
+  onDrawn: (drawn: readonly boolean[]) => void;
+}) {
+  const plot = usePlotArea();
+  const key = plot ? [plot.x, plot.y, plot.width, plot.height].join(",") : "";
+  // The plot's box by what it measures (`key`), not by identity.
+  const drawn = useMemo(() => (plot ? namesDrawn(groups, host, labels, plot, lo, hi, FONT_PX) : null), [groups, host, labels, lo, hi, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    if (drawn) onDrawn(drawn);
+  }, [drawn, onDrawn]);
+  return null;
+}
+
 export default function GroupedBars({ groups, series, valueFormat, axis, height }: GroupedBarsProps) {
   const plotPx = height - MARGIN.top - MARGIN.bottom - X_AXIS_PX;
   const { host, lo, hi } = labelLayout(groups, labelPx(series), plotPx);
   const { ticks, decimals } = niceTicks(lo, hi, axis === "pct" ? 100 : 1);
+  const labels = useMemo(() => series.map((s) => s.label), [series]);
+  // Until the plot's box is known every name is drawn.
+  const [drawn, setDrawn] = useState<readonly boolean[] | null>(null);
+  const onDrawn = useCallback((next: readonly boolean[]) => setDrawn((was) => (was && was.join() === next.join() ? was : next)), []);
+  const live = drawn && drawn.length === series.length ? drawn : null;
+  const off = live ? live.filter((d) => !d).length : 0;
   const data = groups.map((g) => {
     const row: Record<string, string | number | null> = { name: g.name };
     g.values.forEach((v, i) => (row[`s${i}`] = v));
@@ -71,7 +131,7 @@ export default function GroupedBars({ groups, series, valueFormat, axis, height 
   // The label group by NAME: a LabelList's index counts only the bars drawn, not the data rows.
   const hostName = groups[host]?.name;
 
-  const nameOn = (s: Series) =>
+  const nameOn = (s: Series, k: number) =>
     function SeriesName(props: LabelBox) {
       // valueAccessor below hands the name only to the label group's bar, "" to every other.
       if (props.value !== s.label) return null;
@@ -84,6 +144,7 @@ export default function GroupedBars({ groups, series, valueFormat, axis, height 
       // The top edge of the bar whichever way it points; the text starts 4px above it.
       const top = Math.min(y, y + h) - 4;
       const cx = x + w / 2;
+      if (live && !live[k]) return <NameOff label={s.label} color={s.color} cx={cx} top={top} />;
       return (
         <text
           x={cx}
@@ -102,8 +163,9 @@ export default function GroupedBars({ groups, series, valueFormat, axis, height 
     };
 
   return (
+    <>
     <ResponsiveContainer width="100%" height={height} initialDimension={{ width: 640, height }}>
-      <BarChart data={data} margin={MARGIN} barCategoryGap="16%" barGap={1}>
+      <BarChart data={data} margin={MARGIN} barCategoryGap={`${BAR_SPACING.categoryGap * 100}%`} barGap={BAR_SPACING.barGap}>
         <CartesianGrid {...gridProps} />
         <XAxis dataKey="name" {...axisProps} height={X_AXIS_PX} interval={0} />
         <YAxis
@@ -130,10 +192,17 @@ export default function GroupedBars({ groups, series, valueFormat, axis, height 
             isAnimationActive={false}
             minPointSize={hostFloor}
           >
-            <LabelList valueAccessor={(e) => (e.payload?.name === hostName ? s.label : "")} content={nameOn(s)} />
+            <LabelList valueAccessor={(e) => (e.payload?.name === hostName ? s.label : "")} content={nameOn(s, i)} />
           </Bar>
         ))}
+        <NameSpots groups={groups} host={host} labels={labels} lo={ticks[0]} hi={ticks[ticks.length - 1]} onDrawn={onDrawn} />
       </BarChart>
     </ResponsiveContainer>
+    {off ? (
+      <p className="chart-cull" style={CULL_STYLE}>
+        {namesCull(off)}
+      </p>
+    ) : null}
+    </>
   );
 }

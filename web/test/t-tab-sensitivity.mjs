@@ -33,7 +33,7 @@ const { contrastRatio, TEXT_AA } = await import("../src/charts/contrast.ts");
 // The series names written on the bars, with the colour each is drawn in.
 const barNames = (root) => [...root.querySelectorAll(".gbars-name")].map((n) => ({ text: n.textContent, fill: n.getAttribute("fill") }));
 const readable = (ns) => ns.every((n) => contrastRatio(n.fill, tokens.color.paper) >= TEXT_AA);
-const { fixtureAnalysis, tabProps } = await import("./_analysis.mjs");
+const { exampleAnalysis, fixtureAnalysis, tabProps } = await import("./_analysis.mjs");
 
 const ORACLE = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8").split(/\r?\n/);
 const lines = (a, b) => ORACLE.slice(a - 1, b).join("\n");
@@ -238,7 +238,40 @@ for (const set of ["cross", "megacap"]) {
   const t3 = M.niceTicks(-1.27, 1.6, 1);
   check(t3.ticks[0] <= -1.27 && t3.ticks.at(-1) >= 1.6 && t3.ticks.includes(0), "ticks: cover the range and include zero", JSON.stringify(t3));
   check(M.tickText(-0.4, "num", 1) === `${MINUS}0.4` && M.tickText(-1e-17, "pct", 0) === "0%", "ticks: a true minus, and no sign on a tick that rounds to zero");
+
+  // Leaving off a name that cannot be placed, the last step after labelLayout. The plot as GroupedBars
+  // lays it out: 4px left plus a 52px axis, 8px right, 12px top, 4px bottom and a 30px axis.
+  const plotAt = (w, height = 400) => ({ x: 56, y: 12, width: w - 64, height: height - 46 });
+  const five = ["1Y", "2Y", "3Y", "5Y", "Full"];
+  const room = (names) => Math.max(...names.map((s) => s.length)) * 11 * 0.62 + 10;
+  // Ten groups of five bars; the label group's bars rise and fall, so a name may run into a neighbour.
+  const ten = Array.from({ length: 10 }, (_, g) => ({ name: `T${g}`, values: five.map((_, k) => (g === 3 ? [0.02, 0.06, 0.01, 0.05, 0.03][k] : 0.1 + 0.05 * ((g + k) % 4))) }));
+  const lay = M.labelLayout(ten, room(five), 400 - 46);
+  const phone = M.namesDrawn(ten, lay.host, five, plotAt(343), lay.lo, lay.hi, 11);
+  const desk = M.namesDrawn(ten, lay.host, five, plotAt(928), lay.lo, lay.hi, 11);
+  check(lay.host === 3 && phone.some((d) => !d) && phone.filter(Boolean).length >= 2,
+    "cull: at ten groups on a phone, names that would overlap are left off and the rest drawn", phone.join());
+  // On a phone each bar is 3px at a 4px pitch: two drawn names are never on neighbouring bars.
+  const drawnAt = phone.flatMap((d, k) => (d ? [k] : []));
+  check(drawnAt.every((k, i) => i === 0 || k - drawnAt[i - 1] >= 2), "cull: no two drawn names are on neighbouring bars", drawnAt.join());
+  check(desk.every(Boolean), "cull: at a desktop's width every name is drawn", desk.join());
+  // The default example: no name is left off on either chart, at a phone's width or a desktop's.
+  const ex = exampleAnalysis();
+  const ef = M.fitWindows(ex).value;
+  const windowNames = ef.map((f) => f.short);
+  const lost = [];
+  const each = (g, names, w, height, unit) => {
+    const L = M.labelLayout(g, room(names), height - 46);
+    const tk = M.niceTicks(L.lo, L.hi, unit).ticks;
+    M.namesDrawn(g, L.host, names, plotAt(w, height), tk[0], tk.at(-1), 11).forEach((d, k) => d || lost.push(`${names[k]} @${w}`));
+  };
+  for (const w of [343, 560, 928, 1240]) {
+    for (const port of ["tan", "gmv"]) each(M.weightGroups(ef, port, ex.tickers), windowNames, w, 400, 100);
+    each(M.sharpeGroups(ef, ex.tickers.map(() => 1 / ex.tickers.length), ex.rf), ["GMV", "Tangency", "Custom"], w, 380, 1);
+  }
+  check(ef.length === 5 && lost.length === 0, "cull: at the default example no bar name is left off on either chart, at any width", lost.join("; "));
 }
+
 
 // ---- (e) the tab rendered ----------------------------------------------------------------------------
 // ResponsiveContainer measures its box; jsdom has no layout, so give chart boxes a size.
@@ -462,6 +495,29 @@ const page = () => text(r.container);
     "below rf: with shorting on, the note names the [-1, 1] bounds searched instead of long-only", belowNote(["1 Year"], 0.5, true));
   check(close(M.metricRows(cf, "tan", 0.5)[0].sharpe, cf[0].tan.sharpe, 1e-12), "below rf: the row is that portfolio's own Sharpe ratio");
   y.unmount();
+}
+
+// Drawn: a chart crowded enough to leave names off says how many in one line under it, and each name
+// left off is a keyboard stop that draws the name while it has focus.
+{
+  const GroupedBars = (await import("../src/tabs/sensitivity/GroupedBars.tsx")).default;
+  const five = ["1Y", "2Y", "3Y", "5Y", "Full"];
+  const groups = Array.from({ length: 16 }, (_, g) => ({ name: `T${g}`, values: five.map((_, k) => 0.05 + 0.04 * ((g + 2 * k) % 5)) }));
+  const series = five.map((label, k) => ({ name: label, label, color: [ROLE.gmv, ROLE.tangency, ROLE.ew, ROLE.custom, ROLE.frontier][k] }));
+  const r = render(h(GroupedBars, { groups, series, valueFormat: "pct2", axis: "pct", height: 400 }));
+  const shown = [...r.container.querySelectorAll(".gbars-name")].map((t) => text(t));
+  const stops = [...r.container.querySelectorAll("g.gbars-name-off")];
+  const line = r.container.querySelector(".chart-cull");
+  const { namesCull } = await import("../src/tabs/sensitivity/GroupedBars.tsx");
+  check(stops.length > 0 && shown.length + stops.length === 5 && line && text(line) === namesCull(stops.length),
+    "cull: drawn crowded, the names left off are counted in one line under the chart", `${shown.join(",")} | off ${stops.length} | ${line ? text(line) : "no line"}`);
+  const name = stops[0]?.getAttribute("aria-label");
+  const before = stops[0]?.querySelector("text");
+  act(() => stops[0].dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+  const during = r.container.querySelector("g.gbars-name-off text");
+  check(stops.every((g) => g.getAttribute("tabindex") === "0") && !before && during && text(during) === name && five.includes(name) && !shown.includes(name),
+    "cull: a name left off is a keyboard stop that draws the name while it has focus", `${name} ${during ? text(during) : "none"}`);
+  r.unmount();
 }
 
 HTMLElement.prototype.getBoundingClientRect = rect;

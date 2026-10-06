@@ -13,7 +13,7 @@
 // - A figure that is not a number fails its chart closed and named, and prints as a dash in a table:
 //   never "nan" (the app prints f"{nan:.3f}" as "nan").
 import { format } from "../../format.ts";
-import { spreadLabels } from "../../charts/labels.ts";
+import { cullLabels, spreadLabels, textWidth, type Rect } from "../../charts/labels.ts";
 import { annualizedStats, capm, drawdowns, rollingStd, TRADING_DAYS } from "../../lib/stats.ts";
 import { monthYear } from "../../chrome/when.ts";
 import { drawdownEpisodes, relatedEvent } from "../../lib/episodes.ts";
@@ -376,4 +376,83 @@ export function yearOf(d: unknown): string {
 export function endLabels(last: number[], yMax: number, plotPx: number, gapPx = 14): number[] {
   const unit = plotPx > 0 && yMax > 0 ? (gapPx * yMax) / plotPx : 0;
   return spreadLabels(last, unit);
+}
+
+/** Where a plot sits in its chart, in px, as Recharts reports it (usePlotArea): its top-left corner and size. */
+export interface PlotArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// The name of a line is set at 12px; across its baseline its ink is the face's cap height, about 0.72 em.
+const NAME_INK = 0.72 * 12;
+
+/**
+ * Which end-of-line names are drawn, the last step after endLabels: each sits right of the plot at its
+ * spread value, its box the ink of a capital, and is left off when that box leaves the chart, top or
+ * bottom (`chartPx` tall), or meets a name drawn before it. `ends` are endLabels' values on [0, yMax].
+ * The ends are spread apart already, so this leaves a name off only when the stack outgrows the chart.
+ */
+export function volEndsDrawn(ends: readonly number[], yMax: number, plot: PlotArea, chartPx: number): boolean[] {
+  const py = (v: number) => plot.y + (yMax > 0 ? (1 - v / yMax) * plot.height : 0);
+  const spots = ends.map((v) => {
+    const mid = py(v);
+    return Number.isFinite(mid) ? [{ lo: 0, hi: 1, top: mid - NAME_INK / 2, bot: mid + NAME_INK / 2 }] : [];
+  });
+  return cullLabels(spots, [], { lo: 0, hi: 1, top: 0, bot: chartPx }).map((k) => k >= 0);
+}
+
+/** The market line's name on the beta chart. */
+export const MARKET_NAME = "Market (β = 1)";
+
+// The beta chart's geometry, as BetaPlot draws it: each bar 80% of its band (Recharts' default gap of
+// 10% a side) and at most `maxBar` wide; each value in JetBrains Mono at `valuePx` (0.6 em an advance,
+// its digits' ink 0.75 em tall), `offset` px past its bar's end, or as far inside it; the market line's
+// name in the sans at 12px, `nameInset` px inside the plot's right edge and under the line (insideTopRight).
+export const BETA_GEOMETRY = { maxBar: 56, valuePx: 11, offset: 5, nameInset: 8 } as const;
+
+/** Where one bar's value is set: past its bar's end (where LabelList sets it), inside it, or left off (null). */
+export type BetaValueSpot = "past" | "inside" | null;
+
+/**
+ * Where each bar's value is set: the last step after the bar's own spot past its end. Taken left to
+ * right, a value goes past its bar's end where that meets no other bar, no value set before it and not
+ * the market line's name; failing that, inside its bar's end, where the bar is long and wide enough to
+ * hold it; failing both, it is left off. The market line's name is never left off.
+ */
+export function betaValueSpots(b: BetaChart, plot: PlotArea): BetaValueSpot[] {
+  const g = BETA_GEOMETRY;
+  const n = b.bars.length;
+  const span = b.yMax - b.yMin;
+  if (!n || !(plot.width > 0) || !(plot.height > 0) || !(span > 0)) return b.bars.map(() => "past");
+  const py = (v: number) => plot.y + ((b.yMax - v) / span) * plot.height;
+  const band = plot.width / n;
+  const bar = Math.min(g.maxBar, band * 0.8);
+  const zero = py(Math.max(b.yMin, Math.min(b.yMax, 0)));
+  const ink = 0.75 * g.valuePx;
+  const bars: Rect[] = b.bars.map((d, i) => {
+    const cx = plot.x + (i + 0.5) * band;
+    const end = py(d.beta);
+    return { lo: cx - bar / 2, hi: cx + bar / 2, top: Math.min(end, zero), bot: Math.max(end, zero) };
+  });
+  const spots = b.bars.map((d, i) => {
+    const cx = plot.x + (i + 0.5) * band;
+    const end = py(d.beta);
+    const w = format(d.beta, "num3").length * 0.6 * g.valuePx;
+    const up = d.beta >= 0;
+    const box = (top: number): Rect => ({ lo: cx - w / 2, hi: cx + w / 2, top, bot: top + ink });
+    const past = box(up ? end - g.offset - ink : end + g.offset);
+    const into = box(up ? end + g.offset : end - g.offset - ink);
+    const own = bars[i];
+    const fits = into.lo >= own.lo + 2 && into.hi <= own.hi - 2 && into.top >= own.top && into.bot <= own.bot;
+    return fits ? [past, into] : [past];
+  });
+  const line = py(1);
+  const right = plot.x + plot.width - g.nameInset;
+  const market: Rect = { lo: right - textWidth(MARKET_NAME), hi: right, top: line + g.nameInset, bot: line + g.nameInset + 12 };
+  // A value past its own bar's end never meets that bar; inside it, it sits on it by design.
+  const at = cullLabels(spots, (i) => [market, ...bars.filter((_, k) => k !== i)]);
+  return at.map((k) => (k < 0 ? null : k === 0 ? "past" : "inside"));
 }

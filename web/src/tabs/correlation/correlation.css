@@ -26,7 +26,8 @@
   color: var(--color-ink2);
 }
 
-/* The grid scrolls sideways inside its own box once it would draw below its own units (12px figures). */
+/* The grid's cells shrink to fit this box, down to a floor (heatLayout in model.ts); only a grid that
+   does not fit even at the floor scrolls sideways, inside this box and never the page. */
 .corr-heat-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;

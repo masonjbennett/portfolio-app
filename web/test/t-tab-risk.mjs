@@ -11,12 +11,13 @@
 import { render, text, act } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, json, done } from "./_assert.mjs";
-import { fixtureAnalysis, tabProps, ORACLE_RF } from "./_analysis.mjs";
+import { exampleAnalysis, fixtureAnalysis, tabProps, ORACLE_RF } from "./_analysis.mjs";
 
 const { createElement: h } = await import("react");
 const M = await import("../src/tabs/risk/model.ts");
 const Risk = (await import("../src/tabs/Risk.tsx")).default;
-const { BETA_ABOVE, BETA_BELOW } = await import("../src/tabs/risk/charts.tsx");
+const RC = await import("../src/tabs/risk/charts.tsx");
+const { BETA_ABOVE, BETA_BELOW } = RC;
 const { format } = await import("../src/format.ts");
 const { csvText, cellFor } = await import("../src/download.ts");
 const { tipText } = await import("../src/content/tooltips.ts");
@@ -171,6 +172,41 @@ function fake(returns, tickers = returns.map((_, i) => `T${i}`)) {
   check(M.pctTick(-0.4) === "\u221240%" && M.pctTick(0.25) === "25%" && M.pctTick(NaN) === "", "model: percentage ticks");
   const ends = M.endLabels([0.2, 0.2001, 0.5], 1, 100, 14);
   check(ends[1] - ends[0] >= 0.14 - 1e-12 && Math.abs(ends[2] - 0.5) < 1e-12, "model: end labels are spread apart, in data units", ends.join());
+
+  // Leaving off what cannot be placed, the last step after each chart's own spot. Ten lines whose ends
+  // crowd: the packer spreads them, and a name is left off only when the spread stack leaves the chart.
+  const plot = { x: 0, y: 12, width: 1, height: 238 };
+  const crowd = Array.from({ length: 10 }, (_, i) => 0.1 + i * 0.004);
+  const spread = M.endLabels(crowd, 0.4, plot.height);
+  const keptAll = M.volEndsDrawn(spread, 0.4, plot, 280);
+  check(keptAll.every(Boolean), "cull: ten crowded line ends, spread by the packer, all keep their names", keptAll.join());
+  const py = (v) => plot.y + (1 - v / 0.4) * plot.height;
+  const kept = spread.filter((_, i) => keptAll[i]).map(py).sort((p, q) => p - q);
+  check(kept.every((p, i) => i === 0 || p - kept[i - 1] >= 0.72 * 12 - 1e-9), "cull: no two drawn line names overlap", kept.map((p) => p.toFixed(1)).join());
+  const low = M.volEndsDrawn(M.endLabels(Array.from({ length: 10 }, () => 0.001), 0.4, 60), 0.4, { x: 0, y: 12, width: 1, height: 60 }, 80);
+  check(low.some((d) => !d) && low.some(Boolean), "cull: a name pushed out of the chart by the stack is left off, the rest kept", low.join());
+
+  // The beta chart at a phone's width: ten bars, two pairs side by side at the same height, and one
+  // value under the market line's name. A value goes past its bar, else inside it, else is left off.
+  const bars = (betas) => M.betaChart(betas.map((b, i) => ({ name: `T${i}`, beta: b }))).value;
+  const B = bars([0.99, 1.151, 1.106, 0.805, 0.836, 0.05, -0.107, 0.121, 0.858, 0.287]);
+  // The plot as Recharts lays it out in a 343px chart: the y axis 44px, 16px right, 20px top, 30px axis.
+  const betaPlot = (w) => ({ x: 44, y: 20, width: w - 60, height: RC.BETA_HEIGHT - 50 });
+  const spots = M.betaValueSpots(B, betaPlot(343));
+  const off = spots.filter((s) => s === null).length;
+  check(spots.length === 10 && off > 0 && off < 10 && spots.some((s) => s === "past"),
+    "cull: at ten bars on a phone some beta values are left off and the rest drawn", spots.join());
+  check(spots[8] !== "past", "cull: a value that would sit on the market line's name is never drawn there", String(spots[8]));
+  check(M.betaValueSpots(B, betaPlot(928)).every((s) => s === "past"), "cull: at a desktop's width every beta value is drawn past its bar's end", "");
+  // The default example: nothing is left off on either chart, at a phone's width or a desktop's.
+  const ex = exampleAnalysis();
+  const D = M.betaChart(M.capmRows(ex)).value;
+  const dv = M.volChart(ex, 60).value;
+  const volPlot = { x: 0, y: 12, width: 1, height: RC.VOL_HEIGHT - 42 };
+  const lost = [343, 560, 928, 1240].flatMap((w) => [
+    ...M.betaValueSpots(D, betaPlot(w)).flatMap((s, i) => (s === null ? [`beta ${D.bars[i].name} @${w}`] : [])),
+  ]).concat(M.volEndsDrawn(M.endLabels(dv.last, dv.yMax, volPlot.height), dv.yMax, volPlot, RC.VOL_HEIGHT).flatMap((d, i) => (d ? [] : [`vol ${dv.names[i]}`])));
+  check(D.bars.length === 5 && lost.length === 0, "cull: at the default example no beta value and no line name is left off, at any width", lost.join("; "));
 }
 
 // ---- (c) ledger entries ---------------------------------------------------------------------------------

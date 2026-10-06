@@ -270,6 +270,12 @@ export function tint(r: number): string {
 /** Cell size in SVG units, which are pixels at the grid's smallest drawn size; figures are FONT units high. */
 export const CELL = 48;
 export const FONT = 12;
+/**
+ * In a box too narrow for CELL, the cell shrinks to fit it, down to CELL_MIN; below FIGURE_MIN a cell is
+ * too small to print its figure legibly, so none is printed and a tap, a pointer or the arrow keys read it.
+ */
+export const CELL_MIN = 26;
+export const FIGURE_MIN = 29;
 // JetBrains Mono's advance is 0.6 em.
 const CHAR = 0.6 * FONT;
 
@@ -281,14 +287,41 @@ export interface HeatLayout {
   turned: boolean;
   width: number;
   height: number;
+  /** The cell's side, CELL unless the box is narrower (see CELL_MIN). */
+  cell: number;
+  /** Whether each cell prints its figure (a cell of FIGURE_MIN or more), and at what size. */
+  figures: boolean;
+  font: number;
 }
 
-export function heatLayout(tickers: string[]): HeatLayout {
+/**
+ * The grid's layout. With no `box` (the width the grid may take, in px; unknown before it is measured)
+ * or a box wide enough, every cell is CELL. In a narrower box the cell shrinks to fit it, never below
+ * CELL_MIN (the grid then scrolls inside its own box), and a figure shrinks with its cell so that the
+ * widest one, `figureChars` characters, stays inside it; below FIGURE_MIN no figure is printed.
+ */
+export function heatLayout(tickers: string[], box?: number, figureChars = 5): HeatLayout {
   const longest = Math.max(1, ...tickers.map((t) => t.length));
   const left = Math.ceil(longest * CHAR) + 12;
-  const turned = longest * CHAR > CELL - 6;
+  const n = tickers.length;
+  const fit = box !== undefined && box > 0 && n > 0 ? Math.floor((box - left) / n) : CELL;
+  const cell = Math.max(CELL_MIN, Math.min(CELL, fit));
+  const turned = longest * CHAR > cell - 6;
   const top = turned ? Math.ceil(longest * CHAR * Math.SQRT1_2) + 14 : FONT + 12;
-  return { left, top, turned, width: left + tickers.length * CELL, height: top + tickers.length * CELL };
+  const figures = cell >= FIGURE_MIN;
+  // JetBrains Mono's advance is 0.6 em: the widest figure keeps 2px clear each side of its cell.
+  const font = Math.min(FONT, Math.floor(((cell - 4) / (Math.max(1, figureChars) * 0.6)) * 10) / 10);
+  return { left, top, turned, width: left + n * cell, height: top + n * cell, cell, figures, font };
+}
+
+/** The cell an arrow key moves the reading to from `at` (the first cell when nothing is read yet), or null for any other key. */
+export function stepCell(at: readonly [number, number] | null, key: string, n: number): [number, number] | null {
+  const move: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+  const d = move[key];
+  if (!d || n < 1) return null;
+  if (!at) return [0, 0];
+  const clamp = (k: number) => Math.max(0, Math.min(n - 1, k));
+  return [clamp(at[0] + d[0]), clamp(at[1] + d[1])];
 }
 
 /**

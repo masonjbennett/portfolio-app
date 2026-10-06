@@ -6,12 +6,15 @@
 // for nothing, but style_chart (983-995), called after its layout (1435), sets hovermode "x unified"
 // on it as on every chart. The readout line above the grid always holds text, so it never jumps.
 //
-// On a phone the grid keeps its figures at 12px and scrolls sideways inside its own box rather than
-// shrinking them below legibility.
-import { useState } from "react";
+// In a box too narrow for its cells (a phone), the grid shrinks its cells to fit the box, down to a
+// floor (heatLayout, ./model.ts); a cell too small to print its figure legibly prints none, and a tap,
+// a pointer or the arrow keys on the focused grid read it. Only a grid that does not fit even at the
+// floor scrolls sideways, inside its own box, never the page.
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { format } from "../../format.ts";
 import { tokens } from "../../styles/tokens.ts";
-import { CELL, FONT, heatLayout, MAX_SCALE, readout, tint, type CorrView } from "./model.ts";
+import { useWidth } from "../returns/useWidth.ts";
+import { FONT, heatLayout, MAX_SCALE, readout, stepCell, tint, type CorrView } from "./model.ts";
 
 const c = tokens.color;
 const mono = tokens.font.mono;
@@ -19,22 +22,36 @@ const mono = tokens.font.mono;
 export default function Heatmap({ view }: { view: CorrView }) {
   const [at, setAt] = useState<readonly [number, number] | null>(null);
   const { tickers, matrix } = view;
-  const L = heatLayout(tickers);
+  // The box's width once measured; 0 (unmeasured, or a surface with no layout) keeps the full-size cells.
+  const [box, width] = useWidth<HTMLDivElement>(0);
+  const widest = useMemo(() => Math.max(1, ...matrix.flatMap((row) => row.map((r) => format(r, "num2").length))), [matrix]);
+  const L = heatLayout(tickers, width > 0 ? width : undefined, widest);
+  const CELL = L.cell;
   const x = (j: number) => L.left + j * CELL;
   const y = (i: number) => L.top + i * CELL;
+  const onKey = (e: KeyboardEvent<SVGSVGElement>) => {
+    if (e.key === "Escape") return setAt(null);
+    const next = stepCell(at, e.key, tickers.length);
+    if (!next) return;
+    e.preventDefault();
+    setAt(next);
+  };
 
   return (
     <div className="corr-heat">
       <p className="corr-readout" aria-live="polite">
         {readout(view, at)}
       </p>
-      <div className="corr-heat-scroll">
+      <div className="corr-heat-scroll" ref={box}>
         <svg
           className="corr-heat-svg"
           viewBox={`0 0 ${L.width} ${L.height}`}
           style={{ minWidth: L.width, maxWidth: L.width * MAX_SCALE, aspectRatio: `${L.width} / ${L.height}` }}
           role="img"
-          aria-label={`Correlation heatmap of ${tickers.join(", ")}. The figures are in the table below.`}
+          aria-label={`Correlation heatmap of ${tickers.join(", ")}. The arrow keys read one cell at a time; the figures are in the table below.`}
+          tabIndex={0}
+          onKeyDown={onKey}
+          onFocus={() => setAt((was) => was ?? [0, 0])}
           onMouseLeave={() => setAt(null)}
         >
           {tickers.map((t, j) =>
@@ -80,18 +97,20 @@ export default function Heatmap({ view }: { view: CorrView }) {
                   onClick={() => setAt([i, j])}
                 >
                   <rect x={x(j)} y={y(i)} width={CELL} height={CELL} fill={tint(r)} stroke={c.paper} strokeWidth={1} />
-                  <text
-                    x={x(j) + CELL / 2}
-                    y={y(i) + CELL / 2}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fill={c.ink}
-                    fontFamily={mono}
-                    fontSize={FONT}
-                    pointerEvents="none"
-                  >
-                    {format(r, "num2")}
-                  </text>
+                  {L.figures ? (
+                    <text
+                      x={x(j) + CELL / 2}
+                      y={y(i) + CELL / 2}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill={c.ink}
+                      fontFamily={mono}
+                      fontSize={L.font}
+                      pointerEvents="none"
+                    >
+                      {format(r, "num2")}
+                    </text>
+                  ) : null}
                 </g>
               );
             }),

@@ -20,6 +20,7 @@ import { gmv, tangency, type Solution, type Tangency } from "../../lib/optimize.
 import { normalizeCustom, portfolioPerformance, windowMoments, windows, type Custom, type Performance } from "../../lib/portfolio.ts";
 import type { Mat, Vec } from "../../lib/num.ts";
 import { format, MINUS } from "../../format.ts";
+import { cullLabels, textWidth, type Rect } from "../../charts/labels.ts";
 import type { Analysis, Column, CustomWeights, LoadState, TableRow } from "../../types.ts";
 
 /** The two optimised portfolios, as the app's radio names them (1938). */
@@ -253,6 +254,52 @@ export function labelLayout(groups: Group[], labelPx: number, plotPx: number): {
   let hi = Math.max(top, (hostTop - f * lo) / (1 - f));
   if (!(hi > lo)) hi = lo + 1;
   return { host, lo, hi };
+}
+
+/** The bars' spacing as GroupedBars asks Recharts for it: a gap of 16% of the band each side, 1px between bars. */
+export const BAR_SPACING = { categoryGap: 0.16, barGap: 1 } as const;
+
+/**
+ * Which series names are drawn on the label group, the last step after labelLayout. Each name runs up
+ * from 4px over its own bar's top edge (the zero line for a bar that points down), its box across the
+ * ink of its letters (the face's cap height, 0.70 em; 0.90 em with a descender) centred on its bar; it
+ * is left off when that box
+ * meets a name drawn before it, another bar of the group, or runs out of the chart's top. `plot` is the
+ * plot's box in px and [lo, hi] the y axis' domain; bars sit in their band as Recharts sets them.
+ */
+export function namesDrawn(
+  groups: readonly Group[],
+  host: number,
+  labels: readonly string[],
+  plot: { x: number; y: number; width: number; height: number },
+  lo: number,
+  hi: number,
+  fontPx = 11,
+): boolean[] {
+  const g = groups[host];
+  const k = labels.length;
+  if (!g || !k || !(plot.width > 0) || !(plot.height > 0) || !(hi > lo)) return labels.map(() => true);
+  const band = plot.width / groups.length;
+  const gap = BAR_SPACING.categoryGap * band;
+  // Recharts' own sizing, measured in the drawn chart: the band less its gaps, shared, floored to whole
+  // px once over 1px; the 1px between bars is added after (at 1,440 px with ten groups a bar is 11px at a 12px pitch).
+  const share = (band - 2 * gap) / k;
+  const size = share > 1 ? Math.floor(share) : share;
+  const py = (v: number) => plot.y + ((hi - v) / (hi - lo)) * plot.height;
+  const left = (i: number) => plot.x + host * band + gap + i * (size + BAR_SPACING.barGap);
+  const v = (i: number) => {
+    const x = g.values[i];
+    return x !== null && x !== undefined && Number.isFinite(x) ? x : 0;
+  };
+  const bars: Rect[] = labels.map((_, i) => ({ lo: left(i), hi: left(i) + size, top: py(Math.max(0, v(i))), bot: py(Math.min(0, v(i))) }));
+  const spots = labels.map((t, i) => {
+    const cx = left(i) + size / 2;
+    const ink = (/[gjpqy,]/.test(t) ? 0.9 : 0.7) * fontPx;
+    const bot = py(Math.max(0, v(i))) - 4;
+    return [{ lo: cx - ink / 2, hi: cx + ink / 2, top: bot - textWidth(t, fontPx), bot }];
+  });
+  const at = cullLabels(spots, (i) => bars.filter((_, j) => j !== i), { lo: -Infinity, hi: Infinity, top: 0, bot: Infinity });
+  return at.map((x) => x >= 0);
 }
 
 /**

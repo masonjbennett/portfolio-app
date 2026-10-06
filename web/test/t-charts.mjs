@@ -134,6 +134,57 @@ check(lab.fill === tokens.color.ink2 && ROLE.tangency === tokens.color.bronze,
   check(seen >= 8 && bare.length === 0, `tooltips: all ${seen} Recharts hover boxes in src/ pass their own content`, bare.join(" | "));
 }
 
+// ---- (c2) leaving off a name that cannot be placed --------------------------------------------------
+// cullLabels is the last step after a chart's own packer: each name at its first spot that meets no
+// name drawn before it and no mark, or left off when every spot fails; a kept name always draws.
+{
+  const { cullLabels, cullBlocked, cullNote, meets } = await import("../src/charts/labels.ts");
+  // Ten names, 12px tall, stacked 8px apart down one column: each may also sit 40px to the right.
+  const box = (lo, top) => ({ lo, hi: lo + 30, top, bot: top + 12 });
+  const spots = Array.from({ length: 10 }, (_, i) => [box(0, i * 8), box(40, i * 8)]);
+  const mark = { lo: 35, hi: 75, top: 40, bot: 48 }; // a reference line's name, across the right column
+  const keep = (i) => i === 9;
+  const at = cullLabels(spots, [mark], undefined, keep);
+  const drawn = at.flatMap((k, i) => (k >= 0 ? [{ i, r: spots[i][k] }] : []));
+  const clash = [];
+  drawn.forEach((a, x) => drawn.slice(x + 1).forEach((b) => meets(a.r, b.r) && clash.push(`${a.i}/${b.i}`)));
+  drawn.forEach((a) => !keep(a.i) && meets(a.r, mark) && clash.push(`${a.i}/mark`));
+  check(clash.length === 0, "labels cull: at N = 10, no two drawn names overlap, and none but a kept one meets a mark", clash.join(", "));
+  check(at[9] === 0, "labels cull: a kept name always draws, at its packer's spot, even where it meets something", String(at[9]));
+  // A name is left off only when each of its spots meets something drawn (or a mark).
+  const needless = at.flatMap((k, i) => (k >= 0 ? [] : spots[i].some((r) => !meets(r, mark) && !drawn.some((d) => meets(d.r, r))) ? [i] : []));
+  check(at.some((k) => k < 0) && needless.length === 0, "labels cull: a name is left off only when every candidate spot collides", `off ${at.flatMap((k, i) => (k < 0 ? [i] : [])).join(",")}; needless ${needless.join(",")}`);
+  check(at.filter((k) => k >= 0).length > 2 && at.some((k) => k === 1), "labels cull: a name whose first spot collides takes its second before it is left off", at.join(","));
+  const apart = Array.from({ length: 10 }, (_, i) => [box(0, i * 14)]);
+  check(cullLabels(apart).every((k) => k === 0), "labels cull: names that do not collide are all drawn where their packer put them");
+  check(cullLabels([[box(0, -4)], [box(0, 20)]], [], { lo: 0, hi: 100, top: 0, bot: 100 }).join() === "-1,0",
+    "labels cull: a name that would leave the chart is left off");
+
+  // cullBlocked, for a packer that flags what it could not set clear: names on a line, one wide, blocked
+  // by any other name nearer than 1. "P" may never be left off.
+  const pos = { P: 0, a1: 0.5, a2: 3, a3: 3.4, a4: 6, a5: 8, a6: 8.6, a7: 9.3, a8: 12, a9: 14 };
+  const place = (off) => {
+    const on = Object.keys(pos).filter((k) => !off.has(k));
+    return on.map((k) => ({ key: k, clear: !on.some((o) => o !== k && Math.abs(pos[o] - pos[k]) < 1) }));
+  };
+  const may = (k) => k !== "P";
+  const { labels, off } = cullBlocked(place, may);
+  const back = off.filter((k) => !place(new Set(off.filter((o) => o !== k))).some((l) => l.clear === false));
+  check(labels.every((l) => l.clear !== false) && labels.some((l) => l.key === "P") && off.length > 0 && !off.includes("P") && back.length === 0,
+    "labels cull: the blocked-name cull leaves the protected name drawn, every drawn name clear, and none off that could come back",
+    `off ${off.join(",")}; could come back ${back.join(",")}`);
+  check(off.length === 3, "labels cull: on the line of ten, exactly the three names that cannot be placed are left off", off.join(","));
+
+  // The line under the chart: from the count, nothing when nothing is left off.
+  const how = ["hover or tap its point to read it", "hover or tap a point to read it"];
+  check(cullNote(0, ["name", "names"], how) === null && cullNote(Number.NaN, ["name", "names"], how) === null,
+    "labels cull: no line under a chart that left nothing off");
+  check(cullNote(1, ["name", "names"], how) === "One name that would overlap is left off; hover or tap its point to read it." &&
+    cullNote(3, ["name", "names"], how) === "Three names that would overlap are left off; hover or tap a point to read it." &&
+    cullNote(12, ["name", "names"], how) === "12 names that would overlap are left off; hover or tap a point to read it.",
+    "labels cull: the line says how many, from the count, and how to read them", cullNote(3, ["name", "names"], how));
+}
+
 // ---- (d) ChartFrame --------------------------------------------------------------------------------
 let drew = [];
 const draw = (v) => {

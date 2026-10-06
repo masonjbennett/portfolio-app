@@ -49,7 +49,7 @@ import { annualizedStats } from "../lib/stats.ts";
 import { tokens } from "../styles/tokens.ts";
 import type { Analysis, LoadState } from "../types.ts";
 import { labelFill } from "./contrast.ts";
-import { textWidth } from "./labels.ts";
+import { CULL_STYLE, cullBlocked, cullNote, textWidth } from "./labels.ts";
 import { axisProps, chartTheme, DASH, gridProps, ROLE, tooltipProps, type Hover } from "./theme.ts";
 
 const c = tokens.color;
@@ -797,11 +797,18 @@ interface LabelItem {
 // The added constructions' names are all set on the chart or none is. Where setting them leaves some
 // name with no free spot, and leaving them off frees one, they are left off, their markers still kept
 // clear of the other names, and `onUnnamed` hands their keys up for the key line under the chart.
-function FrontierLabels({ items, cal, line, onUnnamed }: {
+//
+// Last, an asset's name that still has no free spot is left off (cullBlocked, ../charts/labels.ts), its
+// marker kept clear of the other names, and `onCulled` hands the count up for the line under the
+// chart; the point's own hover box reads it, on a tap as on a pointer, and from the keyboard each one
+// left off is a stop that draws its name while it has focus (CulledName). Only asset names are ever left
+// off: the portfolios', the added constructions', the benchmark's and the two lines' names always draw.
+function FrontierLabels({ items, cal, line, onUnnamed, onCulled }: {
   items: LabelItem[];
   cal: CalSegment | null;
   line: readonly Datum[];
   onUnnamed: (keys: readonly string[]) => void;
+  onCulled: (keys: readonly string[]) => void;
 }) {
   const xs = useXAxisScale();
   const ys = useYAxisScale();
@@ -817,27 +824,78 @@ function FrontierLabels({ items, cal, line, onUnnamed }: {
       const named = placeAll(items, cal, line, xs, ys, yDomain, plot);
       const added = items.filter((it) => it.key.startsWith(ADDED_KEY)).map((it) => it.key);
       const blocked = (ls: readonly PlacedLabel[]) => ls.filter((l) => l.clear === false).length;
-      if (!added.length || !blocked(named)) return { labels: named, unnamed: NONE };
-      const quiet = placeAll(items, cal, line, xs, ys, yDomain, plot, new Set(added));
-      return blocked(quiet) < blocked(named) ? { labels: quiet, unnamed: added } : { labels: named, unnamed: NONE };
+      const quiet = added.length && blocked(named) ? placeAll(items, cal, line, xs, ys, yDomain, plot, new Set(added)) : null;
+      const pick = quiet && blocked(quiet) < blocked(named) ? { labels: quiet, unnamed: added } : { labels: named, unnamed: NONE };
+      if (!pick.labels.some((l) => l.clear === false && isAsset(l.key))) return { ...pick, culled: NONE };
+      const { labels, off } = cullBlocked(
+        (more) => placeAll(items, cal, line, xs, ys, yDomain, plot, new Set([...pick.unnamed, ...more])),
+        isAsset,
+      );
+      return { labels, unnamed: pick.unnamed, culled: off.length ? off : NONE };
     },
     // The scales, domain and area by what they map (`geometry`), not by identity.
     [items, cal, line, geometry],
   );
   const unnamed = placed?.unnamed ?? NONE;
+  const culled = placed?.culled ?? NONE;
   useLayoutEffect(() => onUnnamed(unnamed), [unnamed, onUnnamed]);
+  useLayoutEffect(() => onCulled(culled), [culled, onCulled]);
   if (!placed) return null;
+  const right = plot ? plot.x + plot.width : Infinity;
   return (
     <g className="frontier-labels">
       {placed.labels.map((l) => (
         <LabelText key={l.key} l={l} />
       ))}
+      {culled.map((key) => {
+        const it = items.find((x) => x.key === key);
+        const px = it && xs ? (xs(it.sigma) ?? NaN) : NaN;
+        const py = it && ys ? (ys(it.mu) ?? NaN) : NaN;
+        if (!it || !finite(px) || !finite(py)) return null;
+        const width = textWidth(it.text);
+        const fits = px + CULLED_GAP + width <= right;
+        return (
+          <CulledName
+            key={key}
+            l={{ key, text: it.text, color: it.color, x: fits ? px + CULLED_GAP : px - CULLED_GAP, y: py, px, py, anchor: fits ? "start" : "end", width, leader: false }}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+// How far a left-off name is set from its point while the keyboard is on it.
+const CULLED_GAP = 10;
+
+// A name left off the chart, for the keyboard: a stop in the tab order that names its point to a screen
+// reader and, while it has focus, draws the name beside the point, over whatever is there, as a hover
+// box would. Its state is its own, so focusing it redraws nothing else.
+function CulledName({ l }: { l: PlacedLabel }) {
+  const [on, setOn] = useState(false);
+  return (
+    <g className="culled-name" tabIndex={0} role="img" aria-label={l.text} onFocus={() => setOn(true)} onBlur={() => setOn(false)}>
+      {on ? (
+        <>
+          <circle cx={l.px} cy={l.py} r={8} fill="none" stroke={c.ink} strokeWidth={1.5} pointerEvents="none" />
+          <text x={l.x} y={l.y} textAnchor={l.anchor} dominantBaseline="central" fill={labelFill(l.color)} pointerEvents="none" {...LABEL_FONT}>
+            {l.text}
+          </text>
+        </>
+      ) : null}
     </g>
   );
 }
 
 const NONE: readonly string[] = [];
 const ADDED_KEY = "added-";
+const ASSET_KEY = "asset-";
+/** Whether a name is an asset's, the only kind the chart may leave off. */
+export const isAsset = (key: string) => key.startsWith(ASSET_KEY);
+
+/** The line under the frontier when asset names are left off, from the count. */
+export const frontierCull = (n: number) =>
+  cullNote(n, ["asset name", "asset names"], ["hover or tap its point to read it", "hover or tap a point to read it"]);
 
 function placeAll(
   items: LabelItem[],
@@ -915,7 +973,7 @@ function layout(plot: Plot) {
     })),
     ...added.map((x) => ({ key: `${ADDED_KEY}${x.id}`, text: x.label, color: ADDED_INK, sigma: x.sigma, mu: x.mu, own: glyphExtent(ADDED_GLYPH[x.id]) })),
     ...(bench ? [{ key: "bench", text: bench.label, color: ROLE.bench, sigma: bench.sigma, mu: bench.mu, own: symbolExtent(BENCH_MARKER.type, BENCH_MARKER.size) }] : []),
-    ...assets.map((a) => ({ key: `asset-${a.ticker}`, text: a.ticker, color: ASSET, sigma: a.sigma, mu: a.mu, own: symbolExtent(ASSET_MARKER.type, ASSET_MARKER.size) })),
+    ...assets.map((a) => ({ key: `${ASSET_KEY}${a.ticker}`, text: a.ticker, color: ASSET, sigma: a.sigma, mu: a.mu, own: symbolExtent(ASSET_MARKER.type, ASSET_MARKER.size) })),
     {
       key: "frontier", text: "Efficient frontier", color: ROLE.frontier, sigma: line[line.length - 1].sigma, mu: line[line.length - 1].mu,
       // Its name may sit anywhere along the upper half of the line, from its end back.
@@ -937,6 +995,10 @@ const FrontierPlot = memo(function FrontierPlot({ plot, height }: { plot: Plot; 
   const [unnamed, setUnnamed] = useState<readonly string[]>(NONE);
   const onUnnamed = useCallback((keys: readonly string[]) => setUnnamed((was) => (was.join() === keys.join() ? was : keys)), []);
   const keyed = added.filter((x) => unnamed.includes(`${ADDED_KEY}${x.id}`));
+  // The asset names left off at this width (FrontierLabels), for the line under the chart.
+  const [culled, setCulled] = useState<readonly string[]>(NONE);
+  const onCulled = useCallback((keys: readonly string[]) => setCulled((was) => (was.join() === keys.join() ? was : keys)), []);
+  const note = frontierCull(culled.length);
 
   return (
     <>
@@ -1023,10 +1085,15 @@ const FrontierPlot = memo(function FrontierPlot({ plot, height }: { plot: Plot; 
               isAnimationActive={false}
             />
           ))}
-          <FrontierLabels items={labels} cal={cal} line={line} onUnnamed={onUnnamed} />
+          <FrontierLabels items={labels} cal={cal} line={line} onUnnamed={onUnnamed} onCulled={onCulled} />
         </ScatterChart>
       </div>
       {keyed.length ? <FrontierKey added={keyed} /> : null}
+      {note ? (
+        <p className="chart-cull" style={CULL_STYLE}>
+          {note}
+        </p>
+      ) : null}
     </>
   );
 });
