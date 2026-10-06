@@ -10,7 +10,9 @@
 //     bounds off; the app's toggle help calls that frontier "unconstrained".
 // (e) a failed tangency draws no tangency point and no line, and says so; (f) every other state fails closed.
 // (g) wealth: starts at the amount invested (ledger:drawdown-and-wealth-start, chart half), matches the
-//     app's path a day in, every line named at its end; ledger:daily-rebalanced-label.
+//     app's path a day in, every line named at its end; ledger:daily-rebalanced-label. Two lines that end
+//     together (Custom at equal weights on Equal-Weight) keep the app's order whichever way rounding tips
+//     them, ends apart are never drawn as one, and the caption says Custom covers Equal-Weight exactly then.
 // (h) every name drawn reads on paper at WCAG AA (4.5:1): bronze names are set in ink2 (src/charts/contrast.ts).
 import { render, text, act } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
@@ -27,7 +29,7 @@ const Wealth = W.default;
 const { tokens } = await import("../src/styles/tokens.ts");
 const { ROLE, DASH, SERIES, assetColors } = await import("../src/charts/theme.ts");
 const { contrastRatio, labelFill, TEXT_AA } = await import("../src/charts/contrast.ts");
-const { textWidth } = await import("../src/charts/labels.ts");
+const { spreadLabels, textWidth } = await import("../src/charts/labels.ts");
 const { format, MINUS } = await import("../src/format.ts");
 const { portfolioReturns } = await import("../src/lib/portfolio.ts");
 const REL = 1e-12; // test/t-parity.mjs's T0 tier: arithmetic fed the same inputs
@@ -327,6 +329,46 @@ const W0 = o.w0;
   check(W.WEALTH_HOVER === "x" && W.wealthTooltip.shared === true, "wealth: hover compares every line at one date");
 }
 
+// ---- (g) wealth: ends that tie, and ends that do not ------------------------------------------------------
+{
+  // A near-tie, as rounding makes one in a browser: Custom's weights a hair off Equal-Weight's (inside the
+  // 1e-12 that still counts as equal weights) end it a hair above Equal-Weight, then a hair below. Either
+  // way the names keep the app's order, Equal-Weight above Custom.
+  const nudged = [1, -1].map((s) => long.ew.map((x, i) => x + (i === 0 ? s : i === 1 ? -s : 0) * 1e-13));
+  const gaps = nudged.map((w) => {
+    const ls = W.wealthPlot(ready(W.wealthData(long, w)), W0).value.lines;
+    return ls.find((l) => l.role === "custom").end - ls.find((l) => l.role === "ew").end;
+  });
+  check(gaps[0] * gaps[1] < 0 && gaps.every((g) => Math.abs(g) < 1e-6) && nudged.every((w) => W.wealthData(long, w).customIsEqual),
+    "wealth near-tie setup: still equal weights, and Custom ends within a millionth of a dollar of Equal-Weight, above it once and below it once", gaps.join());
+  nudged.forEach((w, k) => {
+    const r = render(h(Wealth, { title: "Growth", state: ready(W.wealthData(long, w)), amount: W0 }));
+    const ls = labels(r.container);
+    const y = (n) => ls.find((l) => l.text.startsWith(`${n} $`))?.y;
+    check(y("Equal-Weight") < y("Custom"), `wealth near-tie: Equal-Weight's name is above Custom's though Custom ends a hair ${gaps[k] > 0 ? "above" : "below"} it`,
+      ls.map((l) => `${l.text} @ ${l.y}`).join(" | "));
+    r.unmount();
+  });
+
+  // Ends more than half a pixel apart are never drawn as one: GMV, Tangency and the benchmark end a few pixels
+  // apart here, and every name sits where spreadLabels puts its own line's drawn end.
+  const n = long.dates.length;
+  const grow = (x) => new Array(n).fill(Math.pow(x, 1 / n) - 1);
+  const series = [["Equal-Weight", "ew", 2], ["GMV", "gmv", 1.5], ["Tangency", "tangency", 1.52], ["Custom", "custom", 1.9], ["S&P 500", "bench", 1.54]]
+    .map(([label, role, x]) => ({ label, role, returns: grow(x) }));
+  const r = render(h(Wealth, { title: "Growth", state: ready({ start: long.prices.dates[0], dates: long.dates, series, customIsEqual: false }), amount: W0 }));
+  const ends = [...r.container.querySelectorAll(".recharts-line-curve")].map((p) => Number(p.getAttribute("d").match(/,(-?[\d.]+(?:e[-+]?\d+)?)\s*$/)?.[1]));
+  const apart = [[1, 2], [2, 4], [1, 4]].map(([i, j]) => Math.abs(ends[i] - ends[j]));
+  check(ends.length === 5 && ends.every(Number.isFinite) && apart.every((d) => d > 0.5) && apart.some((d) => d < 20),
+    "wealth close ends setup: GMV, Tangency and the benchmark end more than half a pixel apart, and some within 20px", apart.join());
+  const want = spreadLabels(ends, 15);
+  const ls = labels(r.container);
+  check(ls.length === 5 && ls.every((l, k) => Math.abs(l.y - want[k]) < 1e-9),
+    "wealth: ends more than half a pixel apart are never drawn as one; each name sits where its own end puts it",
+    ls.map((l, k) => `${l.text} @ ${l.y} (want ${want[k]})`).join(" | "));
+  r.unmount();
+}
+
 // ---- (h) names that read on paper -------------------------------------------------------------------------
 {
   const paper = tokens.color.paper;
@@ -363,7 +405,7 @@ const W0 = o.w0;
   const r = render(h(Wealth, { title: "Growth", state: ready(W.wealthData(long, long.ew)), amount: W0 }));
   const cap = subtitle(r.container);
   check(cap === `Growth of $10,000 from ${long.prices.dates[0]} to ${long.dates[long.dates.length - 1]}. Each portfolio is rebalanced daily to the target weights. ` +
-    "GMV and Tangency are hypothetical: weights chosen with the whole period's prices.",
+    "GMV and Tangency are hypothetical: weights chosen with the whole period's prices. Custom is still equal weights, so its line covers Equal-Weight's.",
     "ledger:daily-rebalanced-label: the port's caption says each portfolio is rebalanced daily to the target weights", cap);
   // hypothetical: only the lines an optimiser fitted to these prices are called hypothetical.
   check(W.wealthCaption(W0, "2020-01-02", "2020-12-31") === "Growth of $10,000 from 2020-01-02 to 2020-12-31. Each portfolio is rebalanced daily to the target weights." &&
@@ -372,6 +414,19 @@ const W0 = o.w0;
     JSON.stringify(W.fittedLines(W.wealthData({ ...long, gmv: null, tangency: null }, long.ew).series)) === "[]",
     "hypothetical: the caption calls GMV and Tangency hypothetical, and never Equal-Weight, Custom or the benchmark");
   r.unmount();
+  // covers: while Custom's weights are Equal-Weight's its line is drawn over Equal-Weight's, and the caption's
+  // last sentence says so; a typed mix, or no custom line, says nothing of it.
+  const typed = [0.4, 0.15, 0.15, 0.15, 0.15];
+  check(W.CUSTOM_COVERS === "Custom is still equal weights, so its line covers Equal-Weight's." &&
+    W.wealthData(long, long.ew).customIsEqual === true && W.wealthData(long, typed).customIsEqual === false && W.wealthData(long, null).customIsEqual === false &&
+    W.wealthCaption(W0, "2020-01-02", "2020-12-31", ["GMV", "Tangency"], true).endsWith(` whole period's prices. ${W.CUSTOM_COVERS}`) &&
+    W.wealthCaption(W0, "2020-01-02", "2020-12-31", [], true).endsWith(` to the target weights. ${W.CUSTOM_COVERS}`) &&
+    !W.wealthCaption(W0, "2020-01-02", "2020-12-31", ["GMV", "Tangency"]).includes("covers"),
+    "covers: Custom at equal weights is marked, a typed mix and no custom line are not, and the sentence comes last");
+  const rt = render(h(Wealth, { title: "Growth", state: ready(W.wealthData(long, typed)), amount: W0 }));
+  check(!subtitle(rt.container).includes("covers") && subtitle(rt.container).endsWith(" whole period's prices."),
+    "covers: a typed mix's chart does not say Custom covers Equal-Weight", subtitle(rt.container));
+  rt.unmount();
 }
 
 // ---- wealth states ---------------------------------------------------------------------------------------

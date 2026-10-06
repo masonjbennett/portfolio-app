@@ -8,6 +8,8 @@
 // - The caption says what is plotted: fixed weights, rebalanced daily to the target weights (R @ w,
 //   1661-1665). The app plotted exactly that and said nothing about it.
 // - Hover compares every line at one date (a shared x, the one chart family where that is the point).
+// - While Custom's weights are Equal-Weight's, Custom's line is drawn over Equal-Weight's and hides it.
+//   The app drew it so and said nothing (1660-1674); the caption says so.
 import { memo, useMemo, type ReactNode } from "react";
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis, usePlotArea, useYAxisScale } from "recharts";
 import { usePhone } from "../chrome/usePhone.ts";
@@ -46,6 +48,8 @@ export interface WealthData {
   dates: readonly string[];
   /** The lines, drawn in this order. */
   series: readonly WealthSeries[];
+  /** Custom's weights are Equal-Weight's (each within 1e-12), so its line covers Equal-Weight's. */
+  customIsEqual: boolean;
 }
 
 export interface WealthProps {
@@ -72,7 +76,8 @@ export const wealthTooltip = tooltipProps(WEALTH_HOVER);
 /**
  * The lines for one analysis in the app's order (1661-1665): Equal-Weight, GMV, Tangency, Custom,
  * then the benchmark. A portfolio whose solve failed is left out, never replaced. `custom` is the
- * normalised custom weights, or null to leave that line off.
+ * normalised custom weights, or null to leave that line off. Custom weights within 1e-12 of
+ * Equal-Weight's (the tolerance the Custom tab's own equal-weights test uses) are marked customIsEqual.
  */
 export function wealthData(a: Analysis, custom: Vec | null = null): WealthData {
   const series: WealthSeries[] = [{ label: "Equal-Weight", role: "ew", returns: portfolioReturns(a.returns, a.ew) }];
@@ -80,20 +85,28 @@ export function wealthData(a: Analysis, custom: Vec | null = null): WealthData {
   if (a.tangency) series.push({ label: "Tangency", role: "tangency", returns: portfolioReturns(a.returns, a.tangency.w) });
   if (custom) series.push({ label: "Custom", role: "custom", returns: portfolioReturns(a.returns, custom) });
   series.push({ label: a.benchLabel, role: "bench", returns: a.bench });
-  return { start: a.prices.dates[0], dates: a.dates, series };
+  const customIsEqual = custom !== null && custom.length === a.ew.length && custom.every((x, i) => Math.abs(x - a.ew[i]) <= 1e-12);
+  return { start: a.prices.dates[0], dates: a.dates, series, customIsEqual };
 }
+
+/** The caption's last sentence while Custom's weights are Equal-Weight's: one line drawn over the other. */
+export const CUSTOM_COVERS = "Custom is still equal weights, so its line covers Equal-Weight's.";
 
 /**
  * The caption under the wealth chart's title. `fitted` names the lines whose weights an optimiser chose
  * from the same prices the chart then runs them over (GMV and Tangency): their growth is hypothetical,
  * and the caption says so in those words. Equal weights, a custom mix and the benchmark chose nothing.
+ * `customIsEqual` ends it with CUSTOM_COVERS, since the hidden Equal-Weight line is otherwise unexplained.
  */
-export function wealthCaption(amount: number, start?: string, end?: string, fitted: readonly string[] = []): string {
+export function wealthCaption(amount: number, start?: string, end?: string, fitted: readonly string[] = [], customIsEqual = false): string {
   const span = start && end ? ` from ${format(start, "date")} to ${format(end, "date")}` : "";
-  const base = `Growth of ${format(amount, "usd0")}${span}. Each portfolio is rebalanced daily to the target weights.`;
-  if (!fitted.length) return base;
-  const names = fitted.length === 1 ? `${fitted[0]} is` : `${fitted.slice(0, -1).join(", ")} and ${fitted[fitted.length - 1]} are`;
-  return `${base} ${names} hypothetical: weights chosen with the whole period's prices.`;
+  const parts = [`Growth of ${format(amount, "usd0")}${span}. Each portfolio is rebalanced daily to the target weights.`];
+  if (fitted.length) {
+    const names = fitted.length === 1 ? `${fitted[0]} is` : `${fitted.slice(0, -1).join(", ")} and ${fitted[fitted.length - 1]} are`;
+    parts.push(`${names} hypothetical: weights chosen with the whole period's prices.`);
+  }
+  if (customIsEqual) parts.push(CUSTOM_COVERS);
+  return parts.join(" ");
 }
 
 /** The lines whose weights were chosen with the chart's own prices, in series order. */
@@ -165,12 +178,22 @@ export function DateTip({ active, payload, label }: { active?: boolean; payload?
   );
 }
 
+// Ends closer than this are one end (px).
+const TIE_PX = 0.5;
+
 // Each line's name at its last value, just right of the plot, moved apart where they would collide.
+// An end within TIE_PX of an earlier line's end takes that end's position: Custom at equal weights ends
+// on Equal-Weight, apart only by rounding, and spreadLabels keeps series order on an exact tie, so the
+// two names stay in the app's order instead of one that flips with the last bit of a sum.
 function EndLabels({ lines, withValue }: { lines: WealthPlot["lines"]; withValue: boolean }) {
   const ys = useYAxisScale();
   const plot = usePlotArea();
   if (!ys || !plot) return null;
-  const at = lines.map((l) => ys(l.end) ?? NaN);
+  const at: number[] = [];
+  for (const l of lines) {
+    const y = ys(l.end) ?? NaN;
+    at.push(at.find((e) => Math.abs(e - y) <= TIE_PX) ?? y);
+  }
   if (!at.every(Number.isFinite)) return null;
   const spread = spreadLabels(at, 15);
   const x = plot.x + plot.width + 8;
@@ -231,10 +254,11 @@ export default function Wealth({ title, state, amount, height, onAmount }: Wealt
   const plot = useMemo(() => wealthPlot(state, amount), [state, amount]);
   const span = state.status === "ready" && state.value.dates.length ? state.value : null;
   const fitted = state.status === "ready" ? fittedLines(state.value.series) : [];
+  const covers = state.status === "ready" && state.value.customIsEqual;
   return (
     <ChartFrame
       title={title}
-      subtitle={wealthCaption(amount, span?.start, span ? span.dates[span.dates.length - 1] : undefined, fitted)}
+      subtitle={wealthCaption(amount, span?.start, span ? span.dates[span.dates.length - 1] : undefined, fitted, covers)}
       state={plot}
       height={h}
       control={onAmount ? <AmountField amount={amount} onAmount={onAmount} /> : undefined}

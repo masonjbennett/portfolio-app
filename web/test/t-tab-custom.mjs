@@ -25,7 +25,7 @@ const { summaryRow, portfolioPerformance, portfolioReturns } = await import("../
 const { maxDrawdown } = await import("../src/lib/stats.ts");
 const { maxReturn } = await import("../src/lib/optimize.ts");
 const { frontierData, FRONTIER_HOVER } = await import("../src/charts/Frontier.tsx");
-const { wealthData } = await import("../src/charts/Wealth.tsx");
+const { CUSTOM_COVERS, wealthData } = await import("../src/charts/Wealth.tsx");
 const { tipText } = await import("../src/content/tooltips.ts");
 const { csvText } = await import("../src/download.ts");
 const { format, MINUS } = await import("../src/format.ts");
@@ -327,6 +327,8 @@ function Harness({ a, init = {}, level = "plain" }) {
     "frontier: the tab draws its own 60-point frontier (1756), not the Optimization tab's 80");
   const wl = chartLabels(we);
   check(["Equal-Weight", "GMV", "Tangency", "Custom", a.benchLabel].every((n) => wl.some((l) => l.startsWith(`${n} $`))), "wealth: each line named at its end", wl.join());
+  const wsub = () => text(figures(root)[1].querySelector(".chart-sub"));
+  check(wsub().endsWith(` ${CUSTOM_COVERS}`), "wealth: at 1/n the caption says Custom's line covers Equal-Weight's", wsub());
 
   // The one table, with both downloads.
   const tb = tables(root);
@@ -350,6 +352,7 @@ function Harness({ a, init = {}, level = "plain" }) {
   check(t().includes("Weight total: 1.30.") && [...tables(root)[0].querySelectorAll("tbody tr")][0].children[2].textContent === pct(0.5 / 1.3),
     "typing: the total and the normalised weight follow", t().match(/Weight total: [^.]+\.\d+/)?.[0]);
   check(plates(root)[2].value === n3(portfolioPerformance(v1.custom.w, a.m, a.S, a.rf).sharpe), "typing: the plates follow");
+  check(!wsub().includes(CUSTOM_COVERS) && wsub().endsWith(" whole period's prices."), "typing: a typed mix, and the wealth caption no longer says Custom covers Equal-Weight", wsub());
   setValue(field(rows(root)[1]), "1.5");
   check(latest.AGG === 1 && latest.VTI === 0.5, "typing: 1.5 is held to the top of the range, 1, and VTI's entry stays", JSON.stringify(latest));
   setValue(field(rows(root)[2]), "-0.3");
@@ -363,6 +366,7 @@ function Harness({ a, init = {}, level = "plain" }) {
   check(!!reset, "reset: offered once a weight is set");
   if (reset) act(() => reset.click());
   check(Object.keys(latest).length === 0 && root.querySelector(".cust-headline").textContent === M.headline(a, v0), "reset: every weight back to 1/n, and the headline with them");
+  check(wsub().endsWith(` ${CUSTOM_COVERS}`), "reset: back at 1/n, the wealth caption says Custom covers Equal-Weight again", wsub());
   r.unmount();
 }
 
@@ -389,7 +393,7 @@ function Harness({ a, init = {}, level = "plain" }) {
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
   check(JSON.stringify(calls) === JSON.stringify([{ amount: 12000 }]), "amount: the Custom tab's wealth chart edits the same starting amount", JSON.stringify(calls));
-  check(text(we.querySelector(".chart-sub")).endsWith("GMV and Tangency are hypothetical: weights chosen with the whole period's prices."),
+  check(text(we.querySelector(".chart-sub")).endsWith(`GMV and Tangency are hypothetical: weights chosen with the whole period's prices. ${CUSTOM_COVERS}`),
     "hypothetical: the Custom tab's wealth caption names GMV and Tangency as hypothetical", text(we.querySelector(".chart-sub")));
   const tb = r.container.querySelector(".tbl:not(.sc)");
   check(tb && !tb.querySelector(".tbl-span"), "spans: the normalized weights come from no dates, and their table claims none");

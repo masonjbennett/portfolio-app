@@ -22,7 +22,7 @@ const { createElement: h } = await import("react");
 const M = await import("../src/tabs/optimization/model.ts");
 const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
 const { frontierCaption, frontierData } = await import("../src/charts/Frontier.tsx");
-const { wealthCaption, wealthData, wealthPlot } = await import("../src/charts/Wealth.tsx");
+const { CUSTOM_COVERS, wealthCaption, wealthData, wealthPlot } = await import("../src/charts/Wealth.tsx");
 const { format, DASH, MINUS } = await import("../src/format.ts");
 const { tokens } = await import("../src/styles/tokens.ts");
 const { ROLE } = await import("../src/charts/theme.ts");
@@ -393,6 +393,8 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     "tab: hovering a bar names it alone, Tangency in ink2, GMV in its teal and a return share in navy", `${tanRow} | ${gmvRow} | ${retRow}`);
   check([...a.tickers, "GMV", "Tangency", "Equal-Weight", "Custom", "S&P 500"].every((s) => svgText("opt-frontier").includes(s)), "tab: the frontier names every asset and portfolio in the chart");
   check(/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: untouched custom weights are said to repeat Equal-Weight");
+  const wsub = () => text(sectionOf(r, "opt-wealth").querySelector(".chart-sub"));
+  check(wsub().endsWith(` ${CUSTOM_COVERS}`), "tab: untouched custom weights, and the wealth caption says Custom's line covers Equal-Weight's", wsub());
 
   // The tab hands the shared charts what their suites hold them to.
   const fcap = text(sectionOf(r, "opt-frontier").querySelector(".chart-sub"));
@@ -420,6 +422,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const cp = o.modes.long.custom.uneven.perf;
   check(cust[0] === "Custom" && cust[1] === format(cp.mu, "pct2") && cust[3] === format(cp.sharpe, "num3"), "tab: the custom weights score in the summary", cust.join(" "));
   check(!/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: moved custom weights are not called equal");
+  check(!wsub().includes(CUSTOM_COVERS) && wsub().endsWith(" whole period's prices."), "tab: moved custom weights, and the wealth caption no longer says Custom covers Equal-Weight", wsub());
   r.unmount();
 }
 
@@ -466,10 +469,10 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(title.startsWith("Tangency ended highest") && title.includes(" with hindsight weights;"),
     "in-sample: a Tangency line that ends highest does so with hindsight weights, and the title says so", title);
 
-  // The wealth caption: GMV and Tangency are hypothetical.
+  // The wealth caption: GMV and Tangency are hypothetical (then, at the default equal custom weights, Custom covers Equal-Weight).
   const wcap = text(sectionOf(r, "opt-wealth").querySelector(".chart-sub"));
-  check(wcap === wealthCaption(props.settings.amount, a.prices.dates[0], a.asOf, ["GMV", "Tangency"]) &&
-    wcap.endsWith(" GMV and Tangency are hypothetical: weights chosen with the whole period's prices."),
+  check(wcap === wealthCaption(props.settings.amount, a.prices.dates[0], a.asOf, ["GMV", "Tangency"], true) &&
+    wcap.endsWith(` GMV and Tangency are hypothetical: weights chosen with the whole period's prices. ${CUSTOM_COVERS}`),
     "hypothetical: the wealth caption names GMV and Tangency as hypothetical, weights chosen with the whole period's prices", wcap);
 
   // Every GMV and Tangency head in a table carries the sub-line; Equal-Weight, Custom and the benchmark do not
