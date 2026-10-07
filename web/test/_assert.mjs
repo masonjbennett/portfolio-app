@@ -47,7 +47,12 @@ export function json(url) {
   return JSON.parse(readFileSync(url, "utf8"));
 }
 
-export function done(name) {
+// With `drain`, a red run sets the exit code and leaves the exit to the event loop, which ends once the
+// suite's own handles have closed, as a green run's does. For a suite that started a dev server: on Windows,
+// process.exit while one of its handles is still closing aborts Node (exit 0xC0000409) instead of exiting 1.
+export function done(name, { drain = false } = {}) {
   console.log(`${name}: ${checks - failures.length}/${checks} passed`);
-  if (failures.length) process.exit(1);
+  if (!failures.length) return;
+  if (drain) process.exitCode = 1;
+  else process.exit(1);
 }

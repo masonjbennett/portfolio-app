@@ -176,6 +176,12 @@ check(/<html lang="en">/.test(index) && /<title>Portfolio Analytics · Mason Ben
   const { CARD_SENTENCE } = await import("../src/content/published.ts");
   check(one("og:description") === CARD_SENTENCE, "unfurl: og:description is the published card sentence, verbatim", one("og:description") ?? `${meta("og:description").length} tags`);
   check(one("og:title") === title && title === "Portfolio Analytics · Mason Bennett", "unfurl: og:title is the page title, with Mason's name", `${one("og:title")} / ${title}`);
+  // Both sides of the departure: the app's own page_title (portfolio_app.py 14), and the port's title, which is
+  // those words with the author's name after them.
+  const appLines = readFileSync(new URL("../portfolio_app.py", root), "utf8").split(/\r?\n/);
+  const appTitle = /st\.set_page_config\(page_title="([^"]+)"/.exec(appLines[13] ?? "")?.[1];
+  check(appTitle === "Portfolio Analytics" && title === `${appTitle} · Mason Bennett` && title !== appTitle,
+    "ledger:page-title the app's page title (line 14) is the port's first words, and the port adds the author's name", `${appTitle} / ${title}`);
   const want = {
     "og:type": "website",
     "og:url": "https://portfolio.masonjbennett.com/",
@@ -188,6 +194,8 @@ check(/<html lang="en">/.test(index) && /<title>Portfolio Analytics · Mason Ben
   check(wrong.length === 0, "unfurl: type, url, image and its size, and the large-image card, each once", wrong.join("; "));
   const alt = one("og:image:alt") ?? "";
   check(alt.length >= 40 && alt.length <= 420 && /Sharpe/.test(alt), "unfurl: the image has alt text that says what it shows", alt);
+  // Three of the nine rows are equal weight, which is fitted to nothing, so the alt text calls no figure fitted.
+  check(!/\bfit/i.test(alt) && /whole window/.test(alt) && /held-out years/.test(alt), "unfurl: the alt text says scored on the whole window, never fitted", alt);
   const dupes = [...new Set(metas.map((m) => m.key).filter((k) => /^(og|twitter):/.test(k ?? "")))].filter((k) => meta(k).length !== 1);
   check(dupes.length === 0, "unfurl: no og or twitter tag is repeated (a crawler keeps one of two, and not always the same one)", dupes.join(" "));
   const img = new URL(one("og:image") ?? "about:blank");
@@ -208,6 +216,13 @@ check(/<html lang="en">/.test(index) && /<title>Portfolio Analytics · Mason Ben
   check(!!png && size === `${one("og:image:width")} x ${one("og:image:height")}` && png.length < 300 * 1024 && types.at(-1) === "IEND" && textual.length === 0,
     "unfurl: public/og.png is a PNG of the tagged size, under 300 kB, with no text chunk",
     png ? `${size}, ${png.length} bytes, chunks ${[...new Set(types)].join(" ")}` : "no public/og.png");
+  // And it pictures the chart as the page now draws it: the record of what it was shot from still matches the
+  // chart's figures, heading and marks, and the image itself (test/_og-inputs.mjs says how to record a new shot).
+  const og = await import("./_og-inputs.mjs");
+  const shot = og.record();
+  check(!!shot && shot.inputs === og.inputsHash() && shot.image === og.imageHash(),
+    "unfurl: public/og.png was shot from the chart's current figures, heading and marks (shoot it again, then record it)",
+    JSON.stringify({ recorded: shot, now: { inputs: og.inputsHash(), image: og.imageHash() } }));
 }
 check(index.includes(`<meta name="theme-color" content="${tokens.color.paper}"`), "index.html: theme-color is paper");
 const entry = /<script type="module" src="\/([^"]+)"/.exec(index)?.[1];
@@ -266,4 +281,6 @@ try {
   rmSync(tmp, { recursive: true, force: true });
 }
 
-done("t-shell");
+// Drained, so a red run exits 1 like every other suite: the dev server above may still be closing a handle,
+// and exiting on top of that aborts Node on Windows (see done()).
+done("t-shell", { drain: true });
