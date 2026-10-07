@@ -33,6 +33,35 @@
   color: var(--color-teal);
 }
 
+/* The nine pairs: the heading and the strip (./Dumbbell.tsx, styled in ./Live.css) as one block, so the two can be
+   taken together. The strip's group names sit over their rows like a table's row group; every group is set alike. */
+.wfp-pairs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  min-width: 0;
+}
+
+.wfp-pairs .wfl-bells {
+  margin: 0;
+}
+
+.wfp-pairs .wfl-bell-group + .wfl-bell-group {
+  margin-top: var(--space-3);
+}
+
+.wfp-pairs .wfl-bell-group-name {
+  margin: 0 0 2px;
+  padding-bottom: 2px;
+  border-bottom: var(--line-hair) solid var(--color-hairline);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink2);
+}
+
 /* The in-sample figure and the out-of-sample figure, side by side on a wide screen, stacked on a phone. Both
    figures are set alike: neither is marked as the one to look at. */
 .wfp-decay {

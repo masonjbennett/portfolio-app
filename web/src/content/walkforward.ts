@@ -5,7 +5,8 @@
 // The published walk-forward run as it was computed: per set, the tickers, the schedule (each fit and each hold,
 // first and last return day and the count of daily returns), the weights the app's own solver chose on each
 // fit and held through the hold after it ("ship"), the held Sharpe ratio of each hold and of all holds joined,
-// and the joined Sharpe ratios of the same run solved exactly ("tight"). Weights are decimals in the set's
+// the joined Sharpe ratios of the same run solved exactly ("tight"), and each construction scored on the run's
+// whole window under both solvers ("wholeWindow", in-sample). Weights are decimals in the set's
 // ticker order; Sharpe ratios are annual and unrounded. The "As published" segment replays these and prints
 // the published strings themselves from src/content/published.ts.
 
@@ -45,6 +46,12 @@ export interface PublishedRun {
   };
   /** The same schedule solved exactly: only the joined Sharpe ratios are kept. */
   tight: { sharpe: ByConstruction<number> };
+  /**
+   * Each construction scored on the run's whole window, first bar to last, the held-out years included: minimum
+   * variance and maximum Sharpe fitted to that window by the app's own solver ("ship") and solved exactly
+   * ("tight"), equal weight (no fit) scored on it. In-sample figures, at the run's rate; none of them is published.
+   */
+  wholeWindow: { ship: ByConstruction<number>; tight: ByConstruction<number> };
 }
 
 /** The annual risk-free rate the run used, as a decimal, in the maximum-Sharpe fit and in every score. */
@@ -95,6 +102,7 @@ export const WALK_RUNS: readonly PublishedRun[] = [
       sharpe: { ew: 0.863951593948094, gmv: 0.7099522310419396, tan: 0.6594382342365396 },
     },
     tight: { sharpe: { ew: 0.863951593948094, gmv: 0.7097019311633335, tan: 0.6597098960132333 } },
+    wholeWindow: { ship: { ew: 1.0189836724837185, gmv: 1.0342964505960122, tan: 1.10689172558172 }, tight: { ew: 1.0189836724837185, gmv: 1.0349758602019725, tan: 1.1068917766944997 } },
   },
   {
     key: "sectors7",
@@ -140,6 +148,7 @@ export const WALK_RUNS: readonly PublishedRun[] = [
       sharpe: { ew: 0.9145408937445818, gmv: 0.44950449275169363, tan: 0.6612779870699871 },
     },
     tight: { sharpe: { ew: 0.9145408937445818, gmv: 0.45014295707037477, tan: 0.6615601025413573 } },
+    wholeWindow: { ship: { ew: 0.7952326605866853, gmv: 0.6295919207427929, tan: 0.9886355185761482 }, tight: { ew: 0.7952326605866853, gmv: 0.6323672742642833, tan: 0.9886359904851505 } },
   },
   {
     key: "cross",
@@ -185,6 +194,7 @@ export const WALK_RUNS: readonly PublishedRun[] = [
       sharpe: { ew: 0.7040987969347312, gmv: -0.24676141531893753, tan: 0.883245378952509 },
     },
     tight: { sharpe: { ew: 0.7040987969347312, gmv: -0.2483226122314665, tan: 0.8835151049869734 } },
+    wholeWindow: { ship: { ew: 0.7763804400218186, gmv: 0.10570273199198635, tan: 1.1051247238038948 }, tight: { ew: 0.7763804400218186, gmv: 0.10344767036748391, tan: 1.105124724139498 } },
   },
 ];
 

@@ -117,6 +117,8 @@ for (const set of SETS) {
   const run = W.walkForward({ cols: d.cols, dates: d.dates, bench: d.bench, rates: WF.rf, allowShort: false, added: false });
   flat[set] = run;
   check(run.ok && run.convention === "flat", `${set}: the flat walk-forward runs`);
+  // Exactly the three published constructions, so every loop below reads a record the fixture holds.
+  check(same(run.runs.map((r) => r.id), Object.keys(KEYS)), `${set}: the flat run carries the three published constructions`, run.runs.map((r) => r.id).join(" "));
   for (const r of run.runs) {
     tight.weights[r.id].forEach((w, f) => within(`${set} ${r.id}: fold ${f} weights`, r.weights[f], w, 1e-6, "tight weights"));
     within(`${set} ${r.id}: fold Sharpes`, r.foldSharpe, tight.fold_sharpe[r.id], 1e-6, "tight fold");
@@ -133,6 +135,15 @@ for (const set of SETS) {
   for (const [id, sol] of [["gmv", O.gmv(m, S, false)], ["tan", O.tangency(m, S, WF.rf, false)]]) {
     const r = run.runs.find((x) => x.id === id);
     within(`${set} ${id}: in-sample is the whole-window figure the Optimization tab prints`, r.inSample, portfolioPerformance(sol.w, m, S, WF.rf).sharpe, 1e-12);
+  }
+  // The whole window under the oracle's exact solve (the record's whole_window.tight, which the As published chart
+  // sets beside each published figure): every construction's in-sample figure and the weights behind it.
+  const whole = WF.sets[set].whole_window?.tight;
+  for (const r of run.runs) {
+    within(`${set} ${r.id}: the whole-window figure against the tight solve`, r.inSample, whole?.sharpe?.[r.id], 1e-6, "tight whole window");
+    within(`${set} ${r.id}: the whole-window weights against the tight solve`, r.inSampleWeights, whole?.weights?.[r.id], 1e-6, "tight whole weights");
+    check(format(r.inSample, "num3") === whole?.prints?.[r.id], `${set} ${r.id}: the exact engine prints the tight solve's whole-window figure`,
+      `${format(r.inSample, "num3")} against ${whole?.prints?.[r.id]}`);
   }
   const b = run.bench;
   within(`${set}: the benchmark's joined Sharpe is annualizedStats on its held rows`, b.sharpe, annualizedStats(d.bench.slice(run.folds[0].holdFrom), WF.rf).sharpe, 1e-12);

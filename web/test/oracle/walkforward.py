@@ -74,7 +74,8 @@ Equal weight is 1/N under the same H, S, R and J.
         going into 2022 print under the pinned key (or KEY). Prints each figure's distance to its rounding edge and, for a run walkforward.json
         records, how far each raw value has moved from it
     python web/test/oracle/walkforward.py dump [out.json]
-        writes web/test/fixtures/walkforward.json: the pinned run fold by fold, both solvers. Its
+        writes web/test/fixtures/walkforward.json: the pinned run fold by fold, both solvers, and
+        each set's three constructions scored on the run's whole window ("whole_window"). Its
         "versions" block records the Python, numpy and pandas that wrote it, so a dump from an
         environment whose libraries have moved on differs there and nowhere else: compare two dumps
         with that block left out, and re-pin the libraries before replacing the committed file
@@ -375,10 +376,16 @@ class Walk:
             for (fit_last, first, last), f in zip(folds, fits):
                 if first <= first_2022 <= last:
                     rec["agg2022"] = float(f["gmv"][self.tickers.index("AGG")])
+        # Every construction on the run's whole window, first bar to last: minimum variance and maximum
+        # Sharpe fitted to it and scored on it, equal weight (which needs no fit) scored on it, the way the
+        # app's own page reads a basket. The window takes in the years the walk-forward held out, so these
+        # are in-sample figures for the whole run, not any one fold's.
+        whole = self.fit(self.prices.index[-1], cut, opt, self.fit_rate(rkey, self.prices.index[-1]))
+        held = {"ew": np.ones(self.n) / self.n, "gmv": whole["gmv"], "tan": whole["tan"]}
+        rec["whole"] = {name: self.in_sample(whole["R"], rkey, w) for name, w in held.items()}
+        rec["whole_weights"] = {name: w.tolist() for name, w in held.items()}
         rec["is"] = None
         if self.set_name == "megacap5":
-            whole = self.fit(self.prices.index[-1], cut, opt,
-                             self.fit_rate(rkey, self.prices.index[-1]))
             each = [self.in_sample(f["R"], rkey, f["tan"]) for f in fits]
             rec["is"] = {"full": self.in_sample(whole["R"], rkey, whole["tan"]),
                          "lastfit": each[-1], "firstfit": each[0],
@@ -661,9 +668,15 @@ def dump(path):
            "versions": {"python": sys.version.split()[0], "numpy": np.__version__,
                         "scipy": scipy.__version__, "pandas": pd.__version__},
            "sets": {}}
+    whole = {}
     for opt in ("ship", "tight"):
         key = "|".join((e, a, h, s, r, j, opt))
         for set_name, (walk, rec) in pinned_cells(key).items():
+            whole.setdefault(set_name, {})[opt] = {
+                "weights": rec["whole_weights"],
+                "sharpe": {k: rec["whole"][k] for k in ("ew", "gmv", "tan")},
+                "prints": {k: printed(rec["whole"][k]) for k in ("ew", "gmv", "tan")},
+            }
             entry = out["sets"].setdefault(set_name, {
                 "tickers": walk.tickers, "first_bar": str(walk.prices.index[0].date()),
                 "last_bar": str(walk.prices.index[-1].date()),
@@ -688,6 +701,18 @@ def dump(path):
                                             "tangency_aapl": float(row["tan"].x[0])}
                                            for row in rows]}
     out["sets"]["cross"]["published_agg_into_2022"] = AGG_2022
+    # Last in each set, so this block adds lines to a dump and moves none: every construction scored on the
+    # run's whole window (Walk.cell's "whole"), under both solvers, with the weights scored (one list per
+    # construction, in the set's ticker order) so another engine can replay them. None of it is published;
+    # the page prints it as in-sample figures beside the published out-of-sample ones. The mega-caps'
+    # maximum Sharpe here is the same computation as their in_sample_tangency above, and must be the same
+    # double.
+    for set_name, blocks in whole.items():
+        if set_name == "megacap5":
+            for opt, block in blocks.items():
+                assert block["sharpe"]["tan"] == out["sets"][set_name][opt]["in_sample_tangency"], \
+                    f"megacap5 {opt}: the whole-window maximum Sharpe is not the recorded in-sample tangency"
+        out["sets"][set_name]["whole_window"] = blocks
     pathlib.Path(path).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n",
                                   encoding="utf-8", newline="\n")
     print(f"wrote {path}")

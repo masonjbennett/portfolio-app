@@ -9,7 +9,9 @@
 //      the published strings exactly, on the schedule the module states;
 //   4. the view prints the published strings exactly as published.ts holds them and every other figure as the
 //      module's value formatted, names in its solver note exactly the figures the exact solve prints
-//      differently, reruns each set with its own tickers, fetches nothing, and links the method note once.
+//      differently, reruns each set with its own tickers, fetches nothing, and links the method note once;
+//   5. the chart of the nine pairs: each set and construction's whole-window figure (the module's, replayed in 3
+//      from the fixture's stored whole-window weights; 1.107 quoted) against its published string, on one axis.
 // Nothing here is typed from a published source: each expected value is read from published.ts, the fixture or
 // the module, and compared as the page prints it.
 import { readFileSync } from "node:fs";
@@ -22,9 +24,12 @@ const M = await import("../src/content/walkforward.ts");
 const P = await import("../src/content/published.ts");
 const W = await import("../src/lib/walkforward.ts");
 const { computeReturns, column } = await import("../src/lib/clean.ts");
+const { portfolioReturns } = await import("../src/lib/portfolio.ts");
+const { annualizedStats } = await import("../src/lib/stats.ts");
+const { bellDomain, bellTicks } = await import("../src/tabs/walkforward/Dumbbell.tsx");
 const { format } = await import("../src/format.ts");
 const View = await import("../src/tabs/walkforward/Published.tsx");
-const { RERUN_START } = await import("../src/tabs/walkforward/terms.ts");
+const { PAIR_HEADING, RERUN_START } = await import("../src/tabs/walkforward/terms.ts");
 
 const WF = json(new URL("./fixtures/walkforward.json", import.meta.url));
 const MODULE = new URL("../src/content/walkforward.ts", import.meta.url);
@@ -32,6 +37,8 @@ const VIEW = new URL("../src/tabs/walkforward/Published.tsx", import.meta.url);
 const PRICES = { megacap5: "megacap5", sectors7: "sectors", cross: "cross" };
 const KEYS = ["ew", "gmv", "tan"];
 const FIELD = { ew: "ew", gmv: "gmv", tan: "tangency" }; // module key -> published.ts field
+// How the view names each construction, as the table of the nine heads its columns.
+const LABEL_OF = { ew: "Equal weight", gmv: "Minimum variance (GMV)", tan: "Maximum Sharpe (Tangency)" };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const gap = (a, b) => (a.length === b.length ? Math.max(0, ...a.map((x, i) => Math.abs(x - b[i]))) : Infinity);
 // A set with no published counterpart reads as an empty one, so every check on it fails by name instead of throwing.
@@ -54,10 +61,18 @@ for (const run of M.WALK_RUNS) {
   check(same(run.ship.foldSharpe, e.ship.fold_sharpe), `module ${run.key}: the fold Sharpe ratios deep-equal the fixture's`);
   check(same(run.ship.sharpe, e.ship.sharpe), `module ${run.key}: the joined Sharpe ratios deep-equal the fixture's`);
   check(same(run.tight.sharpe, e.tight.sharpe), `module ${run.key}: the exact solve's joined Sharpe ratios deep-equal the fixture's`);
+  check(same(run.wholeWindow, { ship: e.whole_window?.ship?.sharpe, tight: e.whole_window?.tight?.sharpe }),
+    `module ${run.key}: the whole-window figures, both solvers, deep-equal the fixture's`);
+  for (const o of ["ship", "tight"])
+    check(KEYS.every((k) => e.whole_window?.[o]?.prints?.[k] === format(e.whole_window[o].sharpe[k], "num3")),
+      `fixture ${run.key}: the whole-window prints (${o}) are its figures at three decimals`, JSON.stringify(e.whole_window?.[o]?.prints));
 }
 const mega = WF.sets.megacap5;
 const cross = WF.sets.cross;
 check(M.WALK_TANGENCY_IN_SAMPLE === mega.ship.in_sample_tangency, "module: the whole-window tangency is the fixture's");
+check(M.WALK_RUNS.find((run) => run.key === "megacap5")?.wholeWindow.ship.tan === M.WALK_TANGENCY_IN_SAMPLE &&
+  mega.whole_window?.tight?.sharpe?.tan === mega.tight.in_sample_tangency,
+  "module: the mega-caps' whole-window maximum Sharpe is the in-sample tangency 1.107 rounds, under both solvers");
 check(same(M.WALK_APPLE, mega.sensitivity_apple.windows.map((w) => ({ label: w.label, rows: w.bars, weight: w.tangency_aapl }))),
   "module: the Apple lookbacks, their lengths and weights are the fixture's");
 check(M.WALK_AGG.weight === cross.ship.gmv_agg_into_2022 && cross.ship.weights.gmv[M.WALK_AGG.fold][cross.tickers.indexOf(M.WALK_AGG.ticker)] === M.WALK_AGG.weight &&
@@ -109,6 +124,24 @@ for (const run of M.WALK_RUNS) {
   }
 }
 console.log(`  replay of the module's weights: fold Sharpe gap ${worstFold.toExponential(2)}, joined ${worstJoined.toExponential(2)}`);
+
+// The whole window: the fixture's stored whole-window weights, scored by the engine on every return of the frozen
+// frame at the run's rate, give the module's whole-window figures, under both solvers.
+let worstWhole = 0;
+for (const run of M.WALK_RUNS) {
+  const d = frame(run);
+  const e = WF.sets[run.key].whole_window;
+  for (const o of ["ship", "tight"])
+    for (const k of KEYS) {
+      const w = e?.[o]?.weights?.[k];
+      const got = Array.isArray(w) && w.length === run.tickers.length ? annualizedStats(portfolioReturns(d.cols, w), M.WALK_RF).sharpe : NaN;
+      const g = Math.abs(got - run.wholeWindow[o][k]);
+      worstWhole = Math.max(worstWhole, g);
+      check(g <= 1e-9, `replay ${run.key} ${k} (${o}): the whole-window figure is the engine's score of the stored whole-window weights within 1e-9`, `gap ${g}`);
+    }
+  check(same(e?.ship?.weights?.ew, run.tickers.map(() => 1 / run.tickers.length)), `replay ${run.key}: the whole window's equal weights are 1/N`);
+}
+console.log(`  replay of the whole-window weights: gap ${worstWhole.toExponential(2)}`);
 check(format(M.WALK_TANGENCY_IN_SAMPLE, "num3") === P.MEGA_CAP_IN_SAMPLE, `module: the whole-window tangency prints ${P.MEGA_CAP_IN_SAMPLE}`);
 check(format(M.WALK_AGG.weight, "pct1") === P.CROSS_AGG_INTO_2022, `module: the AGG weight prints ${P.CROSS_AGG_INTO_2022}`);
 check(same(M.WALK_APPLE.map((w) => format(w.weight, "pct1")), P.MEGA_CAP_APPLE), "module: the Apple weights print the published five");
@@ -211,10 +244,12 @@ check(exactPrinted.every(([fmt, oracle, pub]) => fmt === oracle && note.includes
 const allowed = new Set([P.MEGA_CAP_IN_SAMPLE, P.CROSS_AGG_INTO_2022, ...P.MEGA_CAP_APPLE, P.PUBLISHED_WHEN.split(" ").at(-1),
   ...P.PUBLISHED_SETS.flatMap((p) => [p.ew, p.gmv, p.tangency]), format(M.WALK_RF, "pct1"), format(M.WALK_APPLE.length, "int"),
   format(want.length, "int"), format(KEYS.length * M.WALK_RUNS.length, "int"), format(M.WALK_AGG.fold + 1, "int"), RERUN_START,
+  format(View.wholeDiffers().length, "int"),
+  ...M.WALK_RUNS.flatMap((run) => KEYS.flatMap((k) => [format(run.wholeWindow.ship[k], "num3"), format(run.wholeWindow.tight[k], "num3")])),
   ...M.WALK_RUNS.flatMap((run) => [run.firstBar, run.lastBar, format(run.folds.length, "int"), ...KEYS.map((k) => format(run.tight.sharpe[k], "num3")),
     ...run.folds.flatMap((f) => [f.fitFirst, f.fitLast, f.holdFirst, f.holdLast, f.holdFirst.slice(0, 4), format(f.fitRows, "int"), format(f.rows, "int")])])]);
 const prose = root.cloneNode(true);
-for (const t of prose.querySelectorAll(".tbl")) t.remove();
+for (const t of prose.querySelectorAll(".tbl, .wfl-bells")) t.remove();
 const figures = text(prose).match(/\d{4}-\d\d-\d\d|[−-]?\d+(?:,\d{3})*(?:\.\d+)?%?/g) ?? [];
 const stray = figures.filter((x) => !allowed.has(x));
 check(figures.length > 0 && stray.length === 0, "view: every figure in the prose is read from the module or quoted from published.ts", stray.join(" "));
@@ -245,13 +280,93 @@ check(fetched.length === 0 && !/\bfetch\s*\(/.test(source) && imports.every((s) 
 const BANNED = /\b(best|optimal|winners?|race|contenders?|outperform\w*)\b/i;
 check(!BANNED.test(text(root)), "view: none of the words best, optimal, winner, race, contender, outperform", text(root).match(BANNED)?.[0] ?? "");
 const css = readFileSync(new URL("../src/tabs/walkforward/Published.css", import.meta.url), "utf8");
-check(root.querySelectorAll("[style], mark, table strong, table b, table em").length === 0 && !/\b(td|th|tbl[\w-]*|tr)\b/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")),
+// The chart's axis labels are placed by an inline left offset (Dumbbell.tsx); nothing else may carry a style.
+check(root.querySelectorAll("[style]:not(.wfl-bell-tick), mark, table strong, table b, table em").length === 0 && !/\b(td|th|tbl[\w-]*|tr)\b/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")),
   "view: no cell is highlighted: no inline style, no marked or bold cell, and the segment's stylesheet styles no table cell");
 
 // The method note, linked once.
 const links = [...root.querySelectorAll("a")];
 check(links.length === 1 && links[0].getAttribute("href") === P.PUBLISHED_URL && !links[0].hasAttribute("target"),
   "view: one link, the method note's address from published.ts", links.map((a) => a.getAttribute("href")).join(" "));
+
+// ---- 5. the chart of the nine pairs -----------------------------------------------------------------------
+
+const chart = root.querySelector('[data-chart="published-pairs"]');
+const head = chart?.querySelector("h2");
+check(!!chart && !!head && text(head) === PAIR_HEADING && chart.getAttribute("aria-labelledby") === head.id && chart.querySelectorAll(".wfl-bells").length === 1,
+  "chart: one element holds the heading and the strip, and is labelled by the heading", head ? text(head) : "(none)");
+{
+  // It heads the segment: the first thing after the lede, above the table of the nine.
+  const order = [...root.children];
+  const tableAt = order.findIndex((x) => x.contains(nine));
+  check(order.indexOf(chart) === 1 && order[0].classList.contains("wfp-lede") && tableAt > 1,
+    "chart: it comes straight after the lede, above the table of the nine", order.map((x) => x.className || x.tagName).slice(0, 3).join(" | "));
+}
+const groups = [...(chart?.querySelectorAll(".wfl-bell-group") ?? [])];
+const rowsOf = (g) => [...g.querySelectorAll("li.wfl-bell")];
+check(groups.length === M.WALK_RUNS.length && same(groups.map((g) => text(g.querySelector(".wfl-bell-group-name") ?? {})), M.WALK_RUNS.map((run) => pubFor(run.tickers).name)) &&
+  same(M.WALK_RUNS.map((run) => pubFor(run.tickers).name), P.PUBLISHED_SETS.map((p) => p.name)) &&
+  groups.every((g) => same(rowsOf(g).map((li) => text(li.querySelector(".wfl-bell-name"))), heads(nine).slice(2))),
+  "chart: three groups, one per published set in published.ts's order, each with the three constructions named as the table names them",
+  groups.map((g) => text(g)).join(" | ").slice(0, 200));
+// What each row prints: the module's whole-window figure formatted (the mega-caps' maximum Sharpe quoted as
+// published), then the published out-of-sample string verbatim.
+const inWant = (run, k) => (run.key === "megacap5" && k === "tan" ? P.MEGA_CAP_IN_SAMPLE : format(run.wholeWindow.ship[k], "num3"));
+const printedRows = groups.map((g) => rowsOf(g).map((li) => text(li.querySelector(".wfl-bell-values"))));
+const wantRows = M.WALK_RUNS.map((run) => KEYS.map((k) => `${inWant(run, k)} to ${pubFor(run.tickers)[FIELD[k]]}`));
+check(same(printedRows, wantRows), "chart: each row prints its whole-window figure and its published figure verbatim", JSON.stringify(printedRows));
+check(format(M.WALK_RUNS.find((run) => run.key === "megacap5").wholeWindow.ship.tan, "num3") === P.MEGA_CAP_IN_SAMPLE,
+  "chart: the quoted 1.107 is what the record's own whole-window figure prints");
+// The text alternative: every row's picture names its set, its construction and both figures, so all nine pairs read.
+const alts = groups.flatMap((g) => rowsOf(g).map((li) => li.querySelector("svg")?.getAttribute("aria-label") ?? ""));
+const altWant = M.WALK_RUNS.flatMap((run) => KEYS.map((k) => `${pubFor(run.tickers).name}, ${LABEL_OF[k]}: in-sample ${inWant(run, k)}, out-of-sample ${pubFor(run.tickers)[FIELD[k]]}`));
+check(same(alts, altWant) && (chart?.querySelectorAll("svg[role=img]").length ?? 0) === 9, "chart: the text alternative reads all nine pairs, each with its set and construction", alts.join(" / "));
+// Drawn alike, on one axis: each row's two dots at its two figures on the shared domain, zero's gridline on every
+// row, every gridline at the same place on every row, one hollow and one filled dot per row, and no colour set
+// on any mark (the stylesheet inks them all alike).
+{
+  const pairs = View.publishedPairs();
+  const dom = bellDomain(pairs.flatMap((g) => g.rows));
+  const ticks = bellTicks(dom);
+  const X = (v) => 8 + ((v - dom[0]) / (dom[1] - dom[0])) * (400 - 16);
+  const lis = groups.flatMap(rowsOf);
+  const flat = M.WALK_RUNS.flatMap((run) => KEYS.map((k) => [run.wholeWindow.ship[k], Number(pubFor(run.tickers)[FIELD[k]].replace("\u2212", "-"))]));
+  const grid = (li) => [...li.querySelectorAll("line.wfl-bell-grid, line.wfl-bell-zero")].map((l) => l.getAttribute("x1")).join(",");
+  const ok = lis.length === 9 && lis.every((li, i) => {
+    const hollow = li.querySelectorAll("circle.wfl-bell-in");
+    const filled = li.querySelectorAll("circle.wfl-bell-out");
+    return hollow.length === 1 && filled.length === 1 && Math.abs(Number(hollow[0].getAttribute("cx")) - X(flat[i][0])) < 1e-9 &&
+      Math.abs(Number(filled[0].getAttribute("cx")) - X(flat[i][1])) < 1e-9 && li.querySelectorAll("line.wfl-bell-zero").length === 1 &&
+      grid(li) === grid(lis[0]) && li.className === lis[0].className;
+  });
+  check(ok && ticks.includes(0) && dom[0] < Math.min(...flat.flat()) && dom[1] > Math.max(...flat.flat()) &&
+    (chart?.querySelectorAll("[fill], [stroke], [class~=up], [class~=down], [class*='-up'], [class*='-down']").length ?? 1) === 0,
+    "chart: every row drawn alike on one shared axis with zero marked, its hollow dot at the whole-window figure and its filled dot at the published one");
+  const tickText = [...(chart?.querySelectorAll(".wfl-bell-tick") ?? [])].map(text);
+  check(tickText.length === ticks.length && ticks.length >= 3 && (chart?.querySelectorAll(".wfl-bell-tick[data-zero]").length ?? 0) === 1,
+    "chart: the axis labels every gridline, zero among them", tickText.join(" "));
+}
+// The words: in-sample and the whole window with the held-out years on the hollow dot, published on the filled one.
+const keyText = text(chart?.querySelector(".wfl-bells-key") ?? {});
+const pairsNote = text(root.querySelector('[data-note="pairs"]') ?? {});
+const f0w = M.WALK_RUNS[0].folds[0];
+check(/in-sample, the run's whole window/.test(keyText) && /out-of-sample, as published/.test(keyText) &&
+  pairsNote.includes("whole window") && pairsNote.includes("held-out years included") && pairsNote.includes(`${f0w.fitFirst} to ${M.WALK_RUNS[0].lastBar}`) &&
+  pairsNote.includes(format(M.WALK_RF, "pct1")) && pairsNote.includes("equal weight held at equal weights with no fit") && pairsNote.includes(P.MEGA_CAP_IN_SAMPLE),
+  "chart: the key and the note say in-sample on the whole window with the held-out years included, the window, the rate, that equal weight is not fitted, and which hollow dot is published",
+  `${keyText} / ${pairsNote}`);
+// The note under it: exactly the whole-window figures an exact solve prints differently, by the fixture's own prints.
+{
+  const differs = (run) => KEYS.filter((k) => WF.sets[run.key].whole_window.tight.prints[k] !== WF.sets[run.key].whole_window.ship.prints[k]);
+  const wantW = M.WALK_RUNS.flatMap((run) => differs(run).map((k) => `${pubFor(run.tickers).name}|${LABEL_OF[k]}`));
+  const namedW = [...root.querySelectorAll('[data-note="whole-solver"] [data-differs]')].map((x) => x.getAttribute("data-differs"));
+  const noteW = text(root.querySelector('[data-note="whole-solver"]') ?? {});
+  const printsW = M.WALK_RUNS.flatMap((run) => differs(run).map((k) =>
+    `${WF.sets[run.key].whole_window.tight.prints[k]} where the chart prints ${WF.sets[run.key].whole_window.ship.prints[k]}`));
+  check(same(namedW, wantW) && printsW.every((x) => noteW.includes(x)) && (wantW.length === 0) === (noteW === "") &&
+    (wantW.length === 0 || noteW.includes(`${format(wantW.length, "int")} of the ${format(KEYS.length * M.WALK_RUNS.length, "int")} whole-window figures`)),
+    "chart: the note under it names exactly the whole-window figures the exact solve prints differently, with both prints", `${namedW.join(", ")} / ${wantW.join(", ")}`);
+}
 
 r.unmount();
 done("t-walkforward-published");

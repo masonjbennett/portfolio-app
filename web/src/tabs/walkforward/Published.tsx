@@ -17,7 +17,14 @@
 //     suite holds them to the record's own refit (test/oracle/walkforward.py's check refits them), not to a
 //     replay.
 // The solver note is worked out here, not written: it names whichever of the nine the exact solve prints
-// differently, so a regenerated record cannot leave it saying the wrong thing.
+// differently, so a regenerated record cannot leave it saying the wrong thing. The same goes for the note under
+// the chart of the nine pairs, which names the whole-window figures an exact solve prints differently.
+//
+// The chart of the nine pairs: per set and construction, a hollow dot at the portfolio scored on the run's whole
+// window (the record's wholeWindow, the app's own fit; in-sample, the held-out years included) and a filled dot
+// at the published out-of-sample string, which is printed as published.ts holds it and placed where it reads.
+// The mega-caps' maximum Sharpe prints the published 1.107 itself. Its root, heading included, is
+// [data-chart="published-pairs"].
 import FormulaLine from "../../components/FormulaLine.tsx";
 import Slug from "../../components/Slug.tsx";
 import Table from "../../components/Table.tsx";
@@ -35,6 +42,7 @@ import { format } from "../../format.ts";
 import type { Column, Level, TableRow } from "../../types.ts";
 import { FITTED, tableSpan, windowsSpan } from "../caption.ts";
 import { publishedFormula } from "../formula.ts";
+import Dumbbell, { type BellGroup, type BellMarks } from "./Dumbbell.tsx";
 import { PAIR_HEADING, RERUN_START } from "./terms.ts";
 import "./Published.css";
 
@@ -102,6 +110,80 @@ function SolverNote() {
       . That is how much a third decimal can rest on where a solver stops.
     </p>
   );
+}
+
+// A published string as the number it reads: the note writes a negative with the minus sign U+2212.
+const valueOf = (published: string) => Number(published.replace("−", "-"));
+
+/** The nine pairs, one group per set in the record's order: whole window (in-sample) against published (out-of-sample). */
+export function publishedPairs(): BellGroup[] {
+  return PAIRS.map(({ run, pub }) => ({
+    key: run.key,
+    name: pub.name,
+    rows: KEYS.map((k) => ({
+      key: `${run.key}-${k}`,
+      label: LABEL[k],
+      inSample: run.wholeWindow.ship[k],
+      // The one whole-window figure the note prints is quoted as it prints it; the other eight are the record's.
+      inText: run.key === "megacap5" && k === "tan" ? MEGA_CAP_IN_SAMPLE : format(run.wholeWindow.ship[k], "num3"),
+      oos: valueOf(pub[FIELD[k]]),
+      oosText: pub[FIELD[k]],
+    })),
+  }));
+}
+
+/** Which whole-window figures an exact solve prints differently from the app's own fit, and both prints. */
+export function wholeDiffers(): { set: string; label: string; exact: string; shown: string }[] {
+  return PAIRS.flatMap(({ run, pub }) =>
+    KEYS.flatMap((k) => {
+      const shown = format(run.wholeWindow.ship[k], "num3");
+      const exact = format(run.wholeWindow.tight[k], "num3");
+      return exact === shown ? [] : [{ set: pub.name, label: LABEL[k], exact, shown }];
+    }),
+  );
+}
+
+const PAIR_MARKS: BellMarks = { inSample: "in-sample, the run's whole window", oos: "out-of-sample, as published" };
+
+function Pairs() {
+  const run = WALK_RUNS[0];
+  const differs = wholeDiffers();
+  const total = PAIRS.length * KEYS.length;
+  return (
+    <>
+      <figure className="wfp-pairs" data-chart="published-pairs" aria-labelledby="wfp-pairs-head">
+        <Slug id="wfp-pairs-head">{PAIR_HEADING}</Slug>
+        <Dumbbell groups={publishedPairs()} marks={PAIR_MARKS} />
+      </figure>
+      <p className="wfp-text" data-note="pairs">
+        Each row is one set and construction, scored twice. The hollow dot scores the portfolio on the run's whole
+        window, daily returns {day(run.folds[0].fitFirst)} to {day(run.lastBar)}, the held-out years included, at the
+        run's {format(WALK_RF, "pct1")} rate: minimum variance and maximum Sharpe fitted to that window by the app's own
+        solver, equal weight held at equal weights with no fit. The filled dot is the published figure for the held-out
+        days alone. Of the hollow dots the published note prints only the {pubName("megacap5")}' maximum Sharpe,{" "}
+        {MEGA_CAP_IN_SAMPLE}; the others are this run's stored record of the same fit, printed to three decimals.
+      </p>
+      {differs.length > 0 ? (
+        <p className="wfp-foot" data-note="whole-solver">
+          Solved exactly, {format(differs.length, "int")} of the {format(total, "int")} whole-window figures print
+          differently:{" "}
+          {differs.map((d, i) => (
+            <span key={`${d.set} ${d.label}`} data-differs={`${d.set}|${d.label}`}>
+              {i > 0 ? "; " : ""}
+              {d.set}, {d.label.charAt(0).toLowerCase() + d.label.slice(1)}, <span className="num">{d.exact}</span> where the
+              chart prints <span className="num">{d.shown}</span>
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+// A set's published name, lower-cased for the middle of a sentence, found by the run's key.
+function pubName(key: string): string {
+  return PAIRS.find((p) => p.run.key === key)?.pub.name.toLowerCase() ?? "";
 }
 
 function NineTable() {
@@ -323,17 +405,18 @@ export default function Published({ level, rerun }: PublishedProps) {
       <p className="wfp-lede">
         The walk-forward test published in {PUBLISHED_WHEN}, replayed from the weights it held. Its figures are quoted as the
         published note prints them; every other number here is read from a stored record of the same run (its schedule, the
-        weights held in each hold and each hold's result), which this page's tests replay on the run's own frozen prices
+        weights held in each hold, each hold's result, and each construction scored on the whole window), which this
+        page's tests replay on the run's own frozen prices
         (the Apple lookbacks are held to the stored record of their refit).
         Nothing is fetched and nothing is solved again. <a href={PUBLISHED_URL}>Method note on masonjbennett.com</a>
       </p>
 
+      <Pairs />
+      <Decay level={level} />
+
       <Slug>The published figures</Slug>
       <NineTable />
       <SolverNote />
-
-      <Slug>{PAIR_HEADING}</Slug>
-      <Decay level={level} />
 
       <Slug>How the test was run</Slug>
       <Convention />
