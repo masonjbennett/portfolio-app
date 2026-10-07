@@ -44,6 +44,7 @@
 }
 
 .band-published-figures,
+.band-published-whose,
 .band-published-source {
   margin: var(--space-1) 0 0;
   font-family: var(--font-mono);

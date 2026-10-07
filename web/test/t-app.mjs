@@ -12,7 +12,7 @@ import { act, render, setMedia, text } from "./_dom.mjs";
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
-const { default: Band, snapshotPlates, finding, assetsOf, publishedSetOf, standing, nameInSentence, PublishedResult, seams: bandSeams } = await import("../src/chrome/Band.tsx");
+const { default: Band, snapshotPlates, finding, assetsOf, publishedSetOf, standing, nameInSentence, whoseFigures, PublishedResult, seams: bandSeams } = await import("../src/chrome/Band.tsx");
 const OPT = await import("../src/tabs/optimization/model.ts");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: Footer } = await import("../src/chrome/Footer.tsx");
@@ -408,10 +408,10 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     ["Five mega-caps", "AAPL MSFT GOOGL AMZN JPM", "0.864", "0.710", "0.659"],
     ["Seven sector ETFs", "XLK XLF XLV XLE XLI XLP XLY", "0.915", "0.450", "0.661"],
     ["Cross-asset", "VTI AGG GLD VNQ EFA", "0.704", "\u22120.247", "0.883"],
-  ]) && P.MEGA_CAP_IN_SAMPLE === "1.107" && P.PUBLISHED_WHEN === "Sep 2026" &&
+  ]) && P.MEGA_CAP_IN_SAMPLE === "1.107" && P.MEGA_CAP_IN_SAMPLE_END === "2026-09-04" && P.MEGA_CAP_IN_SAMPLE_RF === 0.02 && P.PUBLISHED_WHEN === "Sep 2026" &&
     P.PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method" &&
     P.CROSS_AGG_INTO_2022 === "95.1%" && JSON.stringify(P.MEGA_CAP_APPLE) === JSON.stringify(["41.7%", "3.8%", "6.4%", "21.0%", "44.8%"]),
-    "published: the constants are the nine published Sharpe ratios, 1.107, the AGG and Apple weights, the date and the method note's address",
+    "published: the constants are the nine published Sharpe ratios, 1.107 and its window end and rate, the AGG and Apple weights, the date and the method note's address",
     JSON.stringify([nine, P.CROSS_AGG_INTO_2022, P.MEGA_CAP_APPLE]));
   check(P.CARD_SENTENCE.includes(`${P.MEGA_CAP_IN_SAMPLE} in-sample Sharpe became ${P.PUBLISHED_SETS[0].tangency} out of sample`) &&
     P.CARD_SENTENCE.includes("over six rolling one-year holding periods"),
@@ -436,9 +436,12 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     ["loading a published set", { analysis: { status: "loading" }, fetching: true, failure: null, tickers: P.PUBLISHED_SETS[1].tickers }],
     ["failed build of a published set", { analysis: { status: "loading" }, fetching: false, failure, tickers: P.PUBLISHED_SETS[2].tickers }],
     ["empty, a published set typed", { analysis: { status: "empty", reason: "Enter at least two tickers." }, fetching: false, failure: null, tickers: P.PUBLISHED_SETS[2].tickers }],
+    ["loading the mega-caps", { analysis: { status: "loading" }, fetching: true, failure: null, tickers: P.PUBLISHED_SETS[0].tickers }],
   ];
   const mega = P.PUBLISHED_SETS[0];
-  const allowed = new Set([...P.PUBLISHED_SETS.flatMap((x) => [x.ew, x.gmv, x.tangency]), P.MEGA_CAP_IN_SAMPLE, P.PUBLISHED_WHEN.split(" ")[1]]);
+  // The published figures, the year it was published, and on the mega-caps 1.107's window end and rate.
+  const allowed = new Set([...P.PUBLISHED_SETS.flatMap((x) => [x.ew, x.gmv, x.tangency]), P.MEGA_CAP_IN_SAMPLE, P.PUBLISHED_WHEN.split(" ")[1],
+    P.MEGA_CAP_IN_SAMPLE_END.slice(0, 4), format(P.MEGA_CAP_IN_SAMPLE_RF, "pct1")]);
   // The set each state's line quotes: the analysis' own basket when there is one, else the tickers being
   // loaded, else the five mega-caps; the mega-caps' tangency always with its in-sample figure.
   const quoted = (props) => publishedSetOf(props.analysis.status === "ready" ? props.analysis.value.tickers : props.tickers) ?? mega;
@@ -509,16 +512,27 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(P.PUBLISHED_SETS.map(nameInSentence).join(" | ") === "five mega-caps | seven sector ETFs | cross-asset",
     "figures line: the set's name mid-sentence starts lower-case, its other letters as published", P.PUBLISHED_SETS.map(nameInSentence).join(" | "));
 
-  // On each set: the line says the basket is that set, then quotes its three figures verbatim, in order.
+  // The two additions, written out a second time: on the mega-caps 1.107 says the window end and rate it was
+  // scored on; on the other two sets a clause says the site's sentence's 1.107 and 0.659 are the mega-caps'.
+  const terms = `, to ${monthYear(P.MEGA_CAP_IN_SAMPLE_END)} at ${format(P.MEGA_CAP_IN_SAMPLE_RF, "pct1")}`;
+  const whose = `The sentence's ${P.MEGA_CAP_IN_SAMPLE} and ${mega.tangency} are the ${nameInSentence(mega)}'.`;
+  check(terms === ", to Sep 2026 at 2.0%" && whose === "The sentence's 1.107 and 0.659 are the five mega-caps'." && whoseFigures() === whose &&
+    P.CARD_SENTENCE.includes(` ${P.MEGA_CAP_IN_SAMPLE} `) && P.CARD_SENTENCE.includes(` ${mega.tangency} `),
+    "figures line: 1.107's terms and the clause on whose figures the sentence quotes read from the constants, and the sentence carries both figures",
+    `${terms} | ${whoseFigures()}`);
+
+  // On each set: the line says the basket is that set, then quotes its three figures verbatim, in order, and how
+  // they stood; then on the mega-caps nothing more, and on the other two the clause. (A desktop: the phone folds
+  // the clause away with the sentence, section (g).)
   const lines = P.PUBLISHED_SETS.map((x) => [x, figuresOf({ analysis: { status: "loading" }, tickers: x.tickers })]);
   const fault = lines.filter(([x, { line, set }]) => {
     const three = `equal weight ${x.ew} · GMV ${x.gmv} · tangency ${x.tangency}`;
-    const tail = x === mega ? `${three} (${P.MEGA_CAP_IN_SAMPLE} in-sample); ` : `${three}; `;
-    return set !== x.name || !line.startsWith(`This basket is the published ${nameInSentence(x)} set. Sharpe out of sample: ${tail}`) ||
-      line !== `${line.slice(0, line.indexOf(tail) + tail.length)}${standing(x)}.` || (x !== mega && line.includes(P.MEGA_CAP_IN_SAMPLE));
+    const tail = x === mega ? `${three} (${P.MEGA_CAP_IN_SAMPLE} in-sample${terms}); ` : `${three}; `;
+    const end = x === mega ? "" : ` ${whose}`;
+    return set !== x.name || line !== `This basket is the published ${nameInSentence(x)} set. Sharpe out of sample: ${tail}${standing(x)}.${end}`;
   });
   check(fault.length === 0,
-    "figures line: on a published set it says the basket is that set and quotes its three out-of-sample figures as published, 1.107 only beside the mega-caps",
+    "figures line: on a published set it says the basket is that set and quotes its three out-of-sample figures as published; 1.107 with its terms beside the mega-caps, and elsewhere only in the clause naming them",
     lines.map(([, l]) => l.line).join(" | "));
   // On any other basket, the line it always was.
   const today = `${mega.name} (${mega.tickers.join(", ")}), Sharpe out of sample: equal weight ${mega.ew} · GMV ${mega.gmv} · tangency ${mega.tangency} (${P.MEGA_CAP_IN_SAMPLE} in-sample).`;
@@ -881,6 +895,28 @@ function rail(over = {}) {
     text(fold.querySelector("blockquote") ?? {}) === P.CARD_SENTENCE && !!pFigures && !fold.contains(pFigures) && !!pLink && !fold.contains(pLink),
     "phone: the published sentence folds behind a closed disclosure; the figures and the link stay on the first screen",
     pStrip ? pStrip.innerHTML.slice(0, 200) : "no strip");
+  // The example is the cross-asset set: the clause saying whose the sentence's figures are sits in the fold, after
+  // the sentence, and not in the figures line, so the strip at rest is as tall as it was.
+  const pWhose = fold?.querySelectorAll(".band-published-whose") ?? [];
+  const pQuote = fold?.querySelector("blockquote");
+  check(pFigures?.getAttribute("data-set") === "Cross-asset" && pWhose.length === 1 && text(pWhose[0]) === whoseFigures() && !!pQuote &&
+    !!(pQuote.compareDocumentPosition(pWhose[0]) & window.Node.DOCUMENT_POSITION_FOLLOWING) && !text(pFigures).includes(whoseFigures()) &&
+    r.container.querySelectorAll(".band-published-whose").length === 1,
+    "phone: on the cross-asset example the clause naming the mega-caps sits in the fold after the sentence, not in the figures line",
+    fold ? fold.innerHTML.slice(-220) : "no fold");
+  // On the mega-caps, or a basket that is no published set, there is nothing to say: the line names the mega-caps.
+  const phoneOn = (tickers) => {
+    const b = render(h(Band, { analysis: { status: "loading" }, fetching: false, failure: null, level: "plain", tickers }));
+    const out = { fold: !!b.container.querySelector("details.band-published-more"), whose: b.container.querySelectorAll(".band-published-whose").length,
+      line: text(b.container.querySelector(".band-published-figures") ?? {}) };
+    b.unmount();
+    return out;
+  };
+  const pOthers = [phoneOn(P.PUBLISHED_SETS[0].tickers), phoneOn(["SPY", "QQQ", "IWM"]), phoneOn(P.PUBLISHED_SETS[1].tickers)];
+  check(pOthers.every((o) => o.fold) && pOthers[0].whose === 0 && pOthers[1].whose === 0 && pOthers[2].whose === 1 &&
+    pOthers.every((o) => !o.line.includes(whoseFigures())) && pOthers[0].line.includes(`(${P.MEGA_CAP_IN_SAMPLE} in-sample, to Sep 2026 at 2.0%)`),
+    "phone: no clause on the mega-caps or on another basket, the clause folded on the sector set too, and 1.107's terms on the mega-caps",
+    pOthers.map((o) => `${o.whose} ${o.line}`).join(" | "));
   // The what-if panel: below the plates and folded shut, so the first row of plates stays on the first screen,
   // and not fetched until the reader reaches for it (section (g2)). Opened by its line, it holds the one panel.
   const wPlates = r.container.querySelector(".band-plates");
@@ -898,6 +934,9 @@ function rail(over = {}) {
   check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector("aside [name=tickers]"), "desktop: the rail stands in the left column, no chip");
   check(!desk.container.querySelector(".band-published details") && text(desk.container.querySelector(".band-published blockquote") ?? {}) === P.CARD_SENTENCE,
     "desktop: the published sentence is printed open");
+  check(!desk.container.querySelector(".band-published-whose") && text(desk.container.querySelector(".band-published-figures") ?? {}).endsWith(` ${whoseFigures()}`),
+    "desktop: on the cross-asset example the clause naming the mega-caps ends the figures line, and is nowhere else",
+    text(desk.container.querySelector(".band-published-figures") ?? {}));
   // Folded on a desktop too: printed open it pushed the tab bar below a 900 px first screen.
   const dPlates = desk.container.querySelector(".band-plates");
   const dFold = desk.container.querySelector(".band details.band-whatif-fold");

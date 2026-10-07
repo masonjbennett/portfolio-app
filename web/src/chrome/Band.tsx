@@ -35,7 +35,7 @@
 import { useContext, useState } from "react";
 import type { MouseEvent } from "react";
 import Plate from "../components/Plate.tsx";
-import { CARD_SENTENCE, MEGA_CAP_IN_SAMPLE, PUBLISHED_SETS, PUBLISHED_URL, PUBLISHED_WHEN, type PublishedSet } from "../content/published.ts";
+import { CARD_SENTENCE, MEGA_CAP_IN_SAMPLE, MEGA_CAP_IN_SAMPLE_END, MEGA_CAP_IN_SAMPLE_RF, PUBLISHED_SETS, PUBLISHED_URL, PUBLISHED_WHEN, type PublishedSet } from "../content/published.ts";
 import type { ScoreTipKey } from "../content/tooltips.ts";
 import { format, MINUS } from "../format.ts";
 import { portfolioReturns, summaryRow } from "../lib/portfolio.ts";
@@ -182,15 +182,30 @@ export function nameInSentence(set: PublishedSet): string {
   return set.name.charAt(0).toLowerCase() + set.name.slice(1);
 }
 
+// Whose figures the site's sentence quotes: its 1.107 and 0.659 are the five mega-caps'. On a basket that is
+// one of the other two published sets the figures line names that set, so this says so. On a desktop it ends
+// the figures line; on a phone it sits inside the sentence's fold, after the sentence, so the fold, shut at
+// rest, keeps the strip as tall as before and the reader who opens it finds it beside the figures it explains.
+export function whoseFigures(): string {
+  const mega = PUBLISHED_SETS[0];
+  return `The sentence's ${MEGA_CAP_IN_SAMPLE} and ${mega.tangency} are the ${nameInSentence(mega)}'.`;
+}
+
 // The figures line. On one of the published sets it says this basket is that set, then quotes the set's
 // three out-of-sample ratios (the mega-caps' tangency with its in-sample 1.107 beside it, as always) and how
 // they stood. On any other basket it is the line it always was: the five mega-caps, named and quoted.
-function figuresLine(set: PublishedSet | null): string {
+//
+// On the mega-caps themselves the plate below prints this basket's own in-sample tangency, fitted to the
+// window and rate on screen, so 1.107 says which window and rate it was scored on.
+function figuresLine(set: PublishedSet | null, phone: boolean): string {
   const s = set ?? PUBLISHED_SETS[0];
-  const inSample = s === PUBLISHED_SETS[0] ? ` (${MEGA_CAP_IN_SAMPLE} in-sample)` : "";
+  const mega = s === PUBLISHED_SETS[0];
+  const terms = set ? `, to ${monthYear(MEGA_CAP_IN_SAMPLE_END)} at ${format(MEGA_CAP_IN_SAMPLE_RF, "pct1")}` : "";
+  const inSample = mega ? ` (${MEGA_CAP_IN_SAMPLE} in-sample${terms})` : "";
   const three = `equal weight ${s.ew} · GMV ${s.gmv} · tangency ${s.tangency}${inSample}`;
   if (!set) return `${s.name} (${s.tickers.join(", ")}), Sharpe out of sample: ${three}.`;
-  return `This basket is the published ${nameInSentence(s)} set. Sharpe out of sample: ${three}; ${standing(s)}.`;
+  const line = `This basket is the published ${nameInSentence(s)} set. Sharpe out of sample: ${three}; ${standing(s)}.`;
+  return mega || phone ? line : `${line} ${whoseFigures()}`;
 }
 
 // The published result: the site's own sentence, one set's three out-of-sample Sharpe ratios, the date,
@@ -230,12 +245,13 @@ export function PublishedResult({ tickers = null }: { tickers?: readonly string[
         <details className="band-published-more">
           <summary>The published sentence</summary>
           {quote}
+          {set && set !== PUBLISHED_SETS[0] ? <p className="band-published-whose">{whoseFigures()}</p> : null}
         </details>
       ) : (
         quote
       )}
       <p className="band-published-figures" data-set={set ? set.name : undefined}>
-        {figuresLine(set)}
+        {figuresLine(set, phone)}
       </p>
       <figcaption className="band-published-source">
         {test}, published {PUBLISHED_WHEN} · <a href={PUBLISHED_URL}>Method note on masonjbennett.com</a>

@@ -88,6 +88,10 @@ check(M.WALK_AGG.weight === cross.ship.gmv_agg_into_2022 && cross.ship.weights.g
 check(P.CROSS_AGG_INTO_2022 === cross.published_agg_into_2022, "published: the AGG string is the fixture's", P.CROSS_AGG_INTO_2022);
 check(same(P.MEGA_CAP_APPLE, mega.sensitivity_apple.published), "published: the five Apple strings are the fixture's", JSON.stringify(P.MEGA_CAP_APPLE));
 check(P.MEGA_CAP_IN_SAMPLE === mega.published_in_sample, "published: 1.107 is the fixture's", P.MEGA_CAP_IN_SAMPLE);
+// The band prints 1.107's window end and rate from published.ts, so the page's first chunk never loads the record.
+const megaRun = M.WALK_RUNS.find((run) => run.key === "megacap5");
+check(P.MEGA_CAP_IN_SAMPLE_END === megaRun?.lastBar && P.MEGA_CAP_IN_SAMPLE_END === mega.last_bar && P.MEGA_CAP_IN_SAMPLE_RF === M.WALK_RF,
+  "published: 1.107's window end and rate are the run's last bar and rate", `${P.MEGA_CAP_IN_SAMPLE_END} ${P.MEGA_CAP_IN_SAMPLE_RF}`);
 for (const run of M.WALK_RUNS) {
   const pub = pubFor(run.tickers);
   check(pub !== NONE && KEYS.every((k) => pub[FIELD[k]] === WF.sets[run.key].published[k]), `published ${run.key}: the three strings are the fixture's`);

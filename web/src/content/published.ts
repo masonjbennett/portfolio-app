@@ -47,6 +47,14 @@ export const PUBLISHED_SETS: readonly PublishedSet[] = [
 export const MEGA_CAP_IN_SAMPLE = "1.107";
 
 /**
+ * The terms 1.107 was scored on: the whole window's last bar and the run's risk-free rate. Copies of the stored
+ * record of the run (src/content/walkforward.ts, the Walk-forward tab's chunk, which the page's first chunk does
+ * not load); test/t-walkforward-published.mjs holds each to it.
+ */
+export const MEGA_CAP_IN_SAMPLE_END = "2026-09-04";
+export const MEGA_CAP_IN_SAMPLE_RF = 0.02;
+
+/**
  * The method note's figure for the cross-asset minimum-variance portfolio going into 2022: its weight in AGG
  * through the hold that began in January 2022, as the note prints it. test/fixtures/walkforward.json carries
  * the same string beside the weight the run held, and CI holds the one to the other.
