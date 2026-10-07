@@ -107,7 +107,9 @@ const EMOJI = /\p{Extended_Pictographic}/u;
     "links: \"Source code on GitHub\" points at this repository's own origin", `${source?.getAttribute("href")} vs ${origin}`);
   const site = links.find((a) => text(a) === "masonjbennett.com");
   check(site?.getAttribute("href") === "https://masonjbennett.com", "links: the footer links masonjbennett.com");
-  check(links.length === 2 && links.every((a) => !a.hasAttribute("target")), "links: two plain links, each opening in the same tab");
+  const guide = links.find((a) => a.getAttribute("href") === "?guide");
+  check(links[0] === guide && text(guide) === "How to read this page", "links: the footer opens with the guide, by its title");
+  check(links.length === 3 && links.every((a) => !a.hasAttribute("target")), "links: three plain links, each opening in the same tab");
   r.unmount();
 }
 

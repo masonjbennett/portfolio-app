@@ -39,6 +39,22 @@
   min-width: 0;
 }
 
+/* A phone's settings row: the chip, which takes the room and cuts its summary short, and the guide's link. */
+.app-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.app-chip > .chip {
+  min-width: 0;
+}
+
+.app-guide {
+  flex: none;
+  font-size: 0.85rem;
+}
+
 /* The tab switch scrolls sideways and never wraps: seven labels do not fit a phone. */
 .app-tabs {
   margin: var(--space-5) 0 var(--space-4);

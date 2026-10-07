@@ -11,6 +11,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import SegControl from "../components/SegControl.tsx";
 import { RAIL_HEADINGS } from "../content/rail.ts";
+import { GUIDE_HREF, GUIDE_TITLE } from "../guide/route.ts";
 import { SYMBOL } from "../data/prices.ts";
 import { format } from "../format.ts";
 import { MAX_TICKERS, parseTickers, validateRequest } from "../lib/clean.ts";
@@ -205,6 +206,12 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
     <div className="rail">
       <p className="rail-status" role="status" aria-live="polite">
         {fetching ? "Fetching prices" : ""}
+      </p>
+
+      {/* The guide, first: on a desktop the rail is the first thing beside the page, and a line here moves nothing in
+          the page column. On a phone it heads the settings sheet; the link beside the Settings chip is the way in there. */}
+      <p className="rail-guide">
+        New to this? <a href={GUIDE_HREF}>{GUIDE_TITLE}</a>
       </p>
 
       <section className="rail-group" aria-labelledby={`${id}-level`}>

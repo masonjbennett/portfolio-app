@@ -1,0 +1,211 @@
+/* The guide: one column of prose on paper, the page's faces and tokens, section heads on the Slug's teal bar and
+   hairline. A name the page prints is set in bold ink. The print rules at the end are what the PDF is exported with
+   (scripts/guide-pdf.mjs). */
+.guide {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-5) var(--space-7);
+}
+
+.guide p {
+  margin: var(--space-3) 0 0;
+}
+
+.guide-head {
+  padding-bottom: var(--space-4);
+  border-bottom: var(--line-hair) solid var(--color-ink);
+}
+
+.guide-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.guide .guide-kicker {
+  margin: 0 0 var(--space-2);
+}
+
+.guide-kicker a {
+  color: var(--color-teal);
+  text-decoration: none;
+}
+
+.guide-title {
+  font-size: clamp(2rem, 5vw, 2.75rem);
+}
+
+.guide .guide-dek {
+  margin-top: var(--space-2);
+  color: var(--color-ink2);
+}
+
+.guide .guide-byline {
+  margin-top: var(--space-1);
+  font-size: 0.82rem;
+  color: var(--color-ink2);
+}
+
+.guide-byline a {
+  color: var(--color-ink);
+}
+
+.guide-actions {
+  font-size: 0.9rem;
+}
+
+/* Only on paper: where the page is. */
+.guide-printed {
+  display: none;
+  font-size: 0.82rem;
+  color: var(--color-ink2);
+}
+
+.guide-contents ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.guide-h3 {
+  margin-top: var(--space-5);
+  font-size: 22px;
+}
+
+.guide-h4 {
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-ink);
+}
+
+.guide-ui {
+  color: var(--color-ink);
+}
+
+.guide-tab {
+  margin-top: var(--space-6);
+  padding-top: var(--space-2);
+  border-top: var(--line-hair) solid var(--color-hairline2);
+}
+
+.guide-tab:first-of-type {
+  border-top: 0;
+}
+
+.guide-tab .guide-h3 {
+  margin-top: var(--space-3);
+}
+
+.guide .guide-question {
+  margin-top: var(--space-1);
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.3;
+  color: var(--color-ink2);
+}
+
+.guide-section p {
+  margin-top: var(--space-1);
+}
+
+.guide-open {
+  font-size: 0.9rem;
+}
+
+.guide-terms {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+
+.guide-term {
+  display: grid;
+  grid-template-columns: 12em 1fr;
+  gap: var(--space-3);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.guide-term dt {
+  font-weight: 700;
+}
+
+.guide-term dd {
+  margin: 0;
+  color: var(--color-ink2);
+}
+
+@media (max-width: 760px) {
+  .guide {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+
+  .guide-term {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+/* ---- paper -------------------------------------------------------------------------------------------------- */
+
+/* The page box has no margin, so the paper runs to every edge; the margins are the guide's own padding, repeated on
+   every page it breaks across (box-decoration-break: clone). */
+@page {
+  size: letter;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    background: var(--color-paper);
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .guide {
+    max-width: none;
+    padding: 16mm 18mm 18mm;
+    font-size: 11pt;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .guide-actions {
+    display: none;
+  }
+
+  .guide-printed {
+    display: block;
+  }
+
+  .guide-h3,
+  .guide-h4,
+  .slug {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  .guide-term,
+  .guide-section,
+  .guide-part p {
+    break-inside: avoid;
+  }
+
+  #tabs,
+  #glossary {
+    break-before: page;
+  }
+
+  .guide-tab {
+    margin-top: var(--space-5);
+  }
+}

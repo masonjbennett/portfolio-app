@@ -18,6 +18,7 @@ import MastheadView from "./chrome/Masthead.tsx";
 import RailView from "./chrome/Rail.tsx";
 import SummaryChip, { Sheet } from "./chrome/SummaryChip.tsx";
 import { usePhone } from "./chrome/usePhone.ts";
+import { GUIDE_HREF, GUIDE_TITLE } from "./guide/route.ts";
 import Boundary from "./components/Boundary.tsx";
 import { ChartNote } from "./components/ChartFrame.tsx";
 import SegControl, { tabId, tabPanelId } from "./components/SegControl.tsx";
@@ -195,6 +196,10 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
             <Boundary name="Settings">
               <div className="app-chip">
                 <SummaryChip settings={wb.settings} rf={wb.rf} open={sheet} onToggle={toggleSheet} />
+                {/* The guide, beside the chip in the row it already fills, so the row is no taller. */}
+                <a className="app-guide" href={GUIDE_HREF} title={GUIDE_TITLE}>
+                  Guide
+                </a>
               </div>
               {sheet ? <Sheet onClose={closeSheet}>{rail}</Sheet> : null}
             </Boundary>

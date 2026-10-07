@@ -1038,8 +1038,9 @@ function rail(over = {}) {
   const dialog = () => r.container.querySelector('[aria-label="Command palette"]');
   check(!dialog(), "palette: closed until asked for");
   key(document.body, "k", { ctrlKey: true });
-  check(!!dialog() && clickables(dialog()).length === 10 && clickables(dialog()).some((b) => text(b).endsWith(TAB_LABELS.walkforward)),
-    "palette: Ctrl+K opens the three levels and seven tabs, Walk-forward among them", dialog() ? clickables(dialog()).map(text).join(" | ") : "closed");
+  check(!!dialog() && clickables(dialog()).length === 11 && clickables(dialog()).some((b) => text(b).endsWith(TAB_LABELS.walkforward)) &&
+    text(clickables(dialog()).at(-1)).endsWith("How to read this page"),
+    "palette: Ctrl+K opens the three levels, the seven tabs (Walk-forward among them) and the guide, last", dialog() ? clickables(dialog()).map(text).join(" | ") : "closed");
   const input = dialog()?.querySelector("input");
   if (input) {
     setValue(input, "formula");

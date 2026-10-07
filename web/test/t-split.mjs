@@ -71,9 +71,19 @@ check(walkEarly.length === 0, "split: nothing of the walk-forward tab, its data 
   const words = [...src.matchAll(/\b(?:plain|finance): "([^"]{40,})"/g)].map((m) => m[1].slice(0, 40));
   const firstCode = [...first].map((c) => c.code).join("\n");
   const tabChunk = chunks.find((c) => c.moduleIds.map(rel).includes("web/src/tabs/WalkForward.tsx"));
+  // With the tab: in its chunk, or in a chunk it imports statically (the guide's glossary reads the same texts, so the
+  // build may give them a chunk the two share), and never in one loaded before first paint.
+  const withTab = new Set();
+  const take = (c) => {
+    if (!c || withTab.has(c) || first.has(c)) return;
+    withTab.add(c);
+    for (const f of c.imports) take(byName.get(f));
+  };
+  take(tabChunk);
+  const tabCode = [...withTab].map((c) => c.code).join("\n");
   const early = words.filter((w) => firstCode.includes(w));
-  check(words.length === 10 && early.length === 0 && !!tabChunk && words.every((w) => tabChunk.code.includes(w)),
-    "split: the walk-forward tab's tooltip texts load with the tab, none in the first chunk", early[0] ?? `${words.length} texts`);
+  check(words.length === 10 && early.length === 0 && !!tabChunk && words.every((w) => tabCode.includes(w)),
+    "split: the walk-forward tab's tooltip texts load with the tab (its chunk or one it imports), none in the first chunk", early[0] ?? `${words.length} texts`);
 }
 // The share link names the scorecard's added constructions from their ids module, which imports no solver, not
 // from the module that solves them.
@@ -114,6 +124,21 @@ const pulledBy = (id) => (infoOf(id)?.importers ?? []).map(rel).filter((i) => fi
   const by = pulledBy("web/src/lib/optimize.ts").filter((i) => i !== "web/src/state/analyze.ts");
   check(!!infoOf("web/src/lib/optimize.ts") && by.length === 0,
     "split: lib/optimize.ts is in the first chunk for the first screen's solve alone (state/analyze.ts)", by.join(", "));
+}
+
+// The guide (?guide) is its own chunk, which the entry fetches only when the address asks for it: the first chunk
+// carries src/guide/route.ts (the address, and the title its links print) and nothing else of it, its words included.
+{
+  const GUIDE = /^web\/src\/(guide\/(?!route\.ts$)|content\/guide\.ts$)/;
+  const early = firstIds.filter((id) => GUIDE.test(id));
+  const home = chunks.filter((c) => c.moduleIds.map(rel).includes("web/src/guide/GuidePage.tsx"));
+  const lazy = home.length === 1 && !first.has(home[0]) && [...first].some((c) => c.dynamicImports.includes(home[0].fileName));
+  check(early.length === 0 && firstIds.includes("web/src/guide/route.ts") && lazy,
+    "split: the guide is its own chunk, fetched on demand; the first chunk carries only its address", early.join(", ") || home.map((c) => c.fileName).join());
+  const { GUIDE_DEK } = await import("../src/content/guide.ts");
+  const firstCode = [...first].map((c) => c.code).join("\n");
+  check(GUIDE_DEK.length > 40 && !firstCode.includes(GUIDE_DEK) && home.length === 1 && home[0].code.includes(GUIDE_DEK),
+    "split: the guide's words load with the guide, none in the first chunk");
 }
 
 // Each tab is reached, and reached only, through the entry's dynamic imports.

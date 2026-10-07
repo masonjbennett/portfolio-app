@@ -16,6 +16,8 @@ export const AUTHOR = "Mason Bennett";
 export const CREDENTIAL = "M.S. Finance · University of Arkansas";
 export const SITE_URL = "https://masonjbennett.com";
 export const SOURCE_URL = "https://github.com/masonjbennett/portfolio-app";
+/** Where the page itself is served; index.html's og:url says the same, and test/t-guide.mjs holds the two together. */
+export const APP_URL = "https://portfolio.masonjbennett.com/";
 
 // The masthead's dek: what the page does, in plain words. The app's dek (1097-1153) is the title its
 // assignment gave it, "Mean-Variance Optimization & Risk Analysis", which names a method, not a use.
