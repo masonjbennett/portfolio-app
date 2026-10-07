@@ -277,6 +277,36 @@ for (const { label, a } of baskets) {
   check(!out.some((x) => x.includes("wrong")), "lookback row: ranges that print alike tie, and the first asset wins in either order, as the Sensitivity tab's swing() does", out.join("; "));
   const wider = R.lookbackSpread(two(0.4, 0.6006));
   check(wider.asset === 1 && (wider.spread * 100).toFixed(1) === "60.1", "lookback row: a range wider as printed (60.1 against 60.0) wins, though its asset comes later", JSON.stringify(wider));
+
+  // The precision the ranges are compared at is the precision the row prints, no finer: two ranges equal at
+  // one decimal and apart at the second (60.04 against 60.00 points), the later asset the wider, tie. And two
+  // ranges a few ulps apart across a rounding edge, which print 60.5 and 60.4, are one range, so the last bit
+  // does not decide either. The first asset wins in both orders, and swing() names the same one.
+  const edge = [[0, 0], [0.6044999999999999, 0.6045], [0.3, 0.3]];
+  const fine = [];
+  for (const [what, W] of [["apart at the second decimal", two(0.4, 0.6004)], ["a few ulps across a rounding edge", edge]]) {
+    for (const [order, V] of [["as given", W], ["reversed", flip(W)]]) {
+      const s = R.lookbackSpread(V);
+      const t = swing(V.map((w, k) => ({ named: `w${k}`, tan: { w }, gmv: null })), "tan", ["P", "Q"]);
+      fine.push(`${what}, ${order}: ${s.asset}/${t?.ticker}`);
+      if (s.asset !== 0 || t?.ticker !== "P") fine.push("  ^ wrong");
+    }
+  }
+  const sides = [two(0.4, 0.6004), edge].map((W) => [0, 1].map((i) => Math.max(...W.map((w) => w[i])) - Math.min(...W.map((w) => w[i]))));
+  check(sides[0].every((x) => (x * 100).toFixed(1) === "60.0") && sides[0][1] - sides[0][0] > 1e-4 && (sides[1][0] * 100).toFixed(1) !== (sides[1][1] * 100).toFixed(1),
+    "lookback row: the precision cases are what they say (equal at one decimal and apart at the second; printing apart across the edge)", JSON.stringify(sides));
+  check(!fine.some((x) => x.includes("wrong")), "lookback row: ranked at the precision it prints, no finer, and one range across a rounding edge, the first asset in either order, as swing() does", fine.join("; "));
+
+  // A window whose weights hold a NaN is a failed window in both rules, wherever the NaN sits, so the two
+  // still agree; before, the row took Math.min over the NaN and the finding skipped it, or froze on it.
+  const nan = [];
+  for (const [what, V] of [["NaN in the second asset's second window", [[0.1, 0.0, 0.3], [0.2, NaN, 0.3], [0.3, 0.9, 0.3]]], ["NaN in the first asset's first window", [[NaN, 0.1, 0.3], [0.2, 0.5, 0.3], [0.3, 0.9, 0.3]]]]) {
+    const s = R.lookbackSpread(V);
+    const t = swing(V.map((w, k) => ({ named: `w${k}`, tan: { w }, gmv: null })), "tan", ["AAA", "BBB", "CCC"]);
+    nan.push(`${what}: ${s?.asset}/${t?.ticker} ${s?.lo}..${s?.hi} ${t?.lo}..${t?.hi}`);
+    if (s?.asset !== 1 || t?.ticker !== "BBB" || !Number.isFinite(s.spread) || s.lo !== t.lo || s.hi !== t.hi) nan.push("  ^ wrong");
+  }
+  check(!nan.some((x) => x.includes("wrong")), "lookback row: a window holding a NaN weight counts as failed, and swing() agrees on the asset and its range", nan.join("; "));
 }
 
 // ---- odd baskets --------------------------------------------------------------------------------------------

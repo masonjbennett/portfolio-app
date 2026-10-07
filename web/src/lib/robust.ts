@@ -302,20 +302,31 @@ function printedSpread(spread: number): number {
   return Number((spread * 100).toFixed(1));
 }
 
+// Two ranges closer than this are one range: far above the solver's last digits, far below the 0.05 points
+// pct1 rounds away. It settles two ranges a few ulps apart on either side of a rounding edge (0.6045 against
+// 0.6044999999999999 print 60.5 and 60.4), which rounding alone would let the last bit decide.
+const SAME_RANGE = 1e-9;
+
+// Whether range a is wider than range b as the rule above judges it; a tie is never wider.
+function widerAsPrinted(a: number, b: number): boolean {
+  return Math.abs(a - b) >= SAME_RANGE && printedSpread(a) > printedSpread(b);
+}
+
 /**
  * Given one weight vector per lookback window (null where that window's solve failed), the asset whose
  * weight moves most across the windows that solved, with its lowest and highest weight. The ranges are
- * compared as printed, and a tie goes to the first ticker. Null when fewer than two windows solved.
+ * compared as printed, and a tie goes to the first ticker. A window whose weights hold anything but a number
+ * counts as one that failed, as swing() counts it. Null when fewer than two windows solved.
  */
 export function lookbackSpread(perWindow: (Vec | null)[]): LookbackSpread | null {
-  const ok = perWindow.filter((w): w is Vec => w !== null);
+  const ok = perWindow.filter((w): w is Vec => w !== null && w.every(Number.isFinite));
   if (ok.length < 2) return null;
   let best: LookbackSpread | null = null;
   for (let i = 0; i < ok[0].length; i++) {
     const xs = ok.map((w) => w[i]);
     const lo = Math.min(...xs);
     const hi = Math.max(...xs);
-    if (!best || printedSpread(hi - lo) > printedSpread(best.spread)) best = { asset: i, lo, hi, spread: hi - lo };
+    if (!best || widerAsPrinted(hi - lo, best.spread)) best = { asset: i, lo, hi, spread: hi - lo };
   }
   return best;
 }

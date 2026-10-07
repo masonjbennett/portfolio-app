@@ -227,6 +227,30 @@ for (const set of ["cross", "megacap"]) {
     const wider = mk(0.4, 0.6006);
     const s = M.swing(withTan(wider, fwd), "tan", names(fwd));
     check(s?.ticker === "GLD" && M.printedSwing(s.lo, s.hi) === 60.1, "tie: a swing wider as printed (60.1 against 60.0) wins on size, though its ticker comes later", JSON.stringify(s));
+
+    // No finer than printed: GLD's range 60.04 points against VTI's 60.00, equal at one decimal, is a tie and
+    // goes to the first ticker. Nor does one ulp across a rounding edge decide: VTI 0.6044999999999999
+    // (prints 60.4) against GLD 0.6045 (prints 60.5) is one range. Both in both orders.
+    const edge = (vtiR, gldR) => [[1, 0, 0, 0, 0], [1 - vtiR, 0, gldR, 0, 0], [0.7, 0, 0.3, 0, 0], [0.8, 0, 0.2, 0, 0], [0.9, 0, 0.1, 0, 0]];
+    const fine = [];
+    for (const [what, W] of [["GLD 60.04 against VTI 60.00", mk(0.4, 0.6004)], ["one ulp across the edge", edge(0.6044999999999999, 0.6045)]]) {
+      const vr = 1 - Math.min(...W.map((w) => w[0]));
+      const gr = Math.max(...W.map((w) => w[2]));
+      fine.push(`${what} (${vr} ${gr})`);
+      for (const order of [fwd, rev]) {
+        const tk = names(order);
+        const got = M.swing(withTan(W, order), "tan", tk)?.ticker;
+        fine.push(`${tk[0]} first: ${got}`);
+        if (got !== tk.find((t) => t === "VTI" || t === "GLD")) fine.push("  ^ wrong");
+      }
+    }
+    check(!fine.some((g) => g.includes("wrong")), "tie: ranked at the precision the finding prints, no finer, and one ulp across a rounding edge is a tie; the first ticker in either order", fine.join("; "));
+
+    // A window whose weights hold a NaN is a failed window: with one in VTI's first window, GLD's swing over
+    // the other four (0.1 to 0.6006) is still found, rather than the first ticker's NaN range standing unbeaten.
+    const nanW = mk(0.4, 0.6006).map((w, k) => (k === 0 ? [NaN, ...w.slice(1)] : w));
+    const n = M.swing(withTan(nanW, fwd), "tan", names(fwd));
+    check(n?.ticker === "GLD" && n.lo === 0.1 && n.hi === 0.6006, "tie: a window holding a NaN weight is treated as failed", JSON.stringify(n));
   }
 
   // The too-short rule. The app needs one year of returns (total_years >= 1 at 1855, len < 2 at 1870)

@@ -363,18 +363,32 @@ export interface Swing {
 }
 
 /**
- * A swing's size as the page prints it: the range in percentage points at one decimal, the pct1 the
- * weights are printed at. Two tickers whose ranges differ only in the solver's last digits print the same
- * (in a fit that holds two assets, one weight's range is the other's to within 1e-16), so the larger is
- * judged on this figure and a tie goes to the first ticker: the same data gives the same sentence on every
- * load. src/lib/robust.ts's lookbackSpread() applies the same rule, and test/t-robust.mjs holds the two equal.
+ * A swing's size as the page ranks it: the range hi - lo in percentage points, rounded to one decimal, the
+ * pct1 the finding prints its two ends at. It is the range rounded, not the gap between the two printed
+ * ends: those can sit 0.1 apart from it either way, and ranking on them would name the narrower of two
+ * swings whose true ranges differ (0.6044 against 0.6042 can print 0.0% to 60.4% and 0.0% to 60.5%).
+ * Two tickers whose ranges differ only in the solver's last digits print the same (in a fit that holds two
+ * assets, one weight's range is the other's to within 1e-16), so the larger is judged on this figure and a
+ * tie goes to the first ticker: the same data gives the same sentence on every load. src/lib/robust.ts's
+ * lookbackSpread() applies the same rule, and test/t-robust.mjs holds the two equal.
  */
 export function printedSwing(lo: number, hi: number): number {
   return Number(((hi - lo) * 100).toFixed(1));
 }
 
+// Two ranges closer than this are one range. It is far above the solver's last digits and far below the
+// 0.05 points pct1 rounds away, and it settles the one case rounding cannot: two ranges a few ulps apart
+// on either side of a rounding edge (0.6045 against 0.6044999999999999), which would print 60.5 and 60.4.
+const SAME_RANGE = 1e-9;
+
+// Whether swing a is wider than swing b as the rule above judges it; a tie is never wider.
+function wider(a: Swing, b: Swing): boolean {
+  return Math.abs(a.hi - a.lo - (b.hi - b.lo)) >= SAME_RANGE && printedSwing(a.lo, a.hi) > printedSwing(b.lo, b.hi);
+}
+
+// A window whose weights hold anything but a number is treated as a failed solve, as lookbackSpread() treats it.
 export function swing(fits: WindowFit[], p: Port, tickers: readonly string[]): Swing | null {
-  const ok = fits.filter((f) => weightsOf(f, p));
+  const ok = fits.filter((f) => weightsOf(f, p)?.every(Number.isFinite));
   if (!ok.length) return null;
   let best: Swing | null = null;
   tickers.forEach((t, i) => {
@@ -387,7 +401,7 @@ export function swing(fits: WindowFit[], p: Port, tickers: readonly string[]): S
         if (v > s.hi) Object.assign(s, { hi: v, hiWindow: f.named });
       }
     }
-    if (s && (!best || printedSwing(s.lo, s.hi) > printedSwing(best.lo, best.hi))) best = s;
+    if (s && (!best || wider(s, best))) best = s;
   });
   return best;
 }
