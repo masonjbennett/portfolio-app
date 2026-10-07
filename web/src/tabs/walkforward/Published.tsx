@@ -143,7 +143,7 @@ export function wholeDiffers(): { set: string; label: string; exact: string; sho
   );
 }
 
-const PAIR_MARKS: BellMarks = { inSample: "in-sample, the run's whole window", oos: "out-of-sample, as published" };
+export const PAIR_MARKS: BellMarks = { inSample: "in-sample, the run's whole window", oos: "out-of-sample, as published" };
 
 function Pairs() {
   const run = WALK_RUNS[0];
@@ -161,12 +161,12 @@ function Pairs() {
         run's {format(WALK_RF, "pct1")} rate: minimum variance and maximum Sharpe fitted to that window by the app's own
         solver, equal weight held at equal weights with no fit. The filled dot is the published figure for the held-out
         days alone. Of the hollow dots the published note prints only the {pubName("megacap5")}' maximum Sharpe,{" "}
-        {MEGA_CAP_IN_SAMPLE}; the others are this run's stored record of the same fit, printed to three decimals.
+        {MEGA_CAP_IN_SAMPLE}; the others are this run's stored record, scored the same way, printed to three decimals.
       </p>
       {differs.length > 0 ? (
         <p className="wfp-foot" data-note="whole-solver">
-          Solved exactly, {format(differs.length, "int")} of the {format(total, "int")} whole-window figures print
-          differently:{" "}
+          Solver note, whole window: solved exactly, {format(differs.length, "int")} of the {format(total, "int")}{" "}
+          whole-window figures print differently:{" "}
           {differs.map((d, i) => (
             <span key={`${d.set} ${d.label}`} data-differs={`${d.set}|${d.label}`}>
               {i > 0 ? "; " : ""}

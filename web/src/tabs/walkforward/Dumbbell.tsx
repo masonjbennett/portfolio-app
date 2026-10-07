@@ -8,6 +8,10 @@
 // `groups`, one run of rows per published set under the set's name, all on the one axis, with its figures as
 // quoted strings (`inText`, `oosText`) and its own words for the two marks (`marks`). The strip's styles are
 // in ./Live.css, which WalkForward.tsx loads with both segments; a group's name is styled in ./Published.css.
+//
+// In groups, each set's name is a heading under the chart's own, so a screen reader can move from set to set,
+// and the printed pair beside each row is hidden from it, since the row's picture already reads both figures
+// with its set and construction. Your basket's strip is drawn exactly as before.
 import { useId } from "react";
 import { format } from "../../format.ts";
 
@@ -98,7 +102,7 @@ function Item({ row, domain, ticks, group }: { row: BellRow; domain: [number, nu
     <li className="wfl-bell" data-row={row.key}>
       <span className="wfl-bell-name">{row.label}</span>
       <Bell row={row} domain={domain} ticks={ticks} group={group} />
-      <span className="wfl-bell-values">
+      <span className="wfl-bell-values" aria-hidden={group ? "true" : undefined}>
         {inPrint(row)} to {oosPrint(row)}
       </span>
     </li>
@@ -140,9 +144,9 @@ export default function Dumbbell({
       {groups ? (
         groups.map((g, i) => (
           <div key={g.key} className="wfl-bell-group" data-group={g.key}>
-            <p className="wfl-bell-group-name" id={`${base}-${i}`}>
+            <h3 className="wfl-bell-group-name" id={`${base}-${i}`}>
               {g.name}
-            </p>
+            </h3>
             <ul className="wfl-bell-list" aria-labelledby={`${base}-${i}`}>
               {g.rows.map((r) => (
                 <Item key={r.key} row={r} domain={domain} ticks={ticks} group={g.name} />

@@ -66,6 +66,10 @@ for (const run of M.WALK_RUNS) {
   for (const o of ["ship", "tight"])
     check(KEYS.every((k) => e.whole_window?.[o]?.prints?.[k] === format(e.whole_window[o].sharpe[k], "num3")),
       `fixture ${run.key}: the whole-window prints (${o}) are its figures at three decimals`, JSON.stringify(e.whole_window?.[o]?.prints));
+  // The whole-window block was added after the run was written, so it records the libraries that wrote it.
+  const v = e.whole_window?.versions;
+  check(!!v && ["python", "numpy", "scipy", "pandas"].every((x) => /^\d+\.\d+(\.\d+)?$/.test(v[x] ?? "")) && same(Object.keys(e.whole_window), ["ship", "tight", "versions"]),
+    `fixture ${run.key}: the whole-window block says which Python, numpy, scipy and pandas wrote it`, JSON.stringify(v));
 }
 const mega = WF.sets.megacap5;
 const cross = WF.sets.cross;
@@ -355,6 +359,20 @@ check(/in-sample, the run's whole window/.test(keyText) && /out-of-sample, as pu
   pairsNote.includes(format(M.WALK_RF, "pct1")) && pairsNote.includes("equal weight held at equal weights with no fit") && pairsNote.includes(P.MEGA_CAP_IN_SAMPLE),
   "chart: the key and the note say in-sample on the whole window with the held-out years included, the window, the rate, that equal weight is not fitted, and which hollow dot is published",
   `${keyText} / ${pairsNote}`);
+// The note prints one window for all three sets, read from the first run, so every run must span that window.
+check(M.WALK_RUNS.length === 3 && M.WALK_RUNS.every((run) => run.folds[0].fitFirst === f0w.fitFirst && run.lastBar === M.WALK_RUNS[0].lastBar),
+  "chart: every set's run spans the one window the note prints", M.WALK_RUNS.map((run) => `${run.key} ${run.folds[0].fitFirst}..${run.lastBar}`).join(" | "));
+// Equal weight is fitted to nothing, so the note does not call its whole-window figure a fit's record.
+check(!/record of the same fit/.test(pairsNote) && /stored record, scored the same way/.test(pairsNote),
+  "chart: the note calls the eight unpublished whole-window figures a record scored the same way, not a fit", pairsNote);
+// Each set's name is a heading under the chart's, and labels its list; the pair printed beside a row is hidden
+// from a screen reader, since the row's picture reads both figures.
+check(groups.every((g) => {
+  const name = g.querySelector(".wfl-bell-group-name");
+  return name?.tagName === "H3" && g.querySelector("ul")?.getAttribute("aria-labelledby") === name.id &&
+    rowsOf(g).every((li) => li.querySelector(".wfl-bell-values")?.getAttribute("aria-hidden") === "true");
+}), "chart: each set's name is a heading that labels its rows, and the printed pairs are hidden from a screen reader",
+  groups.map((g) => g.querySelector(".wfl-bell-group-name")?.tagName).join(" "));
 // The note under it: exactly the whole-window figures an exact solve prints differently, by the fixture's own prints.
 {
   const differs = (run) => KEYS.filter((k) => WF.sets[run.key].whole_window.tight.prints[k] !== WF.sets[run.key].whole_window.ship.prints[k]);
@@ -363,6 +381,10 @@ check(/in-sample, the run's whole window/.test(keyText) && /out-of-sample, as pu
   const noteW = text(root.querySelector('[data-note="whole-solver"]') ?? {});
   const printsW = M.WALK_RUNS.flatMap((run) => differs(run).map((k) =>
     `${WF.sets[run.key].whole_window.tight.prints[k]} where the chart prints ${WF.sets[run.key].whole_window.ship.prints[k]}`));
+  // The two solver notes, one under the chart and one under the table, open differently.
+  const noteT = text(root.querySelector('[data-note="solver"]') ?? {});
+  check(noteW === "" || (noteW.startsWith("Solver note, whole window: solved exactly, ") && noteT.startsWith("Solver note: the published run's") && noteW.slice(0, 20) !== noteT.slice(0, 20)),
+    "chart: the note under the chart opens with the whole window, so it reads apart from the table's solver note", `${noteW.slice(0, 60)} / ${noteT.slice(0, 60)}`);
   check(same(namedW, wantW) && printsW.every((x) => noteW.includes(x)) && (wantW.length === 0) === (noteW === "") &&
     (wantW.length === 0 || noteW.includes(`${format(wantW.length, "int")} of the ${format(KEYS.length * M.WALK_RUNS.length, "int")} whole-window figures`)),
     "chart: the note under it names exactly the whole-window figures the exact solve prints differently, with both prints", `${namedW.join(", ")} / ${wantW.join(", ")}`);

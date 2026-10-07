@@ -18,7 +18,7 @@ import { act, render, text } from "./_dom.mjs";
 
 const { createElement: h } = await import("react");
 const { default: Live, ADDED_SWITCH } = await import("../src/tabs/walkforward/Live.tsx");
-const { bellDomain, bellStep, bellTicks } = await import("../src/tabs/walkforward/Dumbbell.tsx");
+const { default: Dumbbell, bellDomain, bellStep, bellTicks } = await import("../src/tabs/walkforward/Dumbbell.tsx");
 const L = await import("../src/tabs/walkforward/live.ts");
 const W = await import("../src/lib/walkforward.ts");
 const { default: WalkForward, walkRates } = await import("../src/tabs/WalkForward.tsx");
@@ -612,6 +612,21 @@ for (const [name, a] of [
       ? [] : [`[${d}]: step ${st}, ${t.join(" ")}`];
   });
   check(odd.length === 0, "dumbbell: the gridlines step by 1, 2 or 5 times a power of ten, three to eight of them, zero among them, on any domain", odd.join(" | "));
+  // Zero stays on the axis when every figure is above it, as on a basket where every row earned a positive
+  // Sharpe: the domain reaches down to zero and zero is a labelled gridline.
+  {
+    const up = [{ key: "a", label: "A", inSample: 0.84, oos: 0.51 }, { key: "b", label: "B", inSample: 1.32, oos: 0.97 }, { key: "c", label: "C", inSample: 0.66, oos: 0.62 }];
+    const d = bellDomain(up);
+    const rr = render(h(Dumbbell, { rows: up }));
+    const zero = rr.container.querySelectorAll(".wfl-bell-ends [data-zero]").length;
+    const zeroLines = rr.container.querySelectorAll("line.wfl-bell-zero").length;
+    check(d[0] <= 0 && bellTicks(d).includes(0) && zero === 1 && zeroLines === up.length,
+      "dumbbell: with every figure positive, the axis still runs down to zero and marks it", `${d} / ${bellTicks(d)} / ${zero} ${zeroLines}`);
+    rr.unmount();
+  }
+  // Your basket's strip is the ungrouped one: no set headings, and its printed pairs are read as they always were.
+  check(!root.querySelector(".wfl-bells h3") && bells.every((b) => !b.querySelector(".wfl-bell-values")?.hasAttribute("aria-hidden")),
+    "dumbbell: Your basket's strip has no set headings and keeps its printed pairs readable", String(root.querySelectorAll(".wfl-bells h3").length));
   check(bells.every((b) => b.className === bells[0].className && b.querySelectorAll("circle.wfl-bell-in").length <= 1 && b.querySelectorAll("circle.wfl-bell-out").length <= 1) &&
     root.querySelectorAll(".wfl-bell-list circle.wfl-bell-in").length === rows.filter((q) => q.inSample !== null).length,
     "dumbbell: every row is drawn alike, a hollow dot in-sample and a filled one out-of-sample");

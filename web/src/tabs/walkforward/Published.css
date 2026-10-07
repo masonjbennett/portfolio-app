@@ -53,6 +53,7 @@
 
 .wfp-pairs .wfl-bell-group-name {
   margin: 0 0 2px;
+  line-height: inherit;
   padding-bottom: 2px;
   border-bottom: var(--line-hair) solid var(--color-hairline);
   font-family: var(--font-sans);

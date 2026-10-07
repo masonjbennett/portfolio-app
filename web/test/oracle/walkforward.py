@@ -78,7 +78,10 @@ Equal weight is 1/N under the same H, S, R and J.
         each set's three constructions scored on the run's whole window ("whole_window"). Its
         "versions" block records the Python, numpy and pandas that wrote it, so a dump from an
         environment whose libraries have moved on differs there and nowhere else: compare two dumps
-        with that block left out, and re-pin the libraries before replacing the committed file
+        with that block left out, and re-pin the libraries before replacing the committed file.
+        Each whole_window block carries a "versions" block of its own, because it was added to
+        the committed file later, by newer libraries, with every value already there kept: the top
+        block says what wrote the run, the inner one what wrote that set's whole-window figures
     python web/test/oracle/walkforward.py options [out.json] [--rf-csv saved.csv] [--fetch]
         writes web/test/fixtures/walkforward-options.json, the reference for the page's own
         walk-forward: the schedule by bar count under each fit and hold option (cross-asset, 2%),
@@ -659,14 +662,19 @@ def check(key):
     return 0 if bad == 0 else 1
 
 
+def versions():
+    """The Python and the libraries writing a dump, as its "versions" blocks record them."""
+    return {"python": sys.version.split()[0], "numpy": np.__version__,
+            "scipy": scipy.__version__, "pandas": pd.__version__}
+
+
 def dump(path):
     """Write the pinned run fold by fold, so another engine can be held to it."""
     e, a, h, s, r, j, o = PINNED.split("|")
     out = {"what": "The walk-forward test quoted in the site's Method Note (published Sep 6 2026), "
                    "rebuilt from the app's own functions by web/test/oracle/walkforward.py.",
            "key": PINNED, "conventions": PINNED_WORDS, "rf": RATES[r],
-           "versions": {"python": sys.version.split()[0], "numpy": np.__version__,
-                        "scipy": scipy.__version__, "pandas": pd.__version__},
+           "versions": versions(),
            "sets": {}}
     whole = {}
     for opt in ("ship", "tight"):
@@ -706,13 +714,13 @@ def dump(path):
     # construction, in the set's ticker order) so another engine can replay them. None of it is published;
     # the page prints it as in-sample figures beside the published out-of-sample ones. The mega-caps'
     # maximum Sharpe here is the same computation as their in_sample_tangency above, and must be the same
-    # double.
+    # double. Its own "versions" block, last, says which libraries wrote it.
     for set_name, blocks in whole.items():
         if set_name == "megacap5":
             for opt, block in blocks.items():
                 assert block["sharpe"]["tan"] == out["sets"][set_name][opt]["in_sample_tangency"], \
                     f"megacap5 {opt}: the whole-window maximum Sharpe is not the recorded in-sample tangency"
-        out["sets"][set_name]["whole_window"] = blocks
+        out["sets"][set_name]["whole_window"] = {**blocks, "versions": versions()}
     pathlib.Path(path).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n",
                                   encoding="utf-8", newline="\n")
     print(f"wrote {path}")
