@@ -258,6 +258,25 @@ for (const { label, a } of baskets) {
   check(s.asset === 0 && s.lo === 0.1 && s.hi === 0.5 && s.spread === 0.5 - 0.1, "lookback row skips a failed window");
   check(R.lookbackSpread([[0.3, 0.7], null]) === null && R.lookbackSpread([]) === null, "lookback row needs two solved windows");
   check(R.lookbackSpread([[0.3, 0.7], [0.4, 0.6]]).asset === 0, "lookback row: a tie goes to the first ticker");
+
+  // Ranges that differ only in the last bit print alike (60.0 points), so they tie and the first asset
+  // wins, in either order and whichever is wider in the last bit; the Sensitivity tab's swing() is held to
+  // the same answer. A range wider as printed (60.1) still wins on size.
+  const two = (aLo, bHi) => [[1, 0], [aLo, bHi], [0.7, 0.3]];
+  const flip = (W) => W.map((w) => w.slice().reverse());
+  const out = [];
+  for (const [what, W] of [["second a bit wider", two(0.4, 0.6000000000000001)], ["first a bit wider", two(0.39999999999999997, 0.6)]]) {
+    for (const [order, V] of [["as given", W], ["reversed", flip(W)]]) {
+      const s = R.lookbackSpread(V);
+      const fits = V.map((w, k) => ({ named: `w${k}`, tan: { w }, gmv: null }));
+      const t = swing(fits, "tan", ["P", "Q"]);
+      out.push(`${what}, ${order}: ${s.asset}/${t?.ticker}`);
+      if (s.asset !== 0 || t?.ticker !== "P" || s.spread !== V.reduce((m, w) => Math.max(m, w[0]), -1) - V.reduce((m, w) => Math.min(m, w[0]), 2)) out.push("  ^ wrong");
+    }
+  }
+  check(!out.some((x) => x.includes("wrong")), "lookback row: ranges that print alike tie, and the first asset wins in either order, as the Sensitivity tab's swing() does", out.join("; "));
+  const wider = R.lookbackSpread(two(0.4, 0.6006));
+  check(wider.asset === 1 && (wider.spread * 100).toFixed(1) === "60.1", "lookback row: a range wider as printed (60.1 against 60.0) wins, though its asset comes later", JSON.stringify(wider));
 }
 
 // ---- odd baskets --------------------------------------------------------------------------------------------

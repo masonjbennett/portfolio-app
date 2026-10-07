@@ -193,6 +193,42 @@ for (const set of ["cross", "megacap"]) {
   const flat = fits.map((f) => ({ ...f, gmv: { ...f.gmv, w: [0.2, 0.2, 0.2, 0.2, 0.2] } }));
   check(/GMV\) portfolio holds VTI at 20\.0% in every window/.test(M.headline(flat, a.tickers)), "headline: a weight that does not move is said to hold", M.headline(flat, a.tickers));
 
+  // The tie rule. In a fit that holds two assets, one weight's range is the other's give or take the last
+  // bit, so which is "wider" is float noise and the finding used to change between loads of the same data.
+  // Synthetic weights, two assets each window: VTI's and GLD's ranges both print 60.0, one of them a bit
+  // wider in each direction; the first ticker in the order the page holds them must win in both orders,
+  // and a range that is wider AS PRINTED (60.1) must still win on size.
+  {
+    const mk = (vtiLo, gldHi, gldMid = 0.3) => [[1, 0, 0, 0, 0], [vtiLo, 0, gldHi, 0, 0], [1 - gldMid, 0, gldMid, 0, 0], [0.8, 0, 0.2, 0, 0], [0.9, 0, 0.1, 0, 0]];
+    const withTan = (W, order) => fits.map((f, k) => ({ ...f, tan: { ...f.tan, w: order.map((i) => W[k][i]) } }));
+    const fwd = [0, 1, 2, 3, 4];
+    const rev = [4, 3, 2, 1, 0];
+    const names = (order) => order.map((i) => a.tickers[i]);
+    const cases = [
+      ["GLD a bit wider", mk(0.4, 0.6000000000000001)],
+      ["VTI a bit wider", mk(0.39999999999999997, 0.6)],
+    ];
+    const got = [];
+    for (const [what, W] of cases) {
+      const vr = 1 - Math.min(...W.map((w) => w[0]));
+      const gr = Math.max(...W.map((w) => w[2]));
+      check(vr !== gr && format(vr, "pct1") === format(gr, "pct1"), `tie: the synthetic ranges differ in the last bit and print alike (${what})`, `${vr} ${gr}`);
+      for (const order of [fwd, rev]) {
+        const tk = names(order);
+        const s = M.swing(withTan(W, order), "tan", tk);
+        const first = tk.find((t) => t === "VTI" || t === "GLD");
+        got.push(`${what}, ${tk[0]} first: ${s?.ticker}`);
+        if (s?.ticker !== first) got.push("  ^ wrong");
+      }
+    }
+    check(!got.some((g) => g.includes("wrong")), "tie: two swings that print alike go to the first ticker in the page's order, whichever is wider in the last bit", got.join("; "));
+    const T = M.headline(withTan(cases[0][1], fwd), names(fwd));
+    check(/weight in VTI runs from 40\.0% \(.*\) to 100\.0% /.test(T), "tie: the headline names the first ticker of a printed tie", T);
+    const wider = mk(0.4, 0.6006);
+    const s = M.swing(withTan(wider, fwd), "tan", names(fwd));
+    check(s?.ticker === "GLD" && M.printedSwing(s.lo, s.hi) === 60.1, "tie: a swing wider as printed (60.1 against 60.0) wins on size, though its ticker comes later", JSON.stringify(s));
+  }
+
   // The too-short rule. The app needs one year of returns (total_years >= 1 at 1855, len < 2 at 1870)
   // but says two (1871); the port says what the code does.
   check(/if total_years >= 1:/.test(lines(1855, 1855)) && /Need at least 2 years/.test(lines(1871, 1871)),

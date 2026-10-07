@@ -293,9 +293,19 @@ export interface LookbackSpread {
 }
 
 /**
+ * A range as the row prints it: percentage points at one decimal (pct1). Ranges are compared on this, so
+ * two that differ only in the solver's last digits are a tie, and a tie goes to the first ticker. The
+ * Sensitivity tab's swing() applies the same rule (its printedSwing), and test/t-robust.mjs holds the two
+ * equal.
+ */
+function printedSpread(spread: number): number {
+  return Number((spread * 100).toFixed(1));
+}
+
+/**
  * Given one weight vector per lookback window (null where that window's solve failed), the asset whose
- * weight moves most across the windows that solved, with its lowest and highest weight. Ties go to the
- * first ticker. Null when fewer than two windows solved.
+ * weight moves most across the windows that solved, with its lowest and highest weight. The ranges are
+ * compared as printed, and a tie goes to the first ticker. Null when fewer than two windows solved.
  */
 export function lookbackSpread(perWindow: (Vec | null)[]): LookbackSpread | null {
   const ok = perWindow.filter((w): w is Vec => w !== null);
@@ -305,7 +315,7 @@ export function lookbackSpread(perWindow: (Vec | null)[]): LookbackSpread | null
     const xs = ok.map((w) => w[i]);
     const lo = Math.min(...xs);
     const hi = Math.max(...xs);
-    if (!best || hi - lo > best.spread) best = { asset: i, lo, hi, spread: hi - lo };
+    if (!best || printedSpread(hi - lo) > printedSpread(best.spread)) best = { asset: i, lo, hi, spread: hi - lo };
   }
   return best;
 }

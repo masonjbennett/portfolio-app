@@ -362,6 +362,17 @@ export interface Swing {
   hiWindow: string;
 }
 
+/**
+ * A swing's size as the page prints it: the range in percentage points at one decimal, the pct1 the
+ * weights are printed at. Two tickers whose ranges differ only in the solver's last digits print the same
+ * (in a fit that holds two assets, one weight's range is the other's to within 1e-16), so the larger is
+ * judged on this figure and a tie goes to the first ticker: the same data gives the same sentence on every
+ * load. src/lib/robust.ts's lookbackSpread() applies the same rule, and test/t-robust.mjs holds the two equal.
+ */
+export function printedSwing(lo: number, hi: number): number {
+  return Number(((hi - lo) * 100).toFixed(1));
+}
+
 export function swing(fits: WindowFit[], p: Port, tickers: readonly string[]): Swing | null {
   const ok = fits.filter((f) => weightsOf(f, p));
   if (!ok.length) return null;
@@ -376,7 +387,7 @@ export function swing(fits: WindowFit[], p: Port, tickers: readonly string[]): S
         if (v > s.hi) Object.assign(s, { hi: v, hiWindow: f.named });
       }
     }
-    if (s && (!best || s.hi - s.lo > best.hi - best.lo)) best = s;
+    if (s && (!best || printedSwing(s.lo, s.hi) > printedSwing(best.lo, best.hi))) best = s;
   });
   return best;
 }

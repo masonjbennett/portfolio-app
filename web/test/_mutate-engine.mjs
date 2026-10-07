@@ -126,6 +126,11 @@ const M = [
   ["src/lib/robust.ts", "const cut = nudgeTangency(m, S, rf, allowShort, T, from, band.lo1);", "const cut = nudgeTangency(m, S, rf, allowShort, T, from, band.lo2);", "cut row at two standard errors, not one", "t-robust"],
   ["src/lib/robust.ts", "const base = kind === \"tan\" ? tangency(x.m, x.S, x.rf, x.allowShort) : gmv(x.m, x.S, x.allowShort);", "const base = tangency(x.m, x.S, x.rf, x.allowShort);", "GMV's draw row reads the tangency's largest holding", "t-robust"],
   ["src/lib/robust.ts", "if (kind === \"tan\") return n + (n * (n + 1)) / 2;", "if (kind === \"tan\") return (n * (n + 1)) / 2;", "tangency's parameters leave out the means", "t-robust"],
+  ["src/lib/robust.ts", "if (!best || printedSpread(hi - lo) > printedSpread(best.spread)) best", "if (!best || hi - lo > best.spread) best", "lookback row ranked on raw ranges, so float noise picks between two that print alike", "t-robust"],
+  ["src/lib/robust.ts", "return Number((spread * 100).toFixed(1));", "return Number((spread * 100).toFixed(0));", "lookback ranges compared at whole points, coarser than the row prints", "t-robust"],
+  // the Sensitivity tab's swing(), the same tie rule as lookbackSpread(), judged by t-tab-sensitivity alone
+  ["src/tabs/sensitivity/model.ts", "if (s && (!best || printedSwing(s.lo, s.hi) > printedSwing(best.lo, best.hi))) best = s;", "if (s && (!best || s.hi - s.lo > best.hi - best.lo)) best = s;", "the finding's swing ranked on raw ranges, so float noise picks between two that print alike", "t-tab-sensitivity"],
+  ["src/tabs/sensitivity/model.ts", "if (s && (!best || printedSwing(s.lo, s.hi) > printedSwing(best.lo, best.hi))) best = s;", "if (s && (!best || printedSwing(s.lo, s.hi) >= printedSwing(best.lo, best.hi))) best = s;", "a printed tie goes to the last ticker", "t-tab-sensitivity"],
   ["src/lib/rng.ts", "let a = seed >>> 0;", "let a = 0;", "the seed is ignored", "t-robust"],
   ["src/lib/rng.ts", "const theta = 2 * Math.PI * uniform();", "const theta = Math.PI * uniform();", "Box-Muller angle over half a circle", "t-robust"],
   ["src/lib/rng.ts", "spare = r * Math.sin(theta);", "spare = r * Math.cos(theta);", "the second normal of each pair repeats the first", "t-robust"],
