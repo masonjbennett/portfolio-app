@@ -10,6 +10,7 @@
 // never enters a shared link).
 import { useEffect, useId, useRef, useState } from "react";
 import SegControl from "../components/SegControl.tsx";
+import { RAIL_HEADINGS } from "../content/rail.ts";
 import { SYMBOL } from "../data/prices.ts";
 import { format } from "../format.ts";
 import { MAX_TICKERS, parseTickers, validateRequest } from "../lib/clean.ts";
@@ -208,7 +209,7 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
 
       <section className="rail-group" aria-labelledby={`${id}-level`}>
         <h2 className="rail-heading" id={`${id}-level`}>
-          Explanation level
+          {RAIL_HEADINGS.level}
         </h2>
         <SegControl options={LEVEL_OPTIONS} value={level} onChange={setLevel} ariaLabel="Explanation level" />
         {/* The app's caption (657-663), with the port's names for the three levels. The port's Formula level
@@ -223,7 +224,7 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
 
       <section className="rail-group" aria-labelledby={`${id}-tickers-h`}>
         <h2 className="rail-heading" id={`${id}-tickers-h`}>
-          Tickers
+          {RAIL_HEADINGS.tickers}
         </h2>
         <p className="rail-note">The published sets:</p>
         <div className="rail-presets">{PUBLISHED_PRESETS.map((p) => presetButton(p, true))}</div>
@@ -275,7 +276,7 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
 
       <section className="rail-group" aria-labelledby={`${id}-dates-h`}>
         <h2 className="rail-heading" id={`${id}-dates-h`}>
-          Date range
+          {RAIL_HEADINGS.dates}
         </h2>
         <div className="rail-dates">
           <div className="rail-field">
@@ -323,7 +324,7 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
 
       <section className="rail-group" aria-labelledby={`${id}-rf-h`}>
         <h2 className="rail-heading" id={`${id}-rf-h`}>
-          Risk-free rate
+          {RAIL_HEADINGS.rf}
         </h2>
         <div className="rail-field">
           <label htmlFor={`${id}-rf`}>Annualized Rf (%)</label>
@@ -352,7 +353,7 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
 
       <section className="rail-group" aria-labelledby={`${id}-bench-h`}>
         <h2 className="rail-heading" id={`${id}-bench-h`}>
-          Benchmark
+          {RAIL_HEADINGS.bench}
         </h2>
         <div className="rail-field">
           <label htmlFor={`${id}-bench`}>Benchmark Index</label>
@@ -368,7 +369,7 @@ export default function Rail({ settings, setSettings, level, setLevel, rf, fetch
 
       <section className="rail-group" aria-labelledby={`${id}-short-h`}>
         <h2 className="rail-heading" id={`${id}-short-h`}>
-          Short selling
+          {RAIL_HEADINGS.short}
         </h2>
         <label className="rail-switch">
           <input
