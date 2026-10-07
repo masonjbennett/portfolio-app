@@ -18,8 +18,8 @@
 // result and says the basket is that set; on any other basket it quotes the five mega-caps, as it always did.
 //
 // The app's Snapshot shows the EQUAL-WEIGHT figures under the "Tangency" labels when the tangency
-// solve fails (1200-1202). Here a failed tangency is null (src/state/analyze.ts), its two plates
-// print a dash, and the sentence says the optimisation failed.
+// solve fails (1200-1202). Here a failed tangency is null (src/state/analyze.ts), its plate prints a
+// dash, and the sentence says the optimisation failed and gives equal weight's return and volatility.
 //
 // Below the plates sits the what-if panel (./WhatIf.tsx): one expected return moved by hand and the
 // weights solved again on these prices. It folds behind a closed disclosure at every width, so the first
@@ -123,9 +123,11 @@ export function finding(a: Analysis): string {
   const assets = assetsOf(a.tickers);
   const ew = rowOf(a, a.ew);
   const t = a.tangency;
+  // The failed solve's sentence says "tangency" alone, the word on its plate: with the tickers named it is
+  // the longest of the three, and the gloss in brackets would add a line to the band on a phone.
   if (!t) {
     return (
-      `The tangency (maximum-Sharpe) optimisation failed for ${assets}${a.allowShort ? " with short positions allowed" : ""}, ` +
+      `The tangency optimisation failed for ${assets}${a.allowShort ? " with short positions allowed" : ""}, ` +
       `so no tangency figures are shown. ${span}, equal weight returned ${format(fin(ew.mu), "pct2")} a year ` +
       `at ${format(fin(ew.sigma), "pct2")} volatility.`
     );
@@ -175,6 +177,11 @@ export function standing(set: PublishedSet): string {
   return `tangency ${t} equal weight, GMV ${g} it`;
 }
 
+// A set's name inside a sentence: its first letter lower-cased ("five mega-caps", "seven sector ETFs").
+export function nameInSentence(set: PublishedSet): string {
+  return set.name.charAt(0).toLowerCase() + set.name.slice(1);
+}
+
 // The figures line. On one of the published sets it says this basket is that set, then quotes the set's
 // three out-of-sample ratios (the mega-caps' tangency with its in-sample 1.107 beside it, as always) and how
 // they stood. On any other basket it is the line it always was: the five mega-caps, named and quoted.
@@ -183,7 +190,7 @@ function figuresLine(set: PublishedSet | null): string {
   const inSample = s === PUBLISHED_SETS[0] ? ` (${MEGA_CAP_IN_SAMPLE} in-sample)` : "";
   const three = `equal weight ${s.ew} · GMV ${s.gmv} · tangency ${s.tangency}${inSample}`;
   if (!set) return `${s.name} (${s.tickers.join(", ")}), Sharpe out of sample: ${three}.`;
-  return `This basket is the published ${s.name} set. Sharpe out of sample: ${three}, ${standing(s)}.`;
+  return `This basket is the published ${nameInSentence(s)} set. Sharpe out of sample: ${three}; ${standing(s)}.`;
 }
 
 // The published result: the site's own sentence, one set's three out-of-sample Sharpe ratios, the date,

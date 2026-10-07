@@ -266,17 +266,17 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   ew_sharpe: {
     plain: "How much return an even split of the money across every asset earned for each unit of risk over this window, with the split kept even. Nothing was fitted to pick these weights, so it is the yardstick the fitted mixes are measured against.",
     finance: "Sharpe ratio of the 1/N portfolio, rebalanced daily to equal weights: annualised mean return less the risk-free rate, over annualised volatility, from this window's mean daily returns and covariance. No estimate chooses the weights, so nothing is fitted to flatter it; it is still one window of history.",
-    formula: "SR = (w′μ − r_f) / √(w′Σw), wᵢ = 1/N, μ = mean daily returns × 252, Σ = daily covariance (n − 1) × 252, both from this window, r_f the page's annual rate.",
+    formula: "SR = (w′μ − r_f) / √(w′Σw), wᵢ = 1/N, μ = mean daily returns × 252, Σ = sample daily covariance (ddof 1) × 252, both from this window, r_f the page's annual rate.",
   },
   gmv_sharpe: {
     plain: "How much return the mix with the smallest day-to-day swings earned for each unit of risk over this window. The mix was picked on these same prices to swing as little as possible, not to score well, and the score is in-sample: it describes the past and promises nothing.",
     finance: "Sharpe ratio of the global minimum-variance portfolio, solved on this window's sample covariance and scored on the same window at the page's risk-free rate. In-sample: the weights saw the returns they are scored on. The solve uses no expected returns, so this Sharpe is a by-product, not its target.",
-    formula: "SR = (w′μ − r_f) / √(w′Σw), w = argmin w′Σw subject to Σwᵢ = 1 and the page's weight bounds; μ = mean daily returns × 252, Σ = daily covariance (n − 1) × 252, both from this window.",
+    formula: "SR = (w′μ − r_f) / √(w′Σw), w = argmin w′Σw subject to Σwᵢ = 1 and the page's weight bounds; μ = mean daily returns × 252, Σ = sample daily covariance (ddof 1) × 252, both from this window.",
   },
   bench_sharpe: {
-    plain: "How much return the benchmark index earned for each unit of risk over this window, on its own. No weights were chosen for it: it is there for comparison.",
+    plain: "How much return the benchmark earned for each unit of risk over this window, on its own. No weights were chosen for it: it is there for comparison.",
     finance: "Sharpe ratio of the benchmark's own daily returns over this window: annualised mean return less the page's risk-free rate, over annualised volatility. A passive reference with nothing fitted.",
-    formula: "SR_b = (μ_b − r_f) / σ_b, μ_b = mean daily return × 252, σ_b = daily standard deviation (n − 1) × √252, over the benchmark's daily returns in this window.",
+    formula: "SR_b = (μ_b − r_f) / σ_b, μ_b = mean daily return × 252, σ_b = sample daily standard deviation (ddof 1) × √252, over the benchmark's daily returns in this window.",
   },
 };
 

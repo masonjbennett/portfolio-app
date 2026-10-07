@@ -12,7 +12,7 @@ import { act, render, setMedia, text } from "./_dom.mjs";
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
-const { default: Band, snapshotPlates, finding, assetsOf, publishedSetOf, standing, PublishedResult, seams: bandSeams } = await import("../src/chrome/Band.tsx");
+const { default: Band, snapshotPlates, finding, assetsOf, publishedSetOf, standing, nameInSentence, PublishedResult, seams: bandSeams } = await import("../src/chrome/Band.tsx");
 const OPT = await import("../src/tabs/optimization/model.ts");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: Footer } = await import("../src/chrome/Footer.tsx");
@@ -313,6 +313,18 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     JSON.stringify(plates.map((p) => [p.label, p.value, p.format, p.tip])) === JSON.stringify(want),
     "band: the four plates are the Sharpe ratios of equal weight, tangency, GMV and the benchmark, each the Optimization tab's own figure, in num3",
     JSON.stringify([plates, want]));
+  // The same to the last bit on two more baskets. On the example a second way of reaching equal weight's
+  // Sharpe (its daily return series through annualizedStats) happens to agree with the table bit for bit;
+  // on the sector fixture it does not, so a plate computed that way goes red here.
+  const strict = ["sectors", "megacap"].map((name) => {
+    const A = fixtureAnalysis(name);
+    const tb = OPT.summaryTable(A, OPT.customWeights(A, {}));
+    const row = (n) => (tb.status === "ready" ? tb.value.rows.find((r) => r.portfolio === n)?.sharpe : undefined);
+    const got = snapshotPlates(A).map((p) => p.value);
+    const exp = [row("Equal-Weight"), row("Tangency"), row("GMV"), row(A.benchLabel)];
+    return { name, ok: exp.every(Number.isFinite) && got.every((v, i) => v === exp[i]), got, exp };
+  });
+  check(strict.every((x) => x.ok), "band: on the sector and mega-cap fixtures too, every plate is the Optimization tab's figure to the last bit", JSON.stringify(strict.filter((x) => !x.ok)));
   // The two fitted portfolios say in-sample; equal weight and the benchmark, which nothing was fitted to, do not.
   check(plates.map((p) => /\(in-sample\)$/.test(p.label)).join() === "false,true,true,false" && !/fit|optimi|in-sample/i.test(plates[0].label),
     "band: in-sample on the tangency and GMV plates only; the equal-weight label says nothing of fitting", plates.map((p) => p.label).join(" | "));
@@ -362,6 +374,9 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     fs.includes(`failed for ${named} with short positions allowed`) &&
     fs.endsWith(`equal weight returned ${format(failedEw.mu, "pct2")} a year at ${format(failedEw.sigma, "pct2")} volatility.`) && !fs.includes(failedA.benchLabel),
     "band: with no mix above the rate, and with a failed solve, the sentence names the tickers and measures against equal weight", `${hs} | ${fs}`);
+  // The failed solve's sentence calls it the tangency, the plate's word, with no gloss: it is the longest of
+  // the three with the tickers named, and the bracket added a line to the band at 375 px.
+  check(fs.startsWith(`The tangency optimisation failed for ${named} `), "band: the failed solve's sentence says tangency alone, the word on its plate", fs);
   r.unmount();
 }
 
@@ -484,13 +499,22 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     presets.some(([, x]) => x === null) && presets.every(([t, x]) => (x !== null) === exact(t)),
     "figures line: a basket is a published set only with exactly its tickers, in any order or case; a preset that overlaps one is not it",
     presets.map(([t, x]) => `${t} -> ${x?.name ?? "none"}`).join(" | "));
+  // The matcher's own guards, for a caller whose tickers have not been through parseTickers (the page's always
+  // have, which trims, upper-cases and drops repeats): a symbol padded with spaces still counts, and a set with
+  // one symbol repeated is not that set.
+  const padded = P.PUBLISHED_SETS.map((x) => publishedSetOf(x.tickers.map((t, i) => (i % 2 ? ` ${t.toLowerCase()}` : `${t} `))) === x);
+  const doubled = P.PUBLISHED_SETS.map((x) => publishedSetOf([...x.tickers, x.tickers[0]]) === null);
+  check([...padded, ...doubled].every(Boolean), "figures line: a padded symbol still matches its set, and a repeated one matches none", JSON.stringify({ padded, doubled }));
+  // Mid-sentence the set's name starts lower-case, and nothing else in it changes case.
+  check(P.PUBLISHED_SETS.map(nameInSentence).join(" | ") === "five mega-caps | seven sector ETFs | cross-asset",
+    "figures line: the set's name mid-sentence starts lower-case, its other letters as published", P.PUBLISHED_SETS.map(nameInSentence).join(" | "));
 
   // On each set: the line says the basket is that set, then quotes its three figures verbatim, in order.
   const lines = P.PUBLISHED_SETS.map((x) => [x, figuresOf({ analysis: { status: "loading" }, tickers: x.tickers })]);
   const fault = lines.filter(([x, { line, set }]) => {
     const three = `equal weight ${x.ew} · GMV ${x.gmv} · tangency ${x.tangency}`;
-    const tail = x === mega ? `${three} (${P.MEGA_CAP_IN_SAMPLE} in-sample), ` : `${three}, `;
-    return set !== x.name || !line.startsWith(`This basket is the published ${x.name} set. Sharpe out of sample: ${tail}`) ||
+    const tail = x === mega ? `${three} (${P.MEGA_CAP_IN_SAMPLE} in-sample); ` : `${three}; `;
+    return set !== x.name || !line.startsWith(`This basket is the published ${nameInSentence(x)} set. Sharpe out of sample: ${tail}`) ||
       line !== `${line.slice(0, line.indexOf(tail) + tail.length)}${standing(x)}.` || (x !== mega && line.includes(P.MEGA_CAP_IN_SAMPLE));
   });
   check(fault.length === 0,

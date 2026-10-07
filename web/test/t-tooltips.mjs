@@ -320,6 +320,13 @@ const COLUMN_NAMES = await (async () => {
     T("gmv_sharpe").join(" | "));
   check(T("bench_sharpe").every((t) => /benchmark|μ_b/.test(t)) && T("bench_sharpe").every((t) => !/in-sample/i.test(t)),
     "band tips: the benchmark's tip is about the benchmark's own returns at every level, and does not call it in-sample", T("bench_sharpe").join(" | "));
+  // The sample denominator is written as the other tips write it (ddof 1), never as "(n − 1)" after a quantity,
+  // where it reads as a factor and n sits beside N; and the benchmark is never called an index, since some are funds.
+  const { BENCHMARKS: BENCH } = await import("../src/state/defaults.ts");
+  check(own.every((k) => !/\(n − 1\)/.test(SCORE_TIPS[k].formula) && /\(ddof 1\)/.test(SCORE_TIPS[k].formula)) &&
+    BENCH.some((x) => /\((URTH|VTI)\)/.test(x.display)) && T("bench_sharpe").every((t) => !/\bindex\b/i.test(t)),
+    "band tips: the sample denominator reads ddof 1 in every new formula, and the benchmark's tip calls no benchmark an index",
+    [...own.map((k) => SCORE_TIPS[k].formula), SCORE_TIPS.bench_sharpe.plain].join(" | "));
   check(own.every((k) => /× 252|× √252/.test(SCORE_TIPS[k].formula) && /r_f/.test(SCORE_TIPS[k].formula)) &&
     own.every((k) => T(k).every((t) => !/\b(best|optimal\w*|winners?|race|outperform\w*|beat\w*|won)\b/i.test(t))),
     "band tips: every formula annualises by 252 days at the page's rate, and no text has a word of contest", own.map((k) => SCORE_TIPS[k].formula).join(" | "));
