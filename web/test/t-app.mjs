@@ -12,7 +12,8 @@ import { act, render, setMedia, text } from "./_dom.mjs";
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
-const { default: Band, snapshotPlates, finding, seams: bandSeams } = await import("../src/chrome/Band.tsx");
+const { default: Band, snapshotPlates, finding, assetsOf, publishedSetOf, standing, PublishedResult, seams: bandSeams } = await import("../src/chrome/Band.tsx");
+const OPT = await import("../src/tabs/optimization/model.ts");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: Footer } = await import("../src/chrome/Footer.tsx");
 const P = await import("../src/content/published.ts");
@@ -295,27 +296,45 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   kept.unmount();
 }
 
-// ---- (d) the band: one sentence, the Snapshot's four plates --------------------------------------
+// ---- (d) the band: one sentence, four Sharpe plates --------------------------------------------
 {
   const t = EX.tangency;
   const plates = snapshotPlates(EX);
+  // The Optimization tab's summary table on the same analysis: every plate is that table's own figure.
+  const table = OPT.summaryTable(EX, OPT.customWeights(EX, {}));
+  const rowSharpe = (name) => (table.status === "ready" ? table.value.rows.find((r) => r.portfolio === name)?.sharpe : undefined);
   const want = [
+    ["Equal-Weight Sharpe", rowSharpe("Equal-Weight"), "num3", "ew_sharpe"],
     ["Tangency Sharpe (in-sample)", t.sharpe, "num3", "best_sharpe"],
-    ["Tangency Return", t.mu, "pct2", "tangency_return"],
-    [`${EX.benchLabel} Return`, EX.benchStats.mu, "pct2", "bench_return"],
-    [`${EX.benchLabel} Volatility`, EX.benchStats.sigma, "pct2", "bench_vol"],
+    ["GMV Sharpe (in-sample)", rowSharpe("GMV"), "num3", "gmv_sharpe"],
+    [`${EX.benchLabel} Sharpe`, rowSharpe(EX.benchLabel), "num3", "bench_sharpe"],
   ];
-  check(JSON.stringify(plates.map((p) => [p.label, p.value, p.format, p.tip])) === JSON.stringify(want),
-    "band: the four plates are the Snapshot's figures, formats and tooltips (1205-1208), the first labelled in-sample", JSON.stringify(plates));
+  check(want.every(([, v]) => Number.isFinite(v)) && t.sharpe === rowSharpe("Tangency") && rowSharpe(EX.benchLabel) === EX.benchStats.sharpe &&
+    JSON.stringify(plates.map((p) => [p.label, p.value, p.format, p.tip])) === JSON.stringify(want),
+    "band: the four plates are the Sharpe ratios of equal weight, tangency, GMV and the benchmark, each the Optimization tab's own figure, in num3",
+    JSON.stringify([plates, want]));
+  // The two fitted portfolios say in-sample; equal weight and the benchmark, which nothing was fitted to, do not.
+  check(plates.map((p) => /\(in-sample\)$/.test(p.label)).join() === "false,true,true,false" && !/fit|optimi|in-sample/i.test(plates[0].label),
+    "band: in-sample on the tangency and GMV plates only; the equal-weight label says nothing of fitting", plates.map((p) => p.label).join(" | "));
   const r = page({});
   const band = text(r.container.querySelector("main"));
   check(want.every(([label, v, f]) => band.includes(label) && band.includes(format(v, f))), "band: every plate renders its label and figure", band);
   const sentence = finding(EX);
-  check(band.includes(sentence) && sentence.includes(format(t.sharpe, "num3")) && sentence.includes(format(EX.benchStats.sharpe, "num3")) &&
-    sentence.includes(monthYear(EX.prices.dates[0])) && sentence.includes(monthYear(EX.asOf)) && sentence.includes(EX.benchLabel),
-    "band: the sentence states the tangency's and the benchmark's Sharpe over the price span", sentence);
-  check(sentence.startsWith(`On these ${EX.tickers.length} assets, with hindsight, `),
-    "band: the sentence names itself, these assets with hindsight, before any figure", sentence);
+  const ewS = format(rowSharpe("Equal-Weight"), "num3");
+  check(band.includes(sentence) && sentence.includes(format(t.sharpe, "num3")) && sentence.endsWith(`; equal weight earned ${ewS}.`) &&
+    sentence.includes(monthYear(EX.prices.dates[0])) && sentence.includes(monthYear(EX.asOf)) && !sentence.includes(EX.benchLabel),
+    "band: the sentence states the tangency's Sharpe against equal weight's over the price span, the benchmark left to its plate", sentence);
+  // The assets by name, in the page's order, up to six; above six, by count.
+  const named = `${EX.tickers.slice(0, -1).join(", ")} and ${EX.tickers.at(-1)}`;
+  check(EX.tickers.length === 5 && sentence.startsWith(`On ${named}, with hindsight, `),
+    "band: the sentence names itself, the basket's tickers in order with hindsight, before any figure", sentence);
+  const six = ["SPY", "AGG", "GLD", "VNQ", "EFA", "TLT"];
+  const seven = [...six, "DBC"];
+  const back = [...EX.tickers].reverse();
+  check(assetsOf(six) === "SPY, AGG, GLD, VNQ, EFA and TLT" && assetsOf(seven) === "these 7 assets" && assetsOf(["SPY", "AGG"]) === "SPY and AGG" &&
+    finding({ ...EX, tickers: seven }).startsWith("On these 7 assets, with hindsight, ") &&
+    finding({ ...EX, tickers: back }).startsWith(`On ${back.slice(0, -1).join(", ")} and ${back.at(-1)}, with hindsight, `),
+    "band: up to six tickers are named in the order the page holds them, seven or more are counted", `${assetsOf(six)} | ${assetsOf(seven)}`);
   // On a published basket the live tangency figure is recomputed in-sample, never the published one, and
   // the sentence says so right after it; on any other basket it says the same, so the mark never comes and goes.
   const through = `(in-sample, recomputed on prices through ${format(EX.asOf, "date")})`;
@@ -332,7 +351,37 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(!presetKeys.includes([...tenOther].sort().join(",")) &&
     other.every((s, i) => s.includes(`${format((i ? high : EX).tangency.sharpe, "num3")}${i ? " " : " of annual excess return per unit of volatility "}${through}`)),
     "band: on a ten-ticker basket that is no preset the tangency Sharpe carries the same in-sample, recomputed mark", other.join(" | "));
+  // Every branch measures against equal weight: the rate nothing beats, and the failed solve.
+  const highEw = OPT.portRow(high, high.ew);
+  const failedA = exampleAnalysis({ allowShort: true, rf: 0.4 });
+  const failedEw = OPT.portRow(failedA, failedA.ew);
+  const hs = finding(high);
+  const fs = finding(failedA);
+  check(hs.startsWith(`On ${named}, held long only, with hindsight, no mix earned more than`) &&
+    hs.endsWith(`against ${format(highEw.sharpe, "num3")} for equal weight.`) && !hs.includes(high.benchLabel) &&
+    fs.includes(`failed for ${named} with short positions allowed`) &&
+    fs.endsWith(`equal weight returned ${format(failedEw.mu, "pct2")} a year at ${format(failedEw.sigma, "pct2")} volatility.`) && !fs.includes(failedA.benchLabel),
+    "band: with no mix above the rate, and with a failed solve, the sentence names the tickers and measures against equal weight", `${hs} | ${fs}`);
   r.unmount();
+}
+
+// ---- (d1) the app's Snapshot against the port's plates -----------------------------------------
+{
+  // The app's side (1205-1208): its four st.metric calls, read out of portfolio_app.py.
+  const calls = ORACLE.map((l) => /^snap_cols\[(\d)\]\.metric\((f?"[^"]*")/.exec(l)).filter(Boolean).map((m) => [m[1], m[2]]);
+  check(JSON.stringify(calls) === JSON.stringify([["0", '"Best Sharpe (Tangency)"'], ["1", '"Tangency Return"'], ["2", 'f"{bench_label_saved} Return"'], ["3", 'f"{bench_label_saved} Volatility"']]),
+    "ledger:snapshot-plates the app's Snapshot is the tangency's Sharpe and return and the benchmark's return and volatility", JSON.stringify(calls));
+  // The port's side: four Sharpe ratios; the three figures the band no longer shows are still on the
+  // Optimization tab, in its summary table, under their portfolios' names, as percentages.
+  const labels = snapshotPlates(EX).map((p) => p.label);
+  const rows = OPT.summaryTable(EX, OPT.customWeights(EX, {}));
+  const row = (name) => (rows.status === "ready" ? rows.value.rows.find((x) => x.portfolio === name) : undefined);
+  const pct = rows.status === "ready" ? rows.value.columns.filter((c) => c.format === "pct2").map((c) => c.key) : [];
+  check(labels.length === 4 && labels.every((l) => / Sharpe( \(in-sample\))?$/.test(l)) &&
+    row("Tangency")?.mu === EX.tangency.mu && row(EX.benchLabel)?.mu === EX.benchStats.mu && row(EX.benchLabel)?.sigma === EX.benchStats.sigma &&
+    pct.includes("mu") && pct.includes("sigma"),
+    "ledger:snapshot-plates the port's plates are four Sharpe ratios; the tangency return and the benchmark's return and volatility stay in the Optimization tab's summary table",
+    `${labels.join(" | ")} / ${JSON.stringify([row("Tangency"), row(EX.benchLabel)])}`);
 }
 
 // ---- (d2) the published result: quoted, dated, linked once, there before any price ---------------
@@ -369,12 +418,19 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     ["failed build", { analysis: { status: "loading" }, fetching: false, failure }],
     ["ready", { analysis: { status: "ready", value: EX }, fetching: false, failure: null }],
     ["ready, not updated", { analysis: { status: "ready", value: EX }, fetching: false, failure }],
+    ["loading a published set", { analysis: { status: "loading" }, fetching: true, failure: null, tickers: P.PUBLISHED_SETS[1].tickers }],
+    ["failed build of a published set", { analysis: { status: "loading" }, fetching: false, failure, tickers: P.PUBLISHED_SETS[2].tickers }],
+    ["empty, a published set typed", { analysis: { status: "empty", reason: "Enter at least two tickers." }, fetching: false, failure: null, tickers: P.PUBLISHED_SETS[2].tickers }],
   ];
   const mega = P.PUBLISHED_SETS[0];
-  const allowed = new Set([mega.ew, mega.gmv, mega.tangency, P.MEGA_CAP_IN_SAMPLE, P.PUBLISHED_WHEN.split(" ")[1]]);
-  const needed = [P.MEGA_CAP_IN_SAMPLE, mega.tangency, mega.ew];
+  const allowed = new Set([...P.PUBLISHED_SETS.flatMap((x) => [x.ew, x.gmv, x.tangency]), P.MEGA_CAP_IN_SAMPLE, P.PUBLISHED_WHEN.split(" ")[1]]);
+  // The set each state's line quotes: the analysis' own basket when there is one, else the tickers being
+  // loaded, else the five mega-caps; the mega-caps' tangency always with its in-sample figure.
+  const quoted = (props) => publishedSetOf(props.analysis.status === "ready" ? props.analysis.value.tickers : props.tickers) ?? mega;
   const faults = [];
   for (const [name, props] of states) {
+    const q = quoted(props);
+    const needed = [q.ew, q.gmv, q.tangency, ...(q === mega ? [P.MEGA_CAP_IN_SAMPLE] : [])];
     const r = render(h(Band, { ...props, level: "plain" }));
     const band = r.container.querySelector("section.band");
     const strip = band?.querySelector(".band-published");
@@ -396,7 +452,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     r.unmount();
   }
   check(faults.length === 0,
-    "published: in every band state the strip comes first, quotes the site's sentence, prints only the published figures, dates itself and links the method note once",
+    "published: in every band state the strip comes first, quotes the site's sentence, prints only the published figures (the basket's set, or the mega-caps), dates itself and links the method note once",
     faults.join("; "));
 
   // On the page, before any price has arrived.
@@ -407,6 +463,75 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(!!strip && !!wait && !!(strip.compareDocumentPosition(wait) & window.Node.DOCUMENT_POSITION_FOLLOWING) && text(strip).includes(P.CARD_SENTENCE),
     "published: the page shows the published result while prices are still loading, above the loading line", text(main ?? {}));
   r.unmount();
+}
+
+// ---- (d2a) the figures line quotes the basket's own published set, when it is one ------------------
+{
+  const mega = P.PUBLISHED_SETS[0];
+  const figuresOf = (props) => {
+    const r = render(h(Band, { fetching: false, failure: null, level: "plain", ...props }));
+    const el = r.container.querySelector(".band-published-figures");
+    const out = { line: text(el ?? {}), set: el?.getAttribute("data-set") ?? null };
+    r.unmount();
+    return out;
+  };
+  // Exactly one of the three sets, as a set: any order, any case; nothing more, nothing less.
+  const same = P.PUBLISHED_SETS.every((x) => publishedSetOf([...x.tickers].reverse().map((t) => t.toLowerCase())) === x);
+  const near = P.PUBLISHED_SETS.flatMap((x) => [publishedSetOf(x.tickers.slice(1)), publishedSetOf([...x.tickers, "SPY"])]);
+  const presets = PRESETS.map((p) => [p.tickers, publishedSetOf(parseTickers(p.tickers))]);
+  const exact = (tickers) => P.PUBLISHED_SETS.some((x) => [...x.tickers].sort().join() === parseTickers(tickers).sort().join());
+  check(same && near.every((x) => x === null) && publishedSetOf([]) === null && publishedSetOf(null) === null &&
+    presets.some(([, x]) => x === null) && presets.every(([t, x]) => (x !== null) === exact(t)),
+    "figures line: a basket is a published set only with exactly its tickers, in any order or case; a preset that overlaps one is not it",
+    presets.map(([t, x]) => `${t} -> ${x?.name ?? "none"}`).join(" | "));
+
+  // On each set: the line says the basket is that set, then quotes its three figures verbatim, in order.
+  const lines = P.PUBLISHED_SETS.map((x) => [x, figuresOf({ analysis: { status: "loading" }, tickers: x.tickers })]);
+  const fault = lines.filter(([x, { line, set }]) => {
+    const three = `equal weight ${x.ew} · GMV ${x.gmv} · tangency ${x.tangency}`;
+    const tail = x === mega ? `${three} (${P.MEGA_CAP_IN_SAMPLE} in-sample), ` : `${three}, `;
+    return set !== x.name || !line.startsWith(`This basket is the published ${x.name} set. Sharpe out of sample: ${tail}`) ||
+      line !== `${line.slice(0, line.indexOf(tail) + tail.length)}${standing(x)}.` || (x !== mega && line.includes(P.MEGA_CAP_IN_SAMPLE));
+  });
+  check(fault.length === 0,
+    "figures line: on a published set it says the basket is that set and quotes its three out-of-sample figures as published, 1.107 only beside the mega-caps",
+    lines.map(([, l]) => l.line).join(" | "));
+  // On any other basket, the line it always was.
+  const today = `${mega.name} (${mega.tickers.join(", ")}), Sharpe out of sample: equal weight ${mega.ew} · GMV ${mega.gmv} · tangency ${mega.tangency} (${P.MEGA_CAP_IN_SAMPLE} in-sample).`;
+  const ten = ["SPY", "QQQ", "IWM", "EFA", "EEM", "AGG", "TLT", "GLD", "VNQ", "DBC"];
+  const others = [figuresOf({ analysis: { status: "loading" }, tickers: ten }), figuresOf({ analysis: { status: "loading" } }),
+    figuresOf({ analysis: { status: "ready", value: { ...EX, tickers: EX.tickers.slice(0, 4) } } })];
+  check(others.every((o) => o.line === today && o.set === null), "figures line: on any other basket, or with no tickers yet, it quotes the five mega-caps as before",
+    others.map((o) => o.line).join(" | "));
+
+  // The words on how the two fitted portfolios stood are read off the published strings, the minus sign included.
+  const fake = (ew, gmv, tangency) => standing({ name: "x", tickers: [], ew, gmv, tangency });
+  check(fake("0.500", "0.600", "0.700") === "GMV and tangency above equal weight" && fake("0.500", "−0.600", "0.400") === "equal weight above GMV and tangency" &&
+    fake("0.500", "0.500", "0.600") === "tangency above equal weight, GMV level with it" && fake("−0.100", "−0.200", "0.100") === "tangency above equal weight, GMV below it" &&
+    fake("0.300", "0.400", "0.200") === "tangency below equal weight, GMV above it",
+    "figures line: the comparison words follow the figures, a negative written with U+2212 read as negative",
+    [fake("0.500", "0.600", "0.700"), fake("−0.100", "−0.200", "0.100")].join(" | "));
+  const num = (s) => Number(s.replace("−", "-"));
+  const said = P.PUBLISHED_SETS.map((x) => {
+    const w = standing(x);
+    const both = /^equal weight above GMV and tangency$/.test(w) ? ["below", "below"] : /^GMV and tangency above equal weight$/.test(w) ? ["above", "above"] :
+      (/^tangency (above|below|level with) equal weight, GMV (above|below|level with) it$/.exec(w) ?? []).slice(1).reverse();
+    const rel = (v) => (num(v) > num(x.ew) ? "above" : num(v) < num(x.ew) ? "below" : "level with");
+    return [w, both.join() === [rel(x.gmv), rel(x.tangency)].join()];
+  });
+  check(said.every(([, ok]) => ok), "figures line: on each published set the words agree with its own figures", said.map(([w]) => w).join(" | "));
+  const banned = /\b(best|optimal\w*|winners?|race|outperform\w*|beat\w*|won)\b/i;
+  check(![...lines.map(([, l]) => l.line), ...said.map(([w]) => w)].some((l) => banned.test(l)),
+    "figures line: no word of contest in it", lines.map(([, l]) => l.line).join(" | "));
+
+  // The set is the basket's, through a load: loading the tickers, then their analysis, prints one line.
+  const loading = figuresOf({ analysis: { status: "loading" }, tickers: EX.tickers });
+  const ready = figuresOf({ analysis: { status: "ready", value: EX }, tickers: EX.tickers });
+  // While a new basket loads behind the figures on screen, the line stays with the figures on screen.
+  const refetch = figuresOf({ analysis: { status: "ready", value: EX }, fetching: true, tickers: P.PUBLISHED_SETS[1].tickers });
+  check(loading.set === "Cross-asset" && loading.line === ready.line && ready.line === refetch.line,
+    "figures line: the same set while the basket's prices load and once they arrive, and while another basket loads behind it",
+    `${loading.line} | ${ready.line} | ${refetch.line}`);
 }
 
 // ---- (d2b) the walk-forward tab: its two segments, and the two ways in that open the published one ------
@@ -547,17 +672,19 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
 {
   const se = sharpeSE(portfolioReturns(EX.returns, EX.tangency.w), EX.rf);
   const plates = snapshotPlates(EX);
-  check(Number.isFinite(se) && plates[0].label === "Tangency Sharpe (in-sample)" && plates[0].se === se && plates.slice(1).every((p) => p.se === undefined),
-    "band: the tangency Sharpe plate's standard error is sharpeSE on the tangency portfolio's daily returns, and no other plate has one", `${plates[0].se} ${se}`);
+  const tan = plates.findIndex((p) => p.tip === "best_sharpe");
+  check(Number.isFinite(se) && tan === 1 && plates[tan].label === "Tangency Sharpe (in-sample)" && plates[tan].se === se &&
+    plates.every((p, i) => i === tan || p.se === undefined),
+    "band: the tangency Sharpe plate's standard error is sharpeSE on the tangency portfolio's daily returns, and no other plate has one", `${plates[tan]?.se} ${se}`);
   const r = render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
-  const first = r.container.querySelector(".band-plates .plate");
-  check(!!first && text(first.querySelector(".plate-se") ?? {}) === `± ${format(se, "num3")} SE` &&
-    text(first.querySelector(".plate-value") ?? {}) === format(EX.tangency.sharpe, "num3") && r.container.querySelectorAll(".band-plates .plate-se").length === 1,
-    "band: the plate prints the figure alone and plus or minus one standard error beside it", first ? first.innerHTML.slice(0, 200) : "no plate");
+  const shown = r.container.querySelectorAll(".band-plates .plate")[tan];
+  check(!!shown && text(shown.querySelector(".plate-se") ?? {}) === `± ${format(se, "num3")} SE` &&
+    text(shown.querySelector(".plate-value") ?? {}) === format(EX.tangency.sharpe, "num3") && r.container.querySelectorAll(".band-plates .plate-se").length === 1,
+    "band: the plate prints the figure alone and plus or minus one standard error beside it", shown ? shown.innerHTML.slice(0, 200) : "no plate");
   r.unmount();
   const failed = exampleAnalysis({ allowShort: true, rf: 0.4 });
   const rf = render(h(Band, { analysis: { status: "ready", value: failed }, level: "plain", fetching: false, failure: null }));
-  check(snapshotPlates(failed)[0].se === null && !rf.container.querySelector(".plate-se"), "band: no tangency, no standard error beside the dash");
+  check(snapshotPlates(failed)[tan].se === null && !rf.container.querySelector(".plate-se"), "band: no tangency, no standard error beside the dash");
   rf.unmount();
 }
 
@@ -575,12 +702,20 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     `branch ${branch}, tangency ${a.tangency}, ew sharpe ${ew.sharpe}`);
 
   // The port's side: the plates are empty and say so, and the sentence says the solve failed.
+  // Equal weight has a plate of its own now, under its own name; the tangency's holds the dash.
   const plates = snapshotPlates(a);
-  check(plates[0].value === null && plates[1].value === null, "ledger:failed-tangency: the port's Tangency plates hold no figure");
+  const tan = plates.filter((p) => /^Tangency/.test(p.label));
+  check(tan.length === 1 && tan[0].value === null, "ledger:failed-tangency: the port's Tangency plate holds no figure");
   const r = page({ analysis: { status: "ready", value: a } });
   const band = text(r.container.querySelector("main"));
   check(/optimisation failed/.test(band) && band.includes(DASH), "ledger:failed-tangency: the port's band says the optimisation failed", band);
-  check(!band.includes(format(ew.sharpe, "num3")) && !band.includes(format(ew.mu, "pct2")), "ledger:failed-tangency: the port shows no equal-weight stand-in", band);
+  const cards = [...r.container.querySelectorAll(".band-plates .plate")].map((p) => [text(p.querySelector(".plate-label") ?? {}), text(p)]);
+  const tanCard = cards.find(([l]) => /^Tangency/i.test(l));
+  const withEw = cards.filter(([, t]) => t.includes(format(ew.sharpe, "num3"))).map(([l]) => l);
+  const sentence = text(r.container.querySelector(".band-finding") ?? {});
+  check(!!tanCard && tanCard[1].includes(DASH) && !tanCard[1].includes(format(ew.sharpe, "num3")) && withEw.length === 1 && /^Equal-Weight Sharpe/i.test(withEw[0]) &&
+    sentence.includes(`equal weight returned ${format(ew.mu, "pct2")} a year`),
+    "ledger:failed-tangency: the port shows no equal-weight stand-in: equal weight's figures appear only under its own name", JSON.stringify([cards, sentence]));
   r.unmount();
 }
 

@@ -176,6 +176,7 @@ const FOUND = {
   "presets are the app's baskets only -> the three published sets first, marked, the app's under More baskets": { "published-presets": ["t-contract"] },
   "the default-level tips call the tangency mix the best possible -> the highest over this window, in-sample": { "plain-tip-words": ["t-app", "t-tooltips"] },
   "the tangency Sharpe tip is the app's text alone -> it closes on what the plate's ± is and what it leaves out": { "sharpe-se-note": ["t-tooltips"] },
+  "the Snapshot's plates are the tangency's Sharpe and return and the benchmark's return and volatility, and the band compares with the benchmark -> the Sharpe ratios of equal weight, the tangency (in-sample, ±), GMV (in-sample) and the benchmark, the sentence measured against equal weight, the three dropped figures kept in the Optimization tab's summary table": { "snapshot-plates": ["t-app"] },
 };
 const PENDING = [];
 

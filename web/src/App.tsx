@@ -205,7 +205,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
           )}
           <main className="app-main">
             <Boundary name="Snapshot" resetKey={ready}>
-              <Band analysis={wb.analysis} level={wb.level} fetching={wb.fetching} failure={wb.failure} settling={settling} />
+              <Band analysis={wb.analysis} level={wb.level} fetching={wb.fetching} failure={wb.failure} settling={settling} tickers={wb.settings.tickers} />
             </Boundary>
             {ready ? (
               <>

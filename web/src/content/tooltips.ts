@@ -110,7 +110,8 @@ export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
 // The scorecard prints figures the app never had, so their texts are the port's, written here beside the
 // app's and never added to tooltips.json (that file is a dump of the app and must stay one). The keys are
 // their own type, so TipKey stays exactly the app's list. Same three levels, same voice: plain words,
-// then the finance term, then the formula.
+// then the finance term, then the formula. Three of the band's plates (equal weight's, the minimum-variance
+// mix's and the benchmark's Sharpe ratios, which the app's Snapshot never showed) read their texts here too.
 
 export type ScoreTipKey =
   | "annual_return"
@@ -135,7 +136,10 @@ export type ScoreTipKey =
   | "col_last_year"
   | "col_shrunk"
   | "col_capped"
-  | "col_parity";
+  | "col_parity"
+  | "ew_sharpe"
+  | "gmv_sharpe"
+  | "bench_sharpe";
 
 export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
   annual_return: {
@@ -259,6 +263,21 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     finance: "Equal risk contribution: each asset's percentage risk contribution is 1/n, long-only, from the sample covariance alone; expected returns do not enter the weights, so a cut to one of them moves nothing. In-sample.",
     formula: "wᵢ (Σw)ᵢ / w′Σw = 1/n for every i, wᵢ > 0, Σwᵢ = 1; parameters n(n + 1)/2, as for minimum variance.",
   },
+  ew_sharpe: {
+    plain: "How much return an even split of the money across every asset earned for each unit of risk over this window, with the split kept even. Nothing was fitted to pick these weights, so it is the yardstick the fitted mixes are measured against.",
+    finance: "Sharpe ratio of the 1/N portfolio, rebalanced daily to equal weights: annualised mean return less the risk-free rate, over annualised volatility, from this window's mean daily returns and covariance. No estimate chooses the weights, so nothing is fitted to flatter it; it is still one window of history.",
+    formula: "SR = (w′μ − r_f) / √(w′Σw), wᵢ = 1/N, μ = mean daily returns × 252, Σ = daily covariance (n − 1) × 252, both from this window, r_f the page's annual rate.",
+  },
+  gmv_sharpe: {
+    plain: "How much return the mix with the smallest day-to-day swings earned for each unit of risk over this window. The mix was picked on these same prices to swing as little as possible, not to score well, and the score is in-sample: it describes the past and promises nothing.",
+    finance: "Sharpe ratio of the global minimum-variance portfolio, solved on this window's sample covariance and scored on the same window at the page's risk-free rate. In-sample: the weights saw the returns they are scored on. The solve uses no expected returns, so this Sharpe is a by-product, not its target.",
+    formula: "SR = (w′μ − r_f) / √(w′Σw), w = argmin w′Σw subject to Σwᵢ = 1 and the page's weight bounds; μ = mean daily returns × 252, Σ = daily covariance (n − 1) × 252, both from this window.",
+  },
+  bench_sharpe: {
+    plain: "How much return the benchmark index earned for each unit of risk over this window, on its own. No weights were chosen for it: it is there for comparison.",
+    finance: "Sharpe ratio of the benchmark's own daily returns over this window: annualised mean return less the page's risk-free rate, over annualised volatility. A passive reference with nothing fitted.",
+    formula: "SR_b = (μ_b − r_f) / σ_b, μ_b = mean daily return × 252, σ_b = daily standard deviation (n − 1) × √252, over the benchmark's daily returns in this window.",
+  },
 };
 
 // A short name per scorecard key, for the info mark's accessible label.
@@ -286,6 +305,9 @@ export const SCORE_TIP_NAMES: Readonly<Record<ScoreTipKey, string>> = {
   col_shrunk: "tangency on shrunk means",
   col_capped: "tangency with a 25% cap",
   col_parity: "risk parity",
+  ew_sharpe: "equal-weight Sharpe",
+  gmv_sharpe: "GMV Sharpe (in-sample)",
+  bench_sharpe: "benchmark Sharpe",
 };
 
 /** True for a scorecard key. */

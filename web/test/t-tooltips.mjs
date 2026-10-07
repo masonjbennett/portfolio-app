@@ -296,4 +296,41 @@ const COLUMN_NAMES = await (async () => {
     "score-tips: the added columns' tips read the cap, the fewest assets and the year from the engine's constants", `says ${says}; typed ${typed.join(", ")}`);
 }
 
+// The band's plates: the tangency keeps the app's tip; equal weight, GMV and the benchmark carry the port's own,
+// each true for the figure under it, and each plate shows its text at every level.
+{
+  const { SCORE_TIPS, tipName } = await import("../src/content/tooltips.ts");
+  const { snapshotPlates, default: Band } = await import("../src/chrome/Band.tsx");
+  const { exampleAnalysis } = await import("./_analysis.mjs");
+  const a = exampleAnalysis();
+  const plates = snapshotPlates(a);
+  const own = ["ew_sharpe", "gmv_sharpe", "bench_sharpe"];
+  check(same(plates.map((p) => p.tip), ["ew_sharpe", "best_sharpe", "gmv_sharpe", "bench_sharpe"]) && own.every((k) => Object.hasOwn(SCORE_TIPS, k)) &&
+    tipName("ew_sharpe") === "equal-weight Sharpe" && tipName("gmv_sharpe") === "GMV Sharpe (in-sample)" && tipName("bench_sharpe") === "benchmark Sharpe",
+    "band tips: the tangency plate keeps the app's tip, the other three plates carry the port's own keys and names", plates.map((p) => p.tip).join(","));
+  const T = (k) => LEVEL_IDS.map((l) => SCORE_TIPS[k][l]);
+  // Equal weight was not fitted, and its text says so and never calls it in-sample; GMV's was, and says in-sample;
+  // the benchmark's names the benchmark; every formula annualises as the engine does (× 252) at the page's rate.
+  check(T("ew_sharpe").every((t) => !/in-sample|fitted on|chosen on/i.test(t)) && /Nothing was fitted/.test(SCORE_TIPS.ew_sharpe.plain) &&
+    /No estimate chooses the weights/.test(SCORE_TIPS.ew_sharpe.finance) && /wᵢ = 1\/N/.test(SCORE_TIPS.ew_sharpe.formula),
+    "band tips: equal weight's tip says nothing was fitted, at no level calls it in-sample, and its formula sets every weight to 1/N", T("ew_sharpe").join(" | "));
+  check(/in-sample/.test(SCORE_TIPS.gmv_sharpe.plain) && /In-sample/.test(SCORE_TIPS.gmv_sharpe.finance) && /argmin w′Σw/.test(SCORE_TIPS.gmv_sharpe.formula) &&
+    !/long-only|wᵢ ≥ 0|0 ≤ wᵢ/.test(T("gmv_sharpe").join(" ")),
+    "band tips: GMV's tip says in-sample in words and in finance terms, its formula is the minimum-variance solve, and it promises no bounds the shorting switch can change",
+    T("gmv_sharpe").join(" | "));
+  check(T("bench_sharpe").every((t) => /benchmark|μ_b/.test(t)) && T("bench_sharpe").every((t) => !/in-sample/i.test(t)),
+    "band tips: the benchmark's tip is about the benchmark's own returns at every level, and does not call it in-sample", T("bench_sharpe").join(" | "));
+  check(own.every((k) => /× 252|× √252/.test(SCORE_TIPS[k].formula) && /r_f/.test(SCORE_TIPS[k].formula)) &&
+    own.every((k) => T(k).every((t) => !/\b(best|optimal\w*|winners?|race|outperform\w*|beat\w*|won)\b/i.test(t))),
+    "band tips: every formula annualises by 252 days at the page's rate, and no text has a word of contest", own.map((k) => SCORE_TIPS[k].formula).join(" | "));
+  // On the page: each plate's mark carries its own key's text, at each level.
+  const shown = LEVEL_IDS.map((level) => {
+    const r = render(h(Band, { analysis: { status: "ready", value: a }, level, fetching: false, failure: null }));
+    const got = [...r.container.querySelectorAll(".band-plates .plate")].map((p) => text(p.querySelector("[role=tooltip]") ?? {}));
+    r.unmount();
+    return got.every((t, i) => t === tipText(plates[i].tip, level, a.allowShort)) && got.length === 4;
+  });
+  check(shown.every(Boolean), "band tips: each plate shows its own tip's text at Plain, Finance and Formula", shown.join(","));
+}
+
 done("t-tooltips");
