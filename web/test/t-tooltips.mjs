@@ -20,7 +20,7 @@ const read = (rel) => readFileSync(new URL(rel, web), "utf8");
 const app = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const committed = read("src/content/tooltips.json");
 const TIPS = JSON.parse(committed);
-const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, TIP_NAMES, NOTES } = await import("../src/content/tooltips.ts");
+const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, PLAIN_OVERRIDES, TIP_NAMES, NOTES } = await import("../src/content/tooltips.ts");
 const { LEVELS } = await import("../src/types.ts");
 const Tip = (await import("../src/components/Tip.tsx")).default;
 const LEVEL_IDS = LEVELS.map((l) => l.id);
@@ -69,12 +69,12 @@ check(same(Object.keys(TIP_NAMES), keys), "tooltips: every key has an accessible
 // ---- (c) the app's text with shorting off ----------------------------------------------------------
 let mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
-  if (!WORD_OVERRIDES[key]?.[level] && tipText(key, level) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
+  if (!WORD_OVERRIDES[key]?.[level] && !PLAIN_OVERRIDES[key]?.[level] && tipText(key, level) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
 }
 check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off, bar the word overrides and closing lines", mismatches.join(" "));
 mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
-  if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && tipText(key, level, true) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
+  if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && !PLAIN_OVERRIDES[key]?.[level] && tipText(key, level, true) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
 }
 check(mismatches.length === 0, "tooltips: with shorting on, every text not overridden is still the app's", mismatches.join(" "));
 check(tipText("no_such_key", "plain") === "" && tipText("no_such_key", "formula", true) === "",
@@ -131,6 +131,35 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
   }
 }
 
+// ---- (d2b) ledger:plain-tip-readings -------------------------------------------------------------
+// Four of the app's texts a newcomer would misread are replaced (src/content/tooltips.ts PLAIN_OVERRIDES): exactly
+// those, each read against the app's current words, each showing at both settings of the shorting toggle, none
+// typing a figure, and each without the misreading it replaces while the app's own text still has it.
+{
+  const MISREAD = {
+    "sharpe/plain": /generally good/,
+    "sortino/plain": /\(losses\)/,
+    "beta/plain": /more volatile than/,
+    "alpha/plain": /outperforming|underperforming/,
+    "alpha/finance": /Measures manager\/stock skill/,
+  };
+  const replaced = Object.entries(PLAIN_OVERRIDES).flatMap(([k, byLevel]) => Object.keys(byLevel).map((l) => `${k}/${l}`));
+  check(same([...replaced].sort(), Object.keys(MISREAD).sort()), "ledger:plain-tip-readings exactly the misread texts are replaced", replaced.join(" "));
+  const both = replaced.filter((at) => { const [k, l] = at.split("/"); return !!WORD_OVERRIDES[k]?.[l]; });
+  check(both.length === 0, "ledger:plain-tip-readings no text is replaced by two tables", both.join(" "));
+  for (const [key, byLevel] of Object.entries(PLAIN_OVERRIDES)) {
+    for (const [level, o] of Object.entries(byLevel)) {
+      const at = `${key}/${level}`;
+      const misread = MISREAD[at] ?? /$^/;
+      check(o.was === TIPS[key][level] && misread.test(o.was), `ledger:plain-tip-readings ${at} was read against the app's current text, which has the misreading`, TIPS[key][level]);
+      const off = tipText(key, level, false);
+      const on = tipText(key, level, true);
+      check(off === withNote(key, level, o.now) && on === off && !misread.test(off) && !/\d/.test(o.now),
+        `ledger:plain-tip-readings ${at} shows the replacement at both shorting settings, with no figure typed and without the misreading`, `${off} | ${on}`);
+    }
+  }
+}
+
 // ---- (d3) ledger:sharpe-se-note -------------------------------------------------------------------
 // The band's tangency Sharpe plate prints a standard error the app never had. Its tip closes with one line
 // per level saying what the ± is and that the weights were fitted on the same prices; no other tip does.
@@ -164,7 +193,7 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
   const pop = btn && r.container.querySelector(`#${CSS.escape(btn.getAttribute("aria-describedby") ?? "none")}`);
   check(btn?.getAttribute("type") === "button" && btn.getAttribute("aria-label") === "About Sharpe ratio",
     "tip: a real button, named for its key", btn?.outerHTML);
-  check(pop?.getAttribute("role") === "tooltip" && text(pop) === TIPS.sharpe.plain,
+  check(pop?.getAttribute("role") === "tooltip" && text(pop) === tipText("sharpe", "plain") && text(pop).length > 40,
     "tip: the button is described by the tooltip, which holds the level's text", pop ? text(pop) : "no tooltip");
   check(text(btn) === "i" && !/\p{Extended_Pictographic}/u.test(r.container.innerHTML),
     "tip: the mark is a typographic i, no emoji", btn ? text(btn) : "");

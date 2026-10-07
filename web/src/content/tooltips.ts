@@ -15,6 +15,12 @@
 // A third: the band's tangency Sharpe plate prints a standard error beside the figure, which the app's
 // plate never had, so that tip gains one closing line (NOTES, below) saying what the ± measures and
 // what it leaves out. The app's text before it is unchanged.
+//
+// A fourth (PLAIN_OVERRIDES): four of the app's texts that a reader new to all of this would take the wrong
+// way. Sharpe's "above 1.0 is generally good" reads a rule of thumb as a verdict, on a page whose point is that
+// an in-sample score above one can earn far less on later years; beta "more volatile than the market" is not
+// what beta measures; alpha "outperforming" and "skill" read a past figure as a lasting one; and Sortino's
+// "(losses)" is narrower than what it counts, every day below the safe rate.
 import type { Level, TipKey } from "../types.ts";
 import { CAP, CAP_MIN_ASSETS, YEAR_ROWS } from "../lib/added.ts";
 import TIPS from "./tooltips.json" with { type: "json" };
@@ -72,6 +78,39 @@ export const WORD_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Leve
     plain: {
       was: "The expected yearly return of the best risk-adjusted portfolio mix.",
       now: "The average yearly return of the mix with the highest risk-vs-reward score over this window, its weights picked from the same prices: in-sample, not a forecast.",
+    },
+  },
+};
+
+// The app's texts a newcomer would misread, and their replacements, whatever the shorting toggle says. Kept apart
+// from WORD_OVERRIDES, whose rule is a tangency mix called best or optimal. None types a figure the page computes.
+export const PLAIN_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Level, WordOverride>>>>> = {
+  sharpe: {
+    plain: {
+      was: "A score that shows if the returns are worth the risk. Higher is better — above 1.0 is generally good.",
+      now: "A score for how much return came with the risk: the yearly return above the safe rate, for each unit of swing. Higher is better. It describes this window, not the years ahead.",
+    },
+  },
+  sortino: {
+    plain: {
+      was: "Like Sharpe, but only counts the bad volatility (losses). Higher is better.",
+      now: "Like Sharpe, but it counts only the swings below the safe rate, not the swings up. Higher is better.",
+    },
+  },
+  beta: {
+    plain: {
+      was: "How much a stock moves when the market moves. Beta of 1.0 = moves with the market; above 1.0 = more volatile than the market.",
+      now: "How much it tended to move when the benchmark moved: at one, in step with it; above one, further; below one, less.",
+    },
+  },
+  alpha: {
+    plain: {
+      was: "Extra return above (or below) what you'd expect given the stock's risk level. Positive = outperforming, negative = underperforming.",
+      now: "The yearly return left over after allowing for how it moved with the benchmark. Above zero, it did better over this window than its beta explains; below zero, worse. It describes the past, not a skill that will last.",
+    },
+    finance: {
+      was: "Annualized Jensen's alpha — the intercept from regressing excess stock returns on excess benchmark returns. Measures manager/stock skill.",
+      now: "Annualized Jensen's alpha — the intercept from regressing excess stock returns on excess benchmark returns. It measures this window's return beyond what beta explains, not a lasting skill.",
     },
   },
 };
@@ -200,7 +239,7 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     formula: "TE = std(rₜ − bₜ) × √252, sample standard deviation (ddof 1).",
   },
   information_ratio: {
-    plain: "The extra yearly return over the benchmark, per unit of that day-to-day difference from it.",
+    plain: "The extra yearly return over the benchmark, divided by the tracking error: how far the portfolio's day-to-day returns strayed from the benchmark's.",
     finance: "Annualised mean active return over tracking error.",
     formula: "IR = 252 × mean(rₜ − bₜ) / TE.",
   },
@@ -215,7 +254,7 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     formula: "VaR₉₅ = −q₀.₀₅(rₜ), linear interpolation between order statistics.",
   },
   es: {
-    plain: "The average loss on those worst 5% of days.",
+    plain: "The average loss on the worst 5% of days in this window. Value at risk is the smallest of those losses; this is their average.",
     finance: "Historical one-day expected shortfall (CVaR) at 95%: the mean of the returns at or below the VaR return.",
     formula: "ES₉₅ = −mean(rₜ | rₜ ≤ −VaR₉₅).",
   },
@@ -323,7 +362,7 @@ export function tipName(key: TipKey | ScoreTipKey): string {
 // say nothing about the bounds and so do not follow the toggle.
 export function tipText(key: TipKey | ScoreTipKey, level: Level, allowShort = false): string {
   if (isScoreTip(key)) return SCORE_TIPS[key][level];
-  const base = WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
+  const base = PLAIN_OVERRIDES[key]?.[level]?.now ?? WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
   const text = allowShort ? (SHORT_OVERRIDES[key]?.[level]?.short ?? base) : base;
   const note = NOTES[key]?.[level];
   return text && note ? `${text} ${note}` : text;
