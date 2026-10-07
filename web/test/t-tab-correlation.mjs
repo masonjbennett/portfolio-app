@@ -78,6 +78,34 @@ for (const set of ["cross", "megacap", "sectors", "dirty", "cross_vti"]) {
     check(!neg && M.heatTitle(v) === `All ${(n * (n - 1)) / 2} pairs were positively correlated`,
       `${set}: the heatmap's title counts the pairs above zero`, M.heatTitle(v));
   }
+  // The sentence under the heatmap, held to the oracle's numpy and pandas: the equal-weight portfolio's
+  // volatility, the average of the assets' own (pandas std times √252), the mean off-diagonal correlation.
+  if (JSON.stringify(tk) === JSON.stringify(a.tickers)) {
+    const s = M.spread(a, v);
+    const own = tk.map((x) => o.perColumn[x].sigma);
+    const offDiag = o.corr.flatMap((row, i) => row.filter((_, j) => j !== i));
+    nearAll(`${set}: the volatility sentence's figures are the oracle's equal-weight volatility, its assets' mean volatility and mean off-diagonal correlation`,
+      [s.together, s.apart, s.meanCorr], [o.modes.long.perf.ew.sigma, own.reduce((x, y) => x + y, 0) / tk.length, offDiag.reduce((x, y) => x + y, 0) / offDiag.length], 0, 1e-12);
+    check(s.n === tk.length && s.together < s.apart, `${set}: equal weights held together are less volatile than the assets' average on their own`, `${s.together} ${s.apart}`);
+  }
+}
+
+// ---- the volatility sentence: when it says nothing --------------------------------------------------
+{
+  const a = fixtureAnalysis("cross");
+  const v = M.corrView(a);
+  const one = { ...a, tickers: a.tickers.slice(0, 1), returns: a.returns.slice(0, 1), m: a.m.slice(0, 1), S: [[a.S[0][0]]], ew: [1] };
+  const holes = { ...a, S: a.S.map((row, i) => row.map((x, j) => (i === 2 && j === 2 ? NaN : x))) };
+  const dead = { ...a, returns: a.returns.map((c, i) => (i === 1 ? c.map(() => 0) : c)) };
+  const said = [
+    ["one asset", M.spread(one, M.corrView(one))],
+    ["no covariance matrix", M.spread({ ...a, S: null }, v)],
+    ["a covariance row short", M.spread({ ...a, S: a.S.map((row, i) => (i === 3 ? row.slice(1) : row)) }, v)],
+    ["no correlation matrix", M.spread(a, { ...v, matrix: null })],
+    ["a non-finite variance", M.spread(holes, v)],
+    ["an undefined pair", M.spread(dead, M.corrView(dead))],
+  ].filter(([, s]) => s !== null);
+  check(said.length === 0 && M.spreadSentence(null) === null, "volatility sentence: nothing with one asset, a missing or misshapen matrix, or a figure that is not finite", said.map(([w, s]) => `${w}: ${JSON.stringify(s)}`).join("; "));
 }
 
 // ---- the copy, on cross --------------------------------------------------------------------------
@@ -174,6 +202,30 @@ const n = cross.tickers.length;
 
 check(text(t.container.querySelector("h2.corr-headline")) === HEAD, "tab: the headline states the finding, literally", text(t.container.querySelector("h2.corr-headline")));
 check(!/NaN|undefined|Infinity|null/.test(page()), "tab: no NaN, undefined, Infinity or null on the page");
+
+// The volatility sentence, literally, from the oracle's own figures; ONE sentence, directly under the
+// heatmap's frame and above its table, the same at every level, and saying it is about this window.
+{
+  const ownMean = oc.clean.tickers.reduce((x, k) => x + oc.perColumn[k].sigma, 0) / n;
+  const off = oc.corr.flatMap((row, i) => row.filter((_, j) => j !== i));
+  const want = `Held in equal weights over this window, the five assets had a volatility of ${(oc.modes.long.perf.ew.sigma * 100).toFixed(1)}% a year ` +
+    `together, against an average of ${(ownMean * 100).toFixed(1)}% each on their own, and the average correlation between any two of them was ${py(off.reduce((x, y) => x + y, 0) / off.length, 2)}.`;
+  const notes = () => [...t.container.querySelectorAll(".corr-spread")];
+  const at = {};
+  for (const level of ["plain", "finance", "formula"]) {
+    t.rerender(h(Correlation, tabProps(cross, { level })));
+    at[level] = notes().map((p) => text(p));
+  }
+  t.rerender(h(Correlation, tabProps(cross)));
+  check(Object.values(at).every((xs) => xs.length === 1 && xs[0] === want), "volatility sentence: one sentence, literally, at Plain, Finance and Formula", JSON.stringify(at) + `\n   want ${want}`);
+  const p = notes()[0];
+  const frame = t.container.querySelector("svg.corr-heat-svg")?.closest(".chart-frame, figure, section, div");
+  const before = p && p.previousElementSibling;
+  const after = p && p.nextElementSibling;
+  check(!!before && before.contains(t.container.querySelector("svg.corr-heat-svg")) && !!after && after.querySelector("table") && !after.contains(t.container.querySelector("svg.corr-heat-svg")),
+    "volatility sentence: directly under the heatmap's frame and above the correlation table", `${before?.className} / ${after?.className} / ${frame?.className}`);
+  check((want.match(/\. |\.$/g) ?? []).length === 1 && /over this window/.test(want), "volatility sentence: a single sentence that says it is about this window");
+}
 
 // Heatmap: one cell per pair, each printing the oracle's .2f, filled from the scale.
 const cells = [...t.container.querySelectorAll("g.corr-cell")];
@@ -407,6 +459,7 @@ t.unmount();
   check(d.container.querySelector("g.corr-cell") === null && /No pair has a defined correlation/.test(text(d.container)) &&
     /No pair of assets has a defined correlation/.test(text(d.container.querySelector("h2.corr-headline"))) && !/NaN|undefined|Infinity/.test(text(d.container)),
     "undefined: with no defined pair the heatmap is a named empty state and the headline says so");
+  check(!d.container.querySelector(".corr-spread"), "volatility sentence: absent when no pair has a defined correlation");
   d.unmount();
 }
 
@@ -428,6 +481,8 @@ check(line(1421) === "with tab3:" && line(1467) === "with tab4:" && !SRC.slice(1
     text(r.container.querySelector("h2.corr-headline")) === HEAD && r.container.querySelectorAll(".tbl").length === 1,
     "ledger:boundary a failed covariance card is named, and the headline, heatmap and correlation table stand", body.slice(-120));
   check(errs.some((e) => e.includes("[boundary] Daily covariance matrix")), "ledger:boundary the console names the card that failed");
+  check(!r.container.querySelector(".corr-spread") && !/volatility note could not be shown/.test(body) && !errs.some((e) => e.includes("[boundary] Equal-weight volatility note")),
+    "volatility sentence: with no covariance matrix it is simply absent, never a failed card", body.slice(0, 200));
   r.unmount();
 }
 

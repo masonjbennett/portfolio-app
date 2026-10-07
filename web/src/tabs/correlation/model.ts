@@ -6,10 +6,13 @@
 // Every figure comes from the engine: corrMatrix is pandas' DataFrame.corr() step for step and
 // rollingCorr is Series.rolling(w).corr(); nothing here re-derives a statistic. What lives here is
 // which pair is highest and lowest, what each chart's title says, the table rows, and the heatmap's
-// colour scale and geometry.
+// colour scale and geometry. The sentence under the heatmap (spread) is the one place a volatility is
+// worked out here, and it uses the engine's own pieces: portfolioPerformance for the equal-weight mix and
+// the covariance matrix's diagonal, annualised by √252 as the engine annualises every volatility.
 import { format } from "../../format.ts";
 import { corrMatrix } from "../../lib/num.ts";
-import { rollingCorr } from "../../lib/stats.ts";
+import { portfolioPerformance } from "../../lib/portfolio.ts";
+import { rollingCorr, TRADING_DAYS } from "../../lib/stats.ts";
 import { tokens } from "../../styles/tokens.ts";
 import type { Analysis, Column, LoadState, TableRow } from "../../types.ts";
 
@@ -113,6 +116,56 @@ export function heatSubtitle(v: CorrView): string {
     ? ` ${v.undefinedPairs} ${v.undefinedPairs === 1 ? "pair has" : "pairs have"} no defined correlation and ${v.undefinedPairs === 1 ? "shows" : "show"} a dash.`
     : "";
   return `Pearson correlation of daily returns, ${format(v.first, "date")} to ${format(v.last, "date")} (${format(v.days, "int")} daily returns).${undef}`;
+}
+
+// ---- what holding them together did to volatility -------------------------------------------------
+
+/** Equal weights against the assets one by one, over the window on screen (in-sample). */
+export interface Spread {
+  /** How many assets. */
+  n: number;
+  /** The equal-weight portfolio's annual volatility, sqrt(w'Sw) at w = 1/n: portfolioPerformance's own. */
+  together: number;
+  /** The same weights over each asset's own annual volatility, sum of w_i sigma_i: the average of the n. */
+  apart: number;
+  /** The mean of the matrix's off-diagonal entries: the heatmap's average cell, the diagonal left out. */
+  meanCorr: number;
+}
+
+/**
+ * What holding the assets together in equal weights did to volatility, from the covariance the optimiser
+ * uses and the correlation the heatmap draws. Each volatility is annualised as the engine annualises one,
+ * the daily figure times √252: an asset's from its own daily variance on S's diagonal, the portfolio's
+ * from the quadratic form. Null with fewer than two assets, a matrix that is missing or the wrong shape,
+ * or any figure that is not finite (an undefined pair makes the mean undefined, so nothing is said).
+ */
+export function spread(a: Analysis, v: CorrView): Spread | null {
+  const n = a.tickers.length;
+  const { S, ew } = a;
+  const square = (M: unknown): M is number[][] => Array.isArray(M) && M.length === n && M.every((row) => Array.isArray(row) && row.length === n);
+  if (n < 2 || !square(S) || !square(v.matrix) || !Array.isArray(ew) || ew.length !== n || !Array.isArray(a.m) || a.m.length !== n) return null;
+  const together = portfolioPerformance(ew, a.m, S, a.rf).sigma;
+  let apart = 0;
+  for (let i = 0; i < n; i++) apart += ew[i] * Math.sqrt(S[i][i] * TRADING_DAYS);
+  let sumCorr = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j) sumCorr += v.matrix[i][j];
+  const meanCorr = sumCorr / (n * (n - 1));
+  if (![together, apart, meanCorr].every(Number.isFinite)) return null;
+  return { n, together, apart, meanCorr };
+}
+
+// The count in words, as a sentence says it; the ticker limit is ten.
+const COUNT = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+/** The one sentence under the heatmap, the same at every level; null where spread() says nothing. */
+export function spreadSentence(s: Spread | null): string | null {
+  if (!s) return null;
+  const many = COUNT[s.n] ?? format(s.n, "int");
+  return (
+    `Held in equal weights over this window, the ${many} assets had a volatility of ${format(s.together, "pct1")} a year ` +
+    `together, against an average of ${format(s.apart, "pct1")} each on their own, and the average correlation between ` +
+    `any two of them was ${r2(s.meanCorr)}.`
+  );
 }
 
 /** What the heatmap's readout line says for a cell, or the hint when no cell is chosen. */

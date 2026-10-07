@@ -31,6 +31,9 @@ import {
   heatTitle,
   matrixColumns,
   matrixRows,
+  spread,
+  spreadSentence,
+  type CorrView,
 } from "./correlation/model.ts";
 import "./correlation/correlation.css";
 
@@ -75,6 +78,9 @@ const HeatCard = memo(function HeatCard({ analysis }: { analysis: Analysis }) {
       <ChartFrame title={heatTitle(v)} subtitle={heatSubtitle(v)} state={heatState(v)} height={320}>
         {(ready) => <Heatmap view={ready} />}
       </ChartFrame>
+      <Boundary name="Equal-weight volatility note" resetKey={analysis}>
+        <SpreadNote analysis={analysis} view={v} />
+      </Boundary>
       <Table
         title="Pairwise correlation of daily returns"
         columns={matrixColumns(v.tickers, CORR_FORMAT)}
@@ -85,6 +91,13 @@ const HeatCard = memo(function HeatCard({ analysis }: { analysis: Analysis }) {
     </>
   );
 });
+
+// One sentence under the heatmap: what equal weights did to volatility over this window. Nothing at all
+// when there is nothing true to say (fewer than two assets, a missing matrix, an undefined figure).
+function SpreadNote({ analysis, view }: { analysis: Analysis; view: CorrView }) {
+  const sentence = spreadSentence(spread(analysis, view));
+  return sentence ? <p className="corr-note corr-spread">{sentence}</p> : null;
+}
 
 const CovCard = memo(function CovCard({ analysis, level, allowShort }: { analysis: Analysis; level: Level; allowShort: boolean }) {
   const { tickers, S } = analysis;
