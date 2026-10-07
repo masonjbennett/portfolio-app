@@ -159,8 +159,56 @@ const preload = links.find((l) => /rel="preload"/.test(l));
 check(!!preload && preload.includes(`href="${PUBLIC_PATH}"`) && /as="fetch"/.test(preload) && /\bcrossorigin\b/.test(preload),
   "index.html: preloads the baked example as a CORS fetch", preload ?? "no preload");
 check(fileURLToPath(OUT) === fileURLToPath(new URL(`public${PUBLIC_PATH}`, root)), "bake: writes the path index.html preloads");
-check(/<html lang="en">/.test(index) && /<title>Portfolio Analytics<\/title>/.test(index) && /id="root"/.test(index),
+check(/<html lang="en">/.test(index) && /<title>Portfolio Analytics · Mason Bennett<\/title>/.test(index) && /id="root"/.test(index),
   "index.html: lang, title, #root");
+
+// The unfurl: what a pasted link turns into. Every tag once; og:description is the published card
+// sentence word for word, read from both files, so a change to either goes red until the other follows.
+{
+  const decode = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const metas = [...index.matchAll(/<meta\b([^>]*)>/g)].map((m) => {
+    const attr = (k) => new RegExp(`\\b${k}="([^"]*)"`).exec(m[1])?.[1];
+    return { key: attr("property") ?? attr("name"), content: attr("content") === undefined ? undefined : decode(attr("content")) };
+  });
+  const meta = (k) => metas.filter((m) => m.key === k);
+  const one = (k) => (meta(k).length === 1 ? meta(k)[0].content : undefined);
+  const title = decode(/<title>([^<]*)<\/title>/.exec(index)?.[1] ?? "");
+  const { CARD_SENTENCE } = await import("../src/content/published.ts");
+  check(one("og:description") === CARD_SENTENCE, "unfurl: og:description is the published card sentence, verbatim", one("og:description") ?? `${meta("og:description").length} tags`);
+  check(one("og:title") === title && title === "Portfolio Analytics · Mason Bennett", "unfurl: og:title is the page title, with Mason's name", `${one("og:title")} / ${title}`);
+  const want = {
+    "og:type": "website",
+    "og:url": "https://portfolio.masonjbennett.com/",
+    "og:image": "https://portfolio.masonjbennett.com/og.png",
+    "og:image:width": "1200",
+    "og:image:height": "630",
+    "twitter:card": "summary_large_image",
+  };
+  const wrong = Object.entries(want).filter(([k, v]) => one(k) !== v).map(([k]) => `${k}=${meta(k).map((m) => m.content).join("|") || "missing"}`);
+  check(wrong.length === 0, "unfurl: type, url, image and its size, and the large-image card, each once", wrong.join("; "));
+  const alt = one("og:image:alt") ?? "";
+  check(alt.length >= 40 && alt.length <= 420 && /Sharpe/.test(alt), "unfurl: the image has alt text that says what it shows", alt);
+  const dupes = [...new Set(metas.map((m) => m.key).filter((k) => /^(og|twitter):/.test(k ?? "")))].filter((k) => meta(k).length !== 1);
+  check(dupes.length === 0, "unfurl: no og or twitter tag is repeated (a crawler keeps one of two, and not always the same one)", dupes.join(" "));
+  const img = new URL(one("og:image") ?? "about:blank");
+  check(img.origin === new URL(one("og:url") ?? "about:blank").origin && img.pathname === "/og.png",
+    "unfurl: the image is the site's own /og.png, served from public/", one("og:image"));
+  // The file those tags point at: in public/, so the build copies it to the site's root; a PNG whose own header
+  // says the size the tags say; small enough for a crawler to fetch; and nothing in it but pixels, so no text
+  // chunk can carry a path or a name out of the machine that drew it.
+  const file = new URL("public/og.png", root);
+  const png = existsSync(file) ? readFileSync(file) : null;
+  const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  const types = [];
+  if (png && sig.every((b, i) => png[i] === b)) {
+    for (let at = 8; at + 8 <= png.length; at += 12 + png.readUInt32BE(at)) types.push(png.toString("latin1", at + 4, at + 8));
+  }
+  const size = png && types[0] === "IHDR" ? `${png.readUInt32BE(16)} x ${png.readUInt32BE(20)}` : "none";
+  const textual = types.filter((t) => /^(tEXt|iTXt|zTXt|eXIf)$/.test(t));
+  check(!!png && size === `${one("og:image:width")} x ${one("og:image:height")}` && png.length < 300 * 1024 && types.at(-1) === "IEND" && textual.length === 0,
+    "unfurl: public/og.png is a PNG of the tagged size, under 300 kB, with no text chunk",
+    png ? `${size}, ${png.length} bytes, chunks ${[...new Set(types)].join(" ")}` : "no public/og.png");
+}
 check(index.includes(`<meta name="theme-color" content="${tokens.color.paper}"`), "index.html: theme-color is paper");
 const entry = /<script type="module" src="\/([^"]+)"/.exec(index)?.[1];
 check(!!entry && existsSync(new URL(entry, root)), "index.html: its module entry exists", entry ?? "none");
