@@ -1,0 +1,44 @@
+# Runs the web app's suites (web/test, `npm test`) on every push and pull request.
+#
+# test/run.mjs discovers every test/t-*.mjs and exits non-zero if any suite fails, so a new suite
+# is in this job the moment it is committed: nothing to add here when one is written.
+#
+# WHAT THIS DOES NOT DO: it does not block the deploy. Vercel builds from the same push on its own,
+# so a red run here reports after a deploy has gone out, not before. The build itself (tsc and
+# vite) is already gated, because Vercel runs it to deploy at all.
+#
+# No suite reaches the network: the ones that call fetch stub it or serve on 127.0.0.1.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - run: npm test 2>&1 | tee test.log; exit "${PIPESTATUS[0]}"
+        shell: bash
+
+      # t-tooltips compares the tooltip texts with the Python app's, and skips that comparison when it
+      # finds no Python. The runner has python3 (the script is standard library only), so a skip here
+      # means the check stopped running while the job stayed green: fail on it instead. No suite prints
+      # SKIP on a full local run today, so any SKIP in this log is a check that did not run.
+      - run: "! grep -n 'SKIP' test.log"
+        shell: bash
