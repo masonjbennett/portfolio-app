@@ -18,7 +18,7 @@
 // wealth path.
 import { readFileSync } from "node:fs";
 import { check, close, done, json, maxAbsDiff, near, nearAll } from "./_assert.mjs";
-import { act, render, text } from "./_dom.mjs";
+import { act, expectUncaught, render, text } from "./_dom.mjs";
 
 const { createElement: h } = await import("react");
 const Sensitivity = (await import("../src/tabs/Sensitivity.tsx")).default;
@@ -496,6 +496,36 @@ const page = () => text(r.container);
   check(zt().includes(M.CUSTOM_REFUSAL.zero) && !zt().includes("Custom weights being evaluated") && captions(z.container).length === 4,
     "ledger:boundary: and its custom section says why it cannot evaluate, in place of the tables");
   z.unmount();
+}
+
+// A card that failed draws again on the next analysis. The tab stays mounted while only the analysis
+// changes, so each card's Boundary must re-arm on the new fit by itself. The tickers here walk fine for
+// the tab and its tables (map) but throw from forEach, which only the headline and the weight chart's
+// title call (swing), each inside its own card.
+{
+  class Brittle extends Array {
+    forEach() {
+      throw new Error("brittle tickers");
+    }
+  }
+  const sick = { ...a, tickers: Brittle.from(a.tickers) };
+  const failed = (root) => [...root.querySelectorAll(".boundary")].map(text);
+  let r = null;
+  try {
+    r = quietly(() => expectUncaught(() => render(h(Sensitivity, tabProps(sick)))));
+  } catch (err) {
+    check(false, "card reset: a card that throws stays inside its own boundary", err.message);
+  }
+  if (r) {
+    check(JSON.stringify(failed(r.container)) === JSON.stringify(["The headline could not be shown.", "Weight comparison chart could not be shown."]) &&
+      captions(r.container).length === 4,
+      "card reset: the stubbed tickers fail the headline and the weight chart, and the tab's tables stand", failed(r.container).join(" | "));
+    quietly(() => r.rerender(h(Sensitivity, tabProps({ ...a }))));
+    check(failed(r.container).length === 0 && text(r.container.querySelector("h2.sens-finding")) === M.headline(fits, a.tickers) &&
+      !!r.container.querySelector(".sens-hero .recharts-wrapper"),
+      "card reset: on the next analysis the headline and the weight chart draw again", failed(r.container).join(" | "));
+    r.unmount();
+  }
 }
 
 // ledger:failed-tangency (the tab's half). The app appends tangency rows only `if tan_r.success`
