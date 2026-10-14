@@ -152,11 +152,16 @@ export function wealthPlot(state: LoadState<WealthData>, amount: number): LoadSt
   return { status: "ready", value: { rows, lines } };
 }
 
-// January's first trading day of each year, at most eight of them, as the date ticks.
-function yearTicks(dates: readonly string[]): string[] {
+// A year label's width and the gap kept between two of them (px).
+const YEAR_PX = 4 * CHAR_PX + 12;
+
+// January's first trading day of each year as the date ticks, at most eight of them and no more than
+// a plot `plotWidth` px wide can label without two years touching (the Overview's phone card is ~130 px).
+export function yearTicks(dates: readonly string[], plotWidth = Infinity): string[] {
   const firsts: string[] = [];
   for (let i = 1; i < dates.length; i++) if (dates[i].slice(0, 4) !== dates[i - 1].slice(0, 4)) firsts.push(dates[i]);
-  const step = Math.ceil(firsts.length / 8) || 1;
+  const max = Math.max(2, Math.min(8, Math.floor(plotWidth / YEAR_PX)));
+  const step = Math.ceil(firsts.length / max) || 1;
   return firsts.filter((_, i) => i % step === 0);
 }
 
@@ -220,7 +225,8 @@ export const WealthLines = memo(function WealthLines({ plot, height }: { plot: W
   const withValue = width >= 560;
   const longest = Math.max(...plot.lines.map((l) => (withValue ? `${l.label} ${format(l.end, "usd0")}` : l.label).length));
   const right = 14 + longest * CHAR_PX;
-  const ticks = yearTicks(plot.rows.map((r) => r.date));
+  // The plot is what the margins and the 72 px money axis leave of the width.
+  const ticks = yearTicks(plot.rows.map((r) => r.date), width - right - 4 - 72);
   return (
     <div ref={ref} className="wealth-chart" style={{ width: "100%", height }}>
       <LineChart width={width} height={height} data={plot.rows} margin={{ top: 12, right, bottom: 8, left: 4 }}>

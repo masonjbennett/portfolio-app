@@ -697,4 +697,20 @@ const W0 = o.w0;
   W1.unmount();
 }
 
+// ---- year ticks fit the plot ---------------------------------------------------------------------------
+// The Overview's growth card on a 375px phone leaves a plot of ~130px; seven years there overlapped
+// into one smear on the first screen.
+{
+  const days = [];
+  for (let y = 2019; y <= 2026; y++) for (const md of ["-01-02", "-06-01", "-12-30"]) days.push(`${y}${md}`);
+  const gaps = (plotWidth) => {
+    const t = W.yearTicks(days, plotWidth);
+    const x = t.map((d) => (days.indexOf(d) / (days.length - 1)) * plotWidth);
+    return { n: t.length, min: Math.min(...x.slice(1).map((v, i) => v - x[i])) };
+  };
+  const phone = gaps(130), wide = gaps(600);
+  check(phone.n >= 2 && phone.min >= 4 * 7 + 4, "year ticks: a 130px plot labels at least two years, none closer than a label's width", JSON.stringify(phone));
+  check(wide.n === 7 && W.yearTicks(days).length === 7, "year ticks: a 600px plot, or one of unknown width, still labels every year", JSON.stringify(wide));
+}
+
 done("t-charts-portfolio");
