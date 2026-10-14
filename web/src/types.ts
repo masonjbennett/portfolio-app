@@ -62,9 +62,11 @@ export interface ShareState {
   settings: Partial<ShareSettings>;
   /** Raw custom weights by ticker, or null when the URL carries none. Weights, never amounts. */
   weights: CustomWeights | null;
-  /** The tab the link opens on, or null for the default. */
-  tab: TabId | null;
-  /** The walk-forward tab's segment: "published" only when the link names it beside that tab, else null (the first segment). */
+  /** The chapter the link opens on, or null for the default (the Overview). */
+  chapter: ChapterId | null;
+  /** The tab an older link named (?tab=), which the page lands on inside its chapter; null for any other link. Never written. */
+  tab?: TabId | null;
+  /** The walk-forward tab's segment: "published" only when the link names it beside that test, else null (the first segment). */
   view?: WalkView | null;
 }
 
@@ -94,6 +96,40 @@ export const TAB_LABELS: Readonly<Record<TabId, string>> = {
 
 /** The tab ids in display order. */
 export const TAB_IDS: readonly TabId[] = ["returns", "risk", "correlation", "optimization", "custom", "sensitivity", "walkforward"];
+
+// ---- chapters -----------------------------------------------------------------------------------------------------
+
+/** The page's five chapters, in reading order. The first is the story; the other four hold the seven tabs. */
+export type ChapterId = "overview" | "performance" | "diversification" | "build" | "holdup";
+
+/** Chapter labels, as the chapter row prints them. */
+export const CHAPTER_LABELS: Readonly<Record<ChapterId, string>> = {
+  overview: "Overview",
+  performance: "Performance",
+  diversification: "Diversification",
+  build: "Build a portfolio",
+  holdup: "Does it hold up?",
+};
+
+/** The chapter ids in display order. */
+export const CHAPTER_IDS: readonly ChapterId[] = ["overview", "performance", "diversification", "build", "holdup"];
+
+/**
+ * The tabs each chapter holds, top to bottom. Every tab is in exactly one chapter; the Overview holds none. Does it
+ * hold up? leads with the walk-forward test, so a link to its published view lands at the top of the chapter.
+ */
+export const CHAPTER_TABS: Readonly<Record<ChapterId, readonly TabId[]>> = {
+  overview: [],
+  performance: ["returns", "risk"],
+  diversification: ["correlation"],
+  build: ["optimization", "custom"],
+  holdup: ["walkforward", "sensitivity"],
+};
+
+/** The chapter a tab sits in. */
+export function chapterOf(tab: TabId): ChapterId {
+  return CHAPTER_IDS.find((c) => CHAPTER_TABS[c].includes(tab)) ?? "overview";
+}
 
 /**
  * The walk-forward tab's two segments: the test run on the basket in the rail ("basket", what the tab
@@ -295,10 +331,12 @@ export interface Workbench {
   weights: CustomWeights;
   /** Replace the custom weights wholesale. */
   setWeights: (next: CustomWeights) => void;
-  /** The active tab. */
-  tab: TabId;
-  /** Switch tabs. The walk-forward tab opens on `view`, its first segment when none is named. */
-  setTab: (tab: TabId, view?: WalkView) => void;
+  /** The active chapter. */
+  chapter: ChapterId;
+  /** The tab the page's link named on arrival (an older ?tab= link), to land on once; null otherwise. */
+  entry: TabId | null;
+  /** Switch chapters. The walk-forward test opens on `view`, its first segment when none is named. */
+  setChapter: (chapter: ChapterId, view?: WalkView) => void;
   /** The walk-forward tab's segment. */
   view: WalkView;
   /** The daily 3-month Treasury series held, and what the analysis on screen is scored against. */
@@ -341,7 +379,8 @@ export interface WalkRates {
 export interface TabContextValue {
   /** The walk-forward tab's segment. */
   view: WalkView;
-  /** Switch tabs, as Workbench.setTab; `land` also brings the walk-forward tab into view and focuses its segment. */
+  /** Open the chapter holding a tab, as Workbench.setChapter; `land` also brings the walk-forward tab into view and
+   *  focuses its segment. */
   setTab: (tab: TabId, view?: WalkView, land?: boolean) => void;
   /** As Workbench.rfHistory. */
   rfHistory: RfHistory;

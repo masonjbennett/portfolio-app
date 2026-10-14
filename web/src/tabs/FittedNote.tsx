@@ -13,7 +13,7 @@ export default function FittedNote({ className }: { className: string }) {
     <button
       type="button"
       className="text-button"
-      title="Open the published test, replayed, in the Walk-forward tab"
+      title="Open the published test, replayed, in Does it hold up?"
       onClick={() => page.setTab("walkforward", "published", true)}
     >
       The walk-forward test

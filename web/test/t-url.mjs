@@ -1,4 +1,5 @@
-// The share link (src/state/url.ts): settings, custom weights and the tab round-trip; the dollar
+// The share link (src/state/url.ts): settings, custom weights and the chapter round-trip, and an older link's tab
+// opens the chapter that holds it; the dollar
 // amount never enters the string; and a hostile or mangled link decodes field by field, dropping
 // what does not parse, never throwing.
 import { check, done } from "./_assert.mjs";
@@ -12,37 +13,61 @@ const full = { tickers: ["VTI", "AGG", "GLD", "BRK-B"], start: "2019-01-01", end
 const weights = { VTI: 0.3, AGG: -0.1, GLD: 1 / 3, "BRK-B": 1 };
 
 // ---- round trips -----------------------------------------------------------------------------------
-const s1 = encodeShare({ settings: full, weights, tab: "risk" });
+const s1 = encodeShare({ settings: full, weights, chapter: "performance" });
 const d1 = decodeShare(s1);
-check(eq(d1.settings, full) && eq(d1.weights, weights) && d1.tab === "risk", "round trip: every setting, the weights (1/3 exactly) and the tab", s1);
+check(eq(d1.settings, full) && eq(d1.weights, weights) && d1.chapter === "performance" && d1.tab === null,
+  "round trip: every setting, the weights (1/3 exactly) and the chapter", s1);
 check(s1.startsWith("?") && s1.includes("tickers=VTI,AGG,GLD,BRK-B") && s1.includes("w=VTI:0.3,AGG:-0.1"),
   "encode: a readable query, commas and colons left literal", s1);
 check(eq(decodeShare(s1.slice(1)), d1), "decode: the leading ? is optional");
 const off = { ...full, allowShort: false };
-check(decodeShare(encodeShare({ settings: off, weights: null, tab: null })).settings.allowShort === false, "round trip: shorting off is carried as off, not left out");
+check(decodeShare(encodeShare({ settings: off, weights: null, chapter: null })).settings.allowShort === false, "round trip: shorting off is carried as off, not left out");
 
 // null end is today and null rf the live rate: a link must not freeze either.
-const s2 = encodeShare({ settings: { ...full, end: null, rf: null }, weights: null, tab: null });
+const s2 = encodeShare({ settings: { ...full, end: null, rf: null }, weights: null, chapter: null });
 const d2 = decodeShare(s2);
 check(!/[?&](end|rf)=/.test(s2) && !has(d2.settings, "end") && !has(d2.settings, "rf"), "encode: end and rf are written only when set", s2);
-check(d2.weights === null && d2.tab === null && !/[?&](w|tab)=/.test(s2), "encode: no weights and no tab write nothing");
-check(encodeShare({ settings: {}, weights: null, tab: null }) === "" && eq(decodeShare(""), { settings: {}, weights: null, tab: null, view: null }) && encodeShare({ settings: DEFAULT_SETTINGS, weights: null, tab: null }).indexOf("cols") === -1,
+check(d2.weights === null && d2.chapter === null && !/[?&](w|ch|tab)=/.test(s2), "encode: no weights and no chapter write nothing");
+check(encodeShare({ settings: {}, weights: null, chapter: null }) === "" && eq(decodeShare(""), { settings: {}, weights: null, chapter: null, tab: null, view: null }) && encodeShare({ settings: DEFAULT_SETTINGS, weights: null, chapter: null }).indexOf("cols") === -1,
   "empty: nothing to carry is the empty string, and it decodes to nothing");
 
-// ---- the walk-forward tab's segment ---------------------------------------------------------------------------
-// view=published, and only beside tab=walkforward: the first segment is what the tab opens on, so it writes nothing.
-const wf = encodeShare({ settings: full, weights: null, tab: "walkforward", view: "published" });
-check(wf.endsWith("&tab=walkforward&view=published") && decodeShare(wf).tab === "walkforward" && decodeShare(wf).view === "published",
-  "view: the published segment round-trips beside the walk-forward tab", wf);
+// ---- the chapters, and the tabs older links name ------------------------------------------------------------------
+// ch= names a chapter. An older link's tab= opens the chapter that holds it and is kept as the tab to land on; it is
+// never written. A link naming both is read by its chapter, and its tab only when the tab sits in that chapter.
+const OLD = { returns: "performance", risk: "performance", correlation: "diversification", optimization: "build", custom: "build", sensitivity: "holdup", walkforward: "holdup" };
+for (const [tab, chapter] of Object.entries(OLD)) {
+  const d = decodeShare(`?tab=${tab}`);
+  check(d.chapter === chapter && d.tab === tab, `legacy: ?tab=${tab} opens ${chapter}, landing on ${tab}`, JSON.stringify(d));
+}
+for (const ch of ["overview", "performance", "diversification", "build", "holdup"]) {
+  const q = encodeShare({ settings: {}, weights: null, chapter: ch });
+  check(q === `?ch=${ch}` && decodeShare(q).chapter === ch && decodeShare(q).tab === null, `chapter: ${ch} round-trips as ch=`, q);
+}
+check(decodeShare("?ch=build&tab=risk").chapter === "build" && decodeShare("?ch=build&tab=risk").tab === null,
+  "chapter: a tab from another chapter beside ch= is ignored, the chapter wins");
+check(decodeShare("?ch=build&tab=custom").chapter === "build" && decodeShare("?ch=build&tab=custom").tab === "custom",
+  "chapter: a tab inside the named chapter is kept to land on");
+check(!/[?&]tab=/.test(encodeShare({ settings: full, weights: null, chapter: "build", tab: "custom" })), "chapter: a tab is never written");
+
+// ---- the walk-forward test's segment ---------------------------------------------------------------------------
+// view=published, and only beside its chapter (or an older link's walk-forward tab): the first segment is what the
+// test opens on, so it writes nothing.
+const wf = encodeShare({ settings: full, weights: null, chapter: "holdup", view: "published" });
+check(wf.endsWith("&ch=holdup&view=published") && decodeShare(wf).chapter === "holdup" && decodeShare(wf).view === "published",
+  "view: the published segment round-trips beside the walk-forward test's chapter", wf);
 const quiet = [
-  encodeShare({ settings: full, weights: null, tab: "walkforward", view: "basket" }),
-  encodeShare({ settings: full, weights: null, tab: "walkforward" }),
-  encodeShare({ settings: full, weights: null, tab: "risk", view: "published" }),
-  encodeShare({ settings: full, weights: null, tab: null, view: "published" }),
+  encodeShare({ settings: full, weights: null, chapter: "holdup", view: "basket" }),
+  encodeShare({ settings: full, weights: null, chapter: "holdup" }),
+  encodeShare({ settings: full, weights: null, chapter: "performance", view: "published" }),
+  encodeShare({ settings: full, weights: null, chapter: null, view: "published" }),
 ];
-check(quiet.every((q) => !/[?&]view=/.test(q)), "view: the first segment, or any other tab, writes no view", quiet.join(" | "));
+check(quiet.every((q) => !/[?&]view=/.test(q)), "view: the first segment, or any other chapter, writes no view", quiet.join(" | "));
 const views = [
   ["?tab=walkforward&view=published", "published"],
+  ["?ch=holdup&view=published", "published"],
+  ["?ch=holdup&tab=walkforward&view=published", "published"],
+  ["?tab=sensitivity&view=published", null],
+  ["?ch=build&view=published", null],
   ["?view=published", null],
   ["?tab=risk&view=published", null],
   ["?tab=walkforward&view=basket", null],
@@ -55,10 +80,10 @@ for (const [q, want] of views) check(decodeShare(q).view === want, `view: ${q} o
 
 // ---- the scorecard's added columns ---------------------------------------------------------------------------
 // Carried as cols=, the engine's ids only, each once, in the fixed order; anything else in the list is dropped.
-const s5 = encodeShare({ settings: { ...full, cols: ["rp", "tan.1y"] }, weights: null, tab: "optimization" });
+const s5 = encodeShare({ settings: { ...full, cols: ["rp", "tan.1y"] }, weights: null, chapter: "build" });
 check(s5.includes("cols=tan.1y,rp") && JSON.stringify(decodeShare(s5).settings.cols) === '["tan.1y","rp"]',
   "cols: the added columns round-trip, written in the fixed order whatever order they were added in", s5);
-check(!/cols=/.test(encodeShare({ settings: { ...full, cols: [] }, weights: null, tab: null })) && !has(decodeShare(s2).settings, "cols") && !has(d1.settings, "cols"),
+check(!/cols=/.test(encodeShare({ settings: { ...full, cols: [] }, weights: null, chapter: null })) && !has(decodeShare(s2).settings, "cols") && !has(d1.settings, "cols"),
   "cols: none added writes nothing, and a link without cols= opens the default table");
 const colsCases = [
   ["?cols=rp,rp,tan.1y,rp", '["tan.1y","rp"]'],
@@ -74,7 +99,7 @@ for (const q of ["?cols=", "?cols=bogus", "?cols=__proto__,constructor", "?cols=
 // fits under the length guard, and one character past the guard is not read at all.
 const ten = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "JPM", "XLRE"];
 const longW = Object.fromEntries(ten.map((t, i) => [t, -(i + 1) / 10.000000000000002 / 3]));
-const longest = encodeShare({ settings: { tickers: ten, start: "2019-01-01", end: "2026-09-26", rf: -0.012345678901234567, benchmark: "^GSPC", allowShort: true, cols: [...ADDED_IDS] }, weights: longW, tab: "optimization" });
+const longest = encodeShare({ settings: { tickers: ten, start: "2019-01-01", end: "2026-09-26", rf: -0.012345678901234567, benchmark: "^GSPC", allowShort: true, cols: [...ADDED_IDS] }, weights: longW, chapter: "build" });
 const back = decodeShare(longest);
 const values = new URLSearchParams(longest).values();
 check(back.settings.tickers?.length === 10 && Object.keys(back.weights ?? {}).length === 10 && JSON.stringify(back.settings.cols) === JSON.stringify(ADDED_IDS) &&
@@ -82,10 +107,10 @@ check(back.settings.tickers?.length === 10 && Object.keys(back.weights ?? {}).le
   "guard: the longest honest link, all four columns included, decodes whole, every value under the length guard", `${longest.length} chars`);
 // The same link on the walk-forward tab's published segment: the longest honest link there is. The guard bounds
 // each value, so the extra key leaves every value as long as it was, and the link still decodes whole.
-const longestWf = encodeShare({ settings: { tickers: ten, start: "2019-01-01", end: "2026-09-26", rf: -0.012345678901234567, benchmark: "^GSPC", allowShort: true, cols: [...ADDED_IDS] }, weights: longW, tab: "walkforward", view: "published" });
+const longestWf = encodeShare({ settings: { tickers: ten, start: "2019-01-01", end: "2026-09-26", rf: -0.012345678901234567, benchmark: "^GSPC", allowShort: true, cols: [...ADDED_IDS] }, weights: longW, chapter: "holdup", view: "published" });
 const backWf = decodeShare(longestWf);
 check(longestWf.length > longest.length && backWf.settings.tickers?.length === 10 && Object.keys(backWf.weights ?? {}).length === 10 &&
-  JSON.stringify(backWf.settings.cols) === JSON.stringify(ADDED_IDS) && backWf.tab === "walkforward" && backWf.view === "published" &&
+  JSON.stringify(backWf.settings.cols) === JSON.stringify(ADDED_IDS) && backWf.chapter === "holdup" && backWf.view === "published" &&
   [...new URLSearchParams(longestWf).values()].every((v) => v.length <= MAX_PARAM) &&
   Math.max(...[...new URLSearchParams(longestWf).values()].map((v) => v.length)) < MAX_PARAM,
   "guard: the longest honest link, on the published segment, decodes whole, every value under the length guard",
@@ -94,8 +119,8 @@ const over = `?cols=${"tan.1y,".repeat(Math.ceil(MAX_PARAM / 7))}rp`;
 check(over.length - 6 > MAX_PARAM && !has(decodeShare(over).settings, "cols"), "guard: a cols value past the length guard is not read at all", `${over.length - 6} chars`);
 
 // ---- the amount never travels ----------------------------------------------------------------------------
-const s3 = encodeShare({ settings: { ...full, amount: 123457 }, weights: { VTI: 0.5 }, tab: "custom" });
-const s4 = encodeShare({ settings: DEFAULT_SETTINGS, weights: null, tab: null });
+const s3 = encodeShare({ settings: { ...full, amount: 123457 }, weights: { VTI: 0.5 }, chapter: "build" });
+const s4 = encodeShare({ settings: DEFAULT_SETTINGS, weights: null, chapter: null });
 check(!/amount|123457/i.test(s3) && !/amount|10000/.test(s4), "amount: never in an encoded URL, even when one is passed in", `${s3} | ${s4}`);
 check(!has(decodeShare("?amount=5000&tickers=VTI,AGG,GLD").settings, "amount"), "amount: a link that names one is not read");
 
@@ -144,8 +169,8 @@ for (const q of ["?w=VTI:abc", "?w=VTI", "?w=:0.5", "?w=VTI:0.5,VTI:0.2", "?w=__
 }
 check(({}).VTI === undefined && Object.getPrototypeOf(decodeShare("?w=CONSTRUCTOR:0.5").weights) === Object.prototype,
   "hostile: no weight reaches a prototype");
-for (const q of ["?tab=admin", "?tab=__proto__", "?tab=constructor", "?tab=RISK"]) {
-  check(decodeShare(q).tab === null, `hostile: ${q} opens the default tab`);
+for (const q of ["?tab=admin", "?tab=__proto__", "?tab=constructor", "?tab=RISK", "?ch=admin", "?ch=__proto__", "?ch=Overview", "?ch=returns"]) {
+  check(decodeShare(q).tab === null && decodeShare(q).chapter === null, `hostile: ${q} opens the default chapter`);
 }
 let odd = 0;
 for (const v of [null, undefined, 42, {}, "%", "?&&&=&", "?tickers=VTI&tickers=<x>"]) {
@@ -159,7 +184,7 @@ check(odd === 0, "hostile: non-strings and malformed escapes do not throw");
 
 // One bad field spoils only itself.
 const mixed = decodeShare("?tickers=VTI,AGG,GLD&rf=abc&start=2019-02-30&bench=%5EGSPC&short=1&w=VTI:0.5&tab=risk");
-check(eq(mixed.settings, { tickers: ["VTI", "AGG", "GLD"], benchmark: "^GSPC", allowShort: true }) && eq(mixed.weights, { VTI: 0.5 }) && mixed.tab === "risk",
+check(eq(mixed.settings, { tickers: ["VTI", "AGG", "GLD"], benchmark: "^GSPC", allowShort: true }) && eq(mixed.weights, { VTI: 0.5 }) && mixed.tab === "risk" && mixed.chapter === "performance",
   "mixed: the good fields survive the bad ones", JSON.stringify(mixed));
 // Honest edge values are kept: eleven tickers (so the page can say "no more than 10"), a negative rate, lower-case input.
 const edge = decodeShare("?tickers=a,b,c,d,e,f,g,h,i,j,k&rf=-0.005&w=vti:-1");

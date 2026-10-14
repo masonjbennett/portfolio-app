@@ -1,0 +1,60 @@
+/* The Overview's interim contents: four rows on a card, the chapter's name as a link-styled button, its line beside it
+   (under it on a phone). */
+.chapter-contents {
+  padding: var(--space-5);
+  background: var(--color-card);
+  border: 1px solid var(--color-cardline);
+  border-radius: var(--radius-card);
+}
+
+.chapter-contents-h {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--type-4);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.chapter-contents-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chapter-contents-list li {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+}
+
+.chapter-contents-open {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-teal);
+  text-align: left;
+  text-decoration: underline;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.chapter-contents-line {
+  color: var(--color-ink2);
+}
+
+@media (max-width: 760px) {
+  .chapter-contents {
+    padding: var(--space-4);
+  }
+
+  .chapter-contents-list li {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

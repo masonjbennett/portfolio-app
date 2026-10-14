@@ -61,7 +61,7 @@ const { act, render, text } = await import("./_dom.mjs");
 const { createElement: h, Profiler, useCallback, useState } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { default: App, AppView, TAB_LOADERS, settlingOf } = await import("../src/App.tsx");
-const { TAB_IDS } = await import("../src/types.ts");
+const { TAB_IDS, chapterOf } = await import("../src/types.ts");
 const { exampleAnalysis, examplePayload, settingsFor } = await import("./_analysis.mjs");
 const TABS = Object.fromEntries(await Promise.all(TAB_IDS.map(async (id) => [id, (await TAB_LOADERS[id]()).default])));
 
@@ -123,12 +123,15 @@ function Harness({ tab }) {
   const setSettings = useCallback((p) => setSettingsState((s) => ({ ...s, ...p })), []);
   const [level, setLevel] = useState("plain");
   const [weights, setWeights] = useState({});
-  const [current, setTab] = useState(tab);
+  const [chapter, setChapter] = useState(() => chapterOf(tab));
   drive = { setWeights };
   const wb = {
-    settings, setSettings, level, setLevel, analysis: READY, fetching: false, failure: null, rf: RF, weights, setWeights, tab: current, setTab,
+    settings, setSettings, level, setLevel, analysis: READY, fetching: false, failure: null, rf: RF, weights, setWeights, chapter, setChapter,
+    entry: null,
   };
-  return h(Profiler, { id: "page", onRender }, h(AppView, { wb, tabs: TABS }));
+  // The tab under test is the only one drawn: its chapter's other tab renders nothing, so every chart counted is this tab's.
+  const only = Object.fromEntries(TAB_IDS.map((id) => [id, id === tab ? TABS[id] : () => null]));
+  return h(Profiler, { id: "page", onRender }, h(AppView, { wb, tabs: only }));
 }
 
 function mount(tab) {
@@ -299,6 +302,7 @@ for (const tab of TAB_IDS) {
     return { ok: u.startsWith("/example-cross.json"), json: async () => body };
   };
   localStorage.clear();
+  // An older link: ?tab=custom opens Build a portfolio, the Custom tab under Optimization.
   history.replaceState(null, "", "/?tab=custom");
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -318,7 +322,7 @@ for (const tab of TAB_IDS) {
     if (assume && assume.getAttribute("aria-expanded") === "false") act(() => assume.click());
     return host.querySelector('[role=switch][name="allowShort"]');
   };
-  const panel = () => host.querySelector('.app-tab[role="tabpanel"]');
+  const panel = () => host.querySelector('.app-chapter[role="tabpanel"]');
   const shortingNote = () => /shorting is on/.test(text(host.querySelector(".cust") ?? host));
   const bandBusy = () => host.querySelector("section.band")?.getAttribute("aria-busy") === "true";
   // Drawn, and the price request answered (it fails here), so nothing but the switch can mark the page busy.

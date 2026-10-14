@@ -1,5 +1,9 @@
 // The page: the masthead, the basket bar (a summary chip and a sheet on a phone), the front-page band,
-// the tab switch and the active tab, each card inside its own Boundary.
+// the chapter row and the active chapter, each card inside its own Boundary.
+//
+// Five chapters hold the seven tabs (CHAPTER_TABS in src/types.ts): a chapter renders its tabs one under
+// the other, each tab in its own Boundary, and the Overview lists the other four until it gets its own
+// first screen.
 //
 // The app runs its six tabs as one script: st.stop() inside one (portfolio_app.py 1483, 1727)
 // ends the run, and every tab after it renders nothing. Here each card fails alone and names
@@ -7,9 +11,10 @@
 // the walk-forward test, after the app's six.
 //
 // Each tab is its own chunk, and so is Recharts, which only the tabs draw with: the first paint
-// needs the masthead, the basket bar and the band, none of which chart anything. Once a tab has drawn,
-// the others are fetched while the page is idle, so a later switch finds its tab in memory and
-// a deploy mid-visit cannot strand a tab whose chunk the new deployment no longer serves.
+// needs the masthead, the basket bar and the band, none of which chart anything, and a chapter fetches
+// only its own tabs' chunks. Once the analysis has drawn, every tab is fetched while the page is idle, so
+// a later switch finds its chapter in memory and a deploy mid-visit cannot strand a tab whose chunk the
+// new deployment no longer serves.
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition, type ComponentType } from "react";
 import BandView from "./chrome/Band.tsx";
 import CommandPaletteView from "./chrome/CommandPalette.tsx";
@@ -22,7 +27,11 @@ import Boundary from "./components/Boundary.tsx";
 import { ChartNote } from "./components/ChartFrame.tsx";
 import SegControl, { tabId, tabPanelId } from "./components/SegControl.tsx";
 import { TabContext, useWorkbench } from "./state/useWorkbench.ts";
-import { TAB_IDS, TAB_LABELS, type Analysis, type TabContextValue, type TabId, type TabProps, type WalkView, type Workbench } from "./types.ts";
+import {
+  CHAPTER_IDS, CHAPTER_LABELS, CHAPTER_TABS, TAB_IDS, TAB_LABELS, chapterOf,
+  type Analysis, type ChapterId, type TabContextValue, type TabId, type TabProps, type WalkView, type Workbench,
+} from "./types.ts";
+import ChapterContents from "./chrome/ChapterContents.tsx";
 import "./App.css";
 
 type TabModule = { default: ComponentType<TabProps> };
@@ -96,9 +105,33 @@ function nextFrame(fn: () => void): () => void {
   return () => window.clearTimeout(handle);
 }
 
-const TAB_OPTIONS = TAB_IDS.map((id) => ({ value: id, label: TAB_LABELS[id] }));
-// The tab row's ids: pill `analysis-tab-<id>`, the panel it shows `analysis-panel-<id>`.
-const TAB_PREFIX = "analysis";
+const CHAPTER_OPTIONS = CHAPTER_IDS.map((id) => ({ value: id, label: CHAPTER_LABELS[id] }));
+// The chapter row's ids: pill `chapter-tab-<id>`, the panel it shows `chapter-panel-<id>`.
+const CHAPTER_PREFIX = "chapter";
+// Each tab's part of its chapter, which the palette and an older ?tab= link land on.
+export const sectionId = (tab: TabId): string => `section-${tab}`;
+
+// A request to land the reader on one tab's part of a chapter; a new `n` is a new request.
+interface Focus {
+  tab: TabId;
+  n: number;
+}
+
+// Brings the requested part into view and moves focus to it, once per request. It renders after the
+// chapter's tabs inside their Suspense, so its effect runs only once every chunk above it has arrived and
+// the part sits where it will stay.
+function Land({ focus }: { focus: Focus | null }) {
+  const taken = useRef(0);
+  useEffect(() => {
+    if (!focus || focus.n <= taken.current) return;
+    taken.current = focus.n;
+    const el = document.getElementById(sectionId(focus.tab));
+    if (!el) return;
+    if (typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" });
+    el.focus({ preventScroll: true });
+  }, [focus]);
+  return null;
+}
 
 export interface AppViewProps {
   /** The page's state (useWorkbench in the app; a stand-in in test/t-app.mjs). */
@@ -115,7 +148,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   // A switch is a transition: the tab on screen stays (dimmed) until the next one's chunk is in,
   // instead of the panel blanking to a loading line. A prefetched tab arrives at once.
   const [switching, startSwitch] = useTransition();
-  const { setTab, view, rfHistory } = wb;
+  const { setChapter, view, rfHistory } = wb;
   // The walk-forward tab opens on its first segment unless the caller names the other (the published
   // strip in the band, the in-sample note on the Optimization tab).
   //
@@ -127,10 +160,24 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   const switchTab = useCallback(
     (id: TabId, to?: WalkView, land = false) =>
       startSwitch(() => {
-        setTab(id, to);
+        setChapter(chapterOf(id), to);
         if (land) setLanding((n) => n + 1);
       }),
-    [setTab],
+    [setChapter],
+  );
+  const switchChapter = useCallback((id: ChapterId) => startSwitch(() => setChapter(id)), [setChapter]);
+  // An older link's tab is landed on once, when it is not already the top of its chapter; the palette's
+  // jumps land every time.
+  const [focus, setFocus] = useState<Focus | null>(() =>
+    wb.entry && CHAPTER_TABS[chapterOf(wb.entry)][0] !== wb.entry ? { tab: wb.entry, n: 1 } : null,
+  );
+  const jump = useCallback(
+    (id: TabId) =>
+      startSwitch(() => {
+        setChapter(chapterOf(id));
+        setFocus((f) => ({ tab: id, n: (f?.n ?? 0) + 1 }));
+      }),
+    [setChapter],
   );
   const takeLanding = useCallback((n: number) => {
     if (n <= landed.current) return false;
@@ -169,7 +216,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
     return nextFrame(() => setHeld(false));
   }, [behind, ready]);
   const settling = behind || held;
-  const Tab = tabs[wb.tab];
+  const chapterTabs = CHAPTER_TABS[wb.chapter];
   const drawn = ready !== null;
   useEffect(() => (drawn && tabs === TABS ? whenIdle(prefetchTabs) : undefined), [drawn, tabs]);
 
@@ -210,37 +257,52 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
             </Boundary>
             {ready ? (
               <>
-                <nav className="app-tabs" aria-label="Analysis tabs">
-                  <SegControl options={TAB_OPTIONS} value={wb.tab} onChange={switchTab} ariaLabel="Analysis" idPrefix={TAB_PREFIX} />
+                <nav className="app-tabs app-chapters" aria-label="Chapters">
+                  <SegControl options={CHAPTER_OPTIONS} value={wb.chapter} onChange={switchChapter} ariaLabel="Chapters" idPrefix={CHAPTER_PREFIX} />
                 </nav>
-                {/* Above the keyed Boundary, so it outlives a switch: the transition then keeps the old
-                    tab up while the new chunk loads, and only the first tab ever shows this line. */}
-                <Suspense fallback={<ChartNote kind="loading" height={320}>Loading {TAB_LABELS[wb.tab]}</ChartNote>}>
-                  <Boundary key={wb.tab} name={TAB_LABELS[wb.tab]} resetKey={ready}>
-                    <section
-                      className="app-tab"
-                      role="tabpanel"
-                      id={tabPanelId(TAB_PREFIX, wb.tab)}
-                      aria-labelledby={tabId(TAB_PREFIX, wb.tab)}
-                      aria-busy={switching || settling || undefined}
-                    >
-                      <Tab
-                        analysis={ready}
-                        settings={wb.settings}
-                        level={wb.level}
-                        weights={wb.weights}
-                        setWeights={wb.setWeights}
-                        requestSettings={wb.setSettings}
-                      />
-                    </section>
-                  </Boundary>
+                {/* Above the keyed panel, so it outlives a switch: the transition then keeps the old chapter up
+                    while the new chunks load, and only the first chapter ever shows this line. */}
+                <Suspense fallback={<ChartNote kind="loading" height={320}>Loading {CHAPTER_LABELS[wb.chapter]}</ChartNote>}>
+                  <section
+                    key={wb.chapter}
+                    className="app-chapter"
+                    role="tabpanel"
+                    id={tabPanelId(CHAPTER_PREFIX, wb.chapter)}
+                    aria-labelledby={tabId(CHAPTER_PREFIX, wb.chapter)}
+                    aria-busy={switching || settling || undefined}
+                  >
+                    {chapterTabs.length === 0 ? (
+                      <Boundary name={CHAPTER_LABELS.overview}>
+                        <ChapterContents onOpen={switchChapter} />
+                      </Boundary>
+                    ) : (
+                      chapterTabs.map((id) => {
+                        const Tab = tabs[id];
+                        return (
+                          <Boundary key={id} name={TAB_LABELS[id]} resetKey={ready}>
+                            <div className="app-tab" id={sectionId(id)} data-section={id} tabIndex={-1}>
+                              <Tab
+                                analysis={ready}
+                                settings={wb.settings}
+                                level={wb.level}
+                                weights={wb.weights}
+                                setWeights={wb.setWeights}
+                                requestSettings={wb.setSettings}
+                              />
+                            </div>
+                          </Boundary>
+                        );
+                      })
+                    )}
+                    <Land focus={focus} />
+                  </section>
                 </Suspense>
               </>
             ) : null}
           </main>
         </div>
         <Footer />
-        <CommandPalette level={wb.level} setLevel={wb.setLevel} tab={wb.tab} setTab={switchTab} />
+        <CommandPalette level={wb.level} setLevel={wb.setLevel} chapter={wb.chapter} setChapter={switchChapter} jump={jump} />
       </div>
     </TabContext.Provider>
   );

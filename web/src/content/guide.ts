@@ -1,7 +1,7 @@
 // The guide's words: "How to read this page", for a reader new to all of this. The in-app page (src/guide/GuidePage.tsx)
 // is the source, and the PDF (public/guide.pdf, scripts/guide-pdf.mjs) is exported from it, never written apart.
 //
-// It is written from the page's own names and held to them. Every tab, settings group and tab section is keyed by the
+// It is written from the page's own names and held to them. Every chapter, tab, settings group and tab section is keyed by the
 // page's id or heading, and test/t-guide.mjs fails when the guide names one the page no longer renders, AND when the
 // page renders one the guide has no entry for, so it cannot go stale by omission either. A name the page prints, quoted
 // inside the prose, is written [[like this]]: the page shows it in bold, and the suite finds every one of them on the
@@ -17,7 +17,7 @@ import { format } from "../format.ts";
 import { MAX_TICKERS, MIN_TICKERS } from "../lib/clean.ts";
 import { TRADING_DAYS } from "../lib/stats.ts";
 import { BENCHMARKS } from "../state/defaults.ts";
-import { LEVELS, TAB_IDS, TAB_LABELS, type TabId } from "../types.ts";
+import { CHAPTER_IDS, CHAPTER_LABELS, LEVELS, TAB_IDS, type ChapterId, type TabId } from "../types.ts";
 import { MEGA_CAP_IN_SAMPLE, MEGA_CAP_IN_SAMPLE_END, MEGA_CAP_IN_SAMPLE_RF, PUBLISHED_SETS } from "./published.ts";
 import { ASSUMPTIONS, INPUT_HEADINGS, INPUT_IDS, type InputId } from "./inputs.ts";
 
@@ -37,7 +37,13 @@ export interface GuidePart {
   body: readonly string[];
 }
 
-/** A tab's entry: the question it answers, what it opens on, then one part per section heading it prints. */
+/** A chapter's entry: the question it answers and what it holds. Its tabs' entries follow it, in CHAPTER_TABS' order. */
+export interface GuideChapter {
+  question: string;
+  opens: readonly string[];
+}
+
+/** A tab's entry, one part of its chapter: the question it answers, what it opens on, then one part per section heading it prints. */
 export interface GuideTab {
   question: string;
   opens: readonly string[];
@@ -62,7 +68,7 @@ export const GUIDE_START: readonly string[] = [
   "This page takes a handful of investments you choose, looks at how their prices moved, and works out how different ways of " +
     "splitting money between them would have done. This guide says what each part of the page shows, in plain words, for a " +
     "reader who has not met these ideas before.",
-  `Names in bold, like [[${INPUT_HEADINGS.tickers}]] or [[${TAB_LABELS.risk}]], are written exactly as the page prints them, ` +
+  `Names in bold, like [[${INPUT_HEADINGS.tickers}]] or [[${CHAPTER_LABELS.performance}]], are written exactly as the page prints them, ` +
     "so you can find them on the screen. Words in the glossary at the end are explained there.",
   "Every figure describes the past: the prices between two dates you pick. Nothing on the page is a forecast or a " +
     "recommendation, and nothing you do on it is saved anywhere but in your own browser.",
@@ -82,7 +88,7 @@ export const GUIDE_IDEA: GuidePart = {
       "that same stretch, which is like setting an exam after reading the answers. An in-sample figure shows what the best " +
       "split would have been with hindsight, not what anyone could have earned.",
     "An out-of-sample figure is the fair test: choose the weights on earlier prices, then hold them, unchanged, over later " +
-      `days they have not seen. The [[${TAB_LABELS.walkforward}]] tab runs that test, and the line at the top of the page ` +
+      `days they have not seen. The [[${CHAPTER_LABELS.holdup}]] chapter runs that test, and the line at the top of the page ` +
       "quotes the result as it was published.",
     `The gap can be large. Take the [[${mega.name}]] set, shares in some of the largest US companies. Fitted to all of ` +
       "its prices up to " +
@@ -115,7 +121,7 @@ export const GUIDE_FIRST_SCREEN: readonly GuidePart[] = [
         "project, then three out-of-sample Sharpe ratios, for an even split, for the least volatile mix and for the highest-" +
         "Sharpe mix. When your tickers are exactly one of the three published sets, the line names that set; on any other " +
         "basket it quotes the five mega-caps. These figures are fixed: they never move with your settings.",
-      "[[Walk-forward test]] opens the same test, replayed, in its tab, and the last link opens the published method note. On " +
+      "[[Walk-forward test]] opens the same test, replayed, in its chapter, and the last link opens the published method note. On " +
         "a phone the sentence folds behind [[The published sentence]]; tap it to read it.",
     ],
   },
@@ -201,7 +207,7 @@ export const GUIDE_INPUT: Readonly<Record<InputId, readonly string[]>> = {
   ],
   level: [
     `How much the small i marks beside the figures explain. [[${plain}]], the default, uses everyday words; [[${finance}]] ` +
-      `uses the terms a finance course would; [[${formula}]] gives the formula, and also adds a line under each tab's opening ` +
+      `uses the terms a finance course would; [[${formula}]] gives the formula, and also adds a line under each part's opening ` +
       "sentence with the formula behind its figure. The level changes the explanations, never a figure. This guide uses the " +
       `${plain} wording.`,
   ],
@@ -212,16 +218,41 @@ export const GUIDE_INPUT_PHONE =
   "On a phone the bar folds into one row at the top of the page that says what is set; tap [[Settings]] on it to open " +
   "every setting in a sheet.";
 
-// ---- the tabs ---------------------------------------------------------------------------------------------------
+// ---- the chapters, and the tabs inside them ----------------------------------------------------------------------
 
-export const GUIDE_TABS_INTRO: readonly string[] = [
-  "The row of tabs under the plates holds the analysis. Most tabs open on one sentence, in large type, that states what " +
-    "their figures show, then the charts and tables behind it. Every one of them is computed from the window and the tickers in " +
-    "the settings.",
-  "Four portfolios recur across the tabs: equal weight (the even split), GMV (the least volatile mix), tangency (the highest-" +
-    "Sharpe mix) and your own, which the page calls [[Custom]] and you set on the " +
-    `[[${TAB_LABELS.custom}]] tab. GMV and tangency are chosen on the window's prices, so their figures are in-sample.`,
+export const GUIDE_CHAPTERS_INTRO: readonly string[] = [
+  `The row of five chapters under the plates holds the analysis, in reading order: [[${CHAPTER_LABELS.overview}]], ` +
+    `[[${CHAPTER_LABELS.performance}]], [[${CHAPTER_LABELS.diversification}]], [[${CHAPTER_LABELS.build}]] and ` +
+    `[[${CHAPTER_LABELS.holdup}]]. Each chapter after the first shows its parts one under the other, and most parts open on ` +
+    "one sentence, in large type, that states what their figures show, then the charts and tables behind it. Every one of " +
+    "them is computed from the window and the tickers in the settings.",
+  "Four portfolios recur across the chapters: equal weight (the even split), GMV (the least volatile mix), tangency (the " +
+    "highest-Sharpe mix) and your own, which the page calls [[Custom]] and you set in " +
+    `[[${CHAPTER_LABELS.build}]]. GMV and tangency are chosen on the window's prices, so their figures are in-sample.`,
 ];
+
+export const GUIDE_CHAPTERS: Readonly<Record<ChapterId, GuideChapter>> = {
+  overview: {
+    question: "Where should I start?",
+    opens: ["The chapter the page opens on. It lists the other four, each with one line on what it answers; pick one to open it."],
+  },
+  performance: {
+    question: "How did each investment and each mix grow, and how far did they fall?",
+    opens: ["Two parts: the returns first, then the risk."],
+  },
+  diversification: {
+    question: "Which of the investments moved together?",
+    opens: ["One part: how closely each pair moved."],
+  },
+  build: {
+    question: "Which mix would have been best, and how does your own compare?",
+    opens: ["Two parts: the mixes the page fits to the prices, then your own mix."],
+  },
+  holdup: {
+    question: "Would the best mix have done as well without hindsight?",
+    opens: ["Two parts: the walk-forward test first, then how much the answer moves with the window it is fitted on."],
+  },
+};
 
 export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
   returns: {
@@ -312,7 +343,7 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
     opens: [
       "Correlation runs from minus one (always moving opposite) through zero (unrelated) to plus one (always moving " +
         "together). Investments that do not move together are what makes spreading money between them worth anything. The " +
-        "tab opens on the most and the least correlated pair, a shaded grid of every pair, and the same figures in a table.",
+        "chapter opens on the most and the least correlated pair, a shaded grid of every pair, and the same figures in a table.",
     ],
     sections: [
       {
@@ -338,7 +369,7 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
     question: "Which mixes of these assets did best, with hindsight?",
     opens: [
       "It opens on the highest-Sharpe mix's weights and its in-sample Sharpe ratio, against the even split's. Everything " +
-        "fitted on this tab is chosen on the same prices it is scored on.",
+        "fitted here is chosen on the same prices it is scored on.",
     ],
     sections: [
       {
@@ -401,7 +432,7 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
     question: "What about a mix you choose yourself?",
     opens: [
       "It opens on your mix's yearly return, volatility and Sharpe ratio, against the highest-Sharpe mix's. Your weights " +
-        "travel in the page's link, and appear as [[Custom]] on the other tabs.",
+        "travel in the page's link, and appear as [[Custom]] everywhere else on the page.",
     ],
     sections: [
       {
@@ -426,11 +457,11 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
       },
       {
         heading: "Scorecard",
-        body: [`The same scorecard as the [[${TAB_LABELS.optimization}]] tab, with your mix in it.`],
+        body: ["The same scorecard as the one above it, with your mix in it."],
       },
       {
         heading: "Normalized Weights",
-        body: ["Your settings after they are divided by their total: the shares every figure on the tab uses."],
+        body: ["Your settings after they are divided by their total: the shares every figure of your mix uses."],
       },
     ],
   },
@@ -535,15 +566,15 @@ export const GUIDE_EVERYWHERE: readonly GuidePart[] = [
     heading: "The link in the address bar",
     body: [
       "Once you change something, the address bar holds a link to exactly this view: the tickers, dates, rate, benchmark, " +
-        "short selling, your custom weights and the tab. Send it and the other person opens the same analysis, on the latest " +
+        "short selling, your custom weights and the chapter. Send it and the other person opens the same analysis, on the latest " +
         "prices unless you set an end date. The starting amount is never in it.",
     ],
   },
   {
     heading: "The keyboard",
     body: [
-      "Press Ctrl and K together (Command and K on a Mac) to open a small box that sets the explanation level or goes to a " +
-        "tab, or to this guide, as you type its name.",
+      "Press Ctrl and K together (Command and K on a Mac) to open a small box that sets the explanation level, opens a " +
+        "chapter or a part of one, or opens this guide, as you type its name.",
     ],
   },
 ];
@@ -582,7 +613,7 @@ export const GUIDE_TERMS: readonly GuideTerm[] = [
   },
   {
     term: "Estimation window",
-    text: "The stretch of prices the weights are chosen from; the page also calls it a lookback. The Sensitivity tab changes it to show how much it matters.",
+    text: "The stretch of prices the weights are chosen from; the page also calls it a lookback. Does it hold up? changes it to show how much it matters.",
   },
   {
     term: "ETF",
@@ -682,6 +713,8 @@ export const GUIDE_METHOD =
   "Every formula and data source is listed under [[Methodology]] at the foot of the page, and of this guide. The code is " +
   "public, linked beside it.";
 
-// The structure the suite holds to the page, exported for it: the tab ids in the guide's order, the settings groups in the guide's order.
+// The structure the suite holds to the page, exported for it: the chapter and tab ids in the guide's order, the settings
+// groups in the guide's order.
+export const GUIDE_CHAPTER_IDS: readonly ChapterId[] = CHAPTER_IDS.filter((id) => Object.hasOwn(GUIDE_CHAPTERS, id));
 export const GUIDE_TAB_IDS: readonly TabId[] = TAB_IDS.filter((id) => Object.hasOwn(GUIDE_TABS, id));
 export const GUIDE_INPUT_IDS: readonly InputId[] = INPUT_IDS.filter((id) => Object.hasOwn(GUIDE_INPUT, id));

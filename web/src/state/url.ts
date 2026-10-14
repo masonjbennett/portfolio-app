@@ -1,6 +1,7 @@
 // The share link: settings (never the dollar amount, but the scorecard's added columns), custom weights
-// and the tab (with the walk-forward tab's segment, only when it is the published one), as a query
-// string. The app has no share link at all; its sidebar starts over on every visit (645-805).
+// and the chapter (with the walk-forward test's segment, only when it is the published one), as a query
+// string. A link from before the chapters named a tab (?tab=); it is still read, as the chapter that holds
+// the tab, and never written. The app has no share link at all; its sidebar starts over on every visit (645-805).
 //
 // Encoding picks each field BY NAME, never by spreading the object it is given, so an amount
 // passed in by mistake has no way into the string. Decoding trusts nothing: a link is typed,
@@ -11,11 +12,11 @@ import { SYMBOL } from "../data/prices.ts";
 import { MAX_TICKERS, parseTickers } from "../lib/clean.ts";
 import { ADDED_IDS, type AddedId } from "../lib/added.ts";
 import { BENCHMARKS } from "./defaults.ts";
-import { TAB_IDS } from "../types.ts";
-import type { CustomWeights, ShareSettings, ShareState, TabId, WalkView } from "../types.ts";
+import { CHAPTER_IDS, TAB_IDS, chapterOf } from "../types.ts";
+import type { ChapterId, CustomWeights, ShareSettings, ShareState, TabId, WalkView } from "../types.ts";
 
 // Query keys. Short, because people read and paste the link.
-const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", cols: "cols", w: "w", tab: "tab", view: "view" };
+const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", cols: "cols", w: "w", ch: "ch", tab: "tab", view: "view" };
 
 // The app does not validate ticker characters (1007); a URL is hostile input, so a symbol is held
 // to the pattern the price endpoint accepts (Yahoo's alphabet: BRK-B, ^GSPC, EURUSD=X), and a link
@@ -48,10 +49,10 @@ export function encodeShare(state: ShareState): string {
   if (cols.length) put(K.cols, cols.join(","));
   const w = state.weights ? Object.entries(state.weights).filter(([t, v]) => SYMBOL.test(t) && Number.isFinite(v)) : [];
   if (w.length) put(K.w, w.map(([t, v]) => `${t}:${v}`).join(","));
-  if (state.tab) put(K.tab, state.tab);
-  // The walk-forward tab's second segment is the one view a link carries, and only beside that tab: the
-  // first segment is what the tab opens on anyway, and no other tab has segments.
-  if (state.tab === "walkforward" && state.view === "published") put(K.view, "published");
+  if (state.chapter) put(K.ch, state.chapter);
+  // The walk-forward test's second segment is the one view a link carries, and only beside its chapter: the
+  // first segment is what the test opens on anyway, and nothing else has segments.
+  if (state.chapter === "holdup" && state.view === "published") put(K.view, "published");
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
@@ -105,6 +106,7 @@ function columns(v: string): AddedId[] | null {
 export function decodeShare(search: string): ShareState {
   const settings: Partial<ShareSettings> = {};
   let w: CustomWeights | null = null;
+  let chapter: ChapterId | null = null;
   let tab: TabId | null = null;
   let view: WalkView | null = null;
   try {
@@ -135,13 +137,23 @@ export function decodeShare(search: string): ShareState {
     if (cols) settings.cols = cols;
     const wv = get(K.w);
     w = wv === null ? null : weights(wv);
+    // A chapter by its id; failing that, an older link's tab, as the chapter that holds it (and the tab to land on).
+    // A link naming both is read by its chapter, and its tab only when the tab sits in that chapter.
+    const chv = get(K.ch);
+    chapter = chv !== null && (CHAPTER_IDS as readonly string[]).includes(chv) ? (chv as ChapterId) : null;
     const tb = get(K.tab);
-    tab = tb !== null && (TAB_IDS as readonly string[]).includes(tb) ? (tb as TabId) : null;
-    // "published" beside the walk-forward tab, exactly; any other value, or the key on any other tab, is ignored.
-    view = tab === "walkforward" && get(K.view) === "published" ? "published" : null;
+    const named = tb !== null && (TAB_IDS as readonly string[]).includes(tb) ? (tb as TabId) : null;
+    if (named && (chapter === null || chapterOf(named) === chapter)) {
+      tab = named;
+      chapter = chapterOf(named);
+    }
+    // "published" beside the walk-forward test's chapter, or an older link's walk-forward tab, exactly; any other
+    // value, or the key beside anything else, is ignored.
+    const wf = chapter === "holdup" && (tab === null || tab === "walkforward");
+    view = wf && get(K.view) === "published" ? "published" : null;
   } catch {
     // URLSearchParams does not throw on a malformed escape today; if a runtime ever does, the link
     // is simply not read.
   }
-  return { settings, weights: w, tab, view };
+  return { settings, weights: w, chapter, tab, view };
 }

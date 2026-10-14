@@ -90,14 +90,14 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const ANALYSIS = fields("Analysis");
 const WORKBENCH = fields("Workbench");
 const TABPROPS = fields("TabProps");
-check(ANALYSIS.length === 23 && WORKBENCH.length === 14 && TABPROPS.length === 6,
+check(ANALYSIS.length === 23 && WORKBENCH.length === 15 && TABPROPS.length === 6,
   "types: the field reader finds Analysis, Workbench and TabProps", `${ANALYSIS.length} / ${WORKBENCH.length} / ${TABPROPS.length}`);
 // The walk-forward tab's wiring, by name: the page's segment and rate history on Workbench, what reaches a
 // tab through TabContext, the rate history itself and the rate input the test on the reader's basket gets.
 // TabProps stays as it was: nothing of the walk-forward tab is handed to the other six.
-check(WORKBENCH.includes("view") && WORKBENCH.includes("rfHistory") && WORKBENCH.includes("setTab") &&
-  /setTab: \(tab: TabId, view\?: WalkView\) => void;/.test(src("src/types.ts")),
-  "types: Workbench carries the walk-forward segment (view), the rate history (rfHistory), and setTab names a segment", WORKBENCH.join(","));
+check(WORKBENCH.includes("view") && WORKBENCH.includes("rfHistory") && WORKBENCH.includes("setChapter") && WORKBENCH.includes("entry") &&
+  /setChapter: \(chapter: ChapterId, view\?: WalkView\) => void;/.test(src("src/types.ts")),
+  "types: Workbench carries the walk-forward segment (view), the rate history (rfHistory), the arrival's tab (entry), and setChapter names a segment", WORKBENCH.join(","));
 // TabContextValue also carries the landing a way in asks for (landing, takeLanding: src/App.tsx).
 check(same(fields("TabContextValue"), ["view", "setTab", "rfHistory", "landing", "takeLanding"]) && same(fields("RfHistory"), ["basis", "series", "loading"]) &&
   same(fields("WalkRates"), ["basis", "points", "flat"]) &&
@@ -192,7 +192,7 @@ try {
   check(false, "hook: useWorkbench renders", err.message);
 }
 check(wb && same(Object.keys(wb), WORKBENCH), "hook: useWorkbench returns exactly the fields Workbench declares", wb && Object.keys(wb).sort().join(","));
-check(wb && ["loading", "empty", "error", "ready"].includes(wb.analysis?.status) && T.TAB_IDS?.includes(wb.tab), "hook: analysis is a LoadState and tab a TabId");
+check(wb && ["loading", "empty", "error", "ready"].includes(wb.analysis?.status) && T.CHAPTER_IDS?.includes(wb.chapter) && wb.entry === null, "hook: analysis is a LoadState, chapter a ChapterId, and no tab to land on without a link naming one");
 check(same(Object.keys(tabProps(ex)), TABPROPS), "tabs: the test's props are exactly TabProps", Object.keys(tabProps(ex)).sort().join(","));
 // Each tab's file is its id capitalised, except the one whose name is two words.
 const TAB_FILE = { walkforward: "src/tabs/WalkForward.tsx" };
@@ -327,8 +327,15 @@ check(T.LEVELS?.find((l) => l.id === D.DEFAULT_LEVEL)?.oracle === knowledge, "de
 const points = Number(grab(/def efficient_frontier\([^)]*n_points=(\d+)/, "efficient_frontier's n_points")[1]);
 check(D.FRONTIER_POINTS === points, "defaults: FRONTIER_POINTS (948)", `${D.FRONTIER_POINTS} vs ${points}`);
 const tabs = grab(/st\.tabs\(\[([\s\S]*?)\]\)/, "the tab labels")[1]?.match(/"([^"]+)"/g)?.map((s) => s.slice(1, -1).trim());
-check(tabs?.length === 6 && JSON.stringify(T.TAB_IDS?.slice(0, 6).map((id) => T.TAB_LABELS[id])) === JSON.stringify(tabs) && D.DEFAULT_TAB === T.TAB_IDS?.[0],
-  "types: the first six TAB_LABELS are the app's six, trimmed, in order (1213-1220)", JSON.stringify(tabs));
+check(tabs?.length === 6 && JSON.stringify(T.TAB_IDS?.slice(0, 6).map((id) => T.TAB_LABELS[id])) === JSON.stringify(tabs) && D.DEFAULT_CHAPTER === T.CHAPTER_IDS?.[0],
+  "types: the first six TAB_LABELS are the app's six, trimmed, in order (1213-1220), and the page opens on its first chapter", JSON.stringify(tabs));
+// The five chapters hold the seven tabs, each exactly once, and keep the app's order inside each chapter but one: Does
+// it hold up? leads with the walk-forward test, the page's own.
+const held = (T.CHAPTER_IDS ?? []).flatMap((c) => T.CHAPTER_TABS?.[c] ?? []);
+check(T.CHAPTER_IDS?.length === 5 && T.CHAPTER_IDS[0] === "overview" && T.CHAPTER_TABS?.overview?.length === 0 &&
+  same(held, T.TAB_IDS ?? []) && held.length === T.TAB_IDS?.length && held.every((t) => T.CHAPTER_TABS[T.chapterOf(t)].includes(t)) &&
+  T.CHAPTER_TABS.holdup?.[0] === "walkforward",
+  "types: five chapters, the Overview first and holding no tab, the other four holding the seven tabs once each, Does it hold up? led by the walk-forward test", JSON.stringify(T.CHAPTER_TABS));
 // The seventh is the page's own, which the app does not have: last, so the app's six keep their places.
 check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?.walkforward === "Walk-forward" &&
   Object.keys(T.TAB_LABELS ?? {}).length === 7,

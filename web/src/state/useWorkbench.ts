@@ -21,13 +21,13 @@ import { createContext, useCallback, useDeferredValue, useEffect, useMemo, useRe
 import { parseTickers, validateRequest } from "../lib/clean.ts";
 import { isExample } from "../data/payload.ts";
 import { analyze, isPricePayload, MESSAGES, priceSpan } from "./analyze.ts";
-import { DEFAULT_SETTINGS, DEFAULT_TAB, PRESETS, RF_FALLBACK } from "./defaults.ts";
+import { DEFAULT_SETTINGS, DEFAULT_CHAPTER, PRESETS, RF_FALLBACK } from "./defaults.ts";
 import { isIsoDay, readRfSeries, windowRate, type RfResolved, type RfSeries, type RfView } from "./rfwindow.ts";
 import { loadPrefs, loadSettings, savePrefs, saveSettings } from "./storage.ts";
 import { decodeShare, encodeShare } from "./url.ts";
 import type {
   Analysis, AnalysisError, CustomWeights, Level, LoadState, PricePayload, RfChoice, RfHistory, RfRate, Settings,
-  ShareSettings, TabContextValue, TabId, WalkView, Workbench,
+  ChapterId, ShareSettings, TabContextValue, WalkView, Workbench,
 } from "../types.ts";
 
 export const EXAMPLE_URL = "/example-cross.json";
@@ -161,14 +161,17 @@ function initialState() {
   const share = decodeShare(currentSearch());
   const prefs = loadPrefs();
   const settings: Settings = { ...FIRST_SETTINGS, ...loadSettings(), ...share.settings, amount: prefs.amount };
-  return { settings, level: prefs.level, weights: share.weights ?? {}, tab: share.tab ?? DEFAULT_TAB, view: share.view ?? "basket" };
+  return {
+    settings, level: prefs.level, weights: share.weights ?? {}, chapter: share.chapter ?? DEFAULT_CHAPTER,
+    entry: share.tab ?? null, view: share.view ?? "basket",
+  };
 }
 
-function shareSearch(settings: Settings, weights: CustomWeights, tab: TabId, view: WalkView): string {
+function shareSearch(settings: Settings, weights: CustomWeights, chapter: ChapterId, view: WalkView): string {
   return encodeShare({
     settings: shareOf(settings),
     weights: Object.keys(weights).length ? weights : null,
-    tab: tab === DEFAULT_TAB ? null : tab,
+    chapter: chapter === DEFAULT_CHAPTER ? null : chapter,
     view,
   });
 }
@@ -178,12 +181,12 @@ export function useWorkbench(): Workbench {
   const [settings, setSettingsState] = useState<Settings>(init.settings);
   const [level, setLevel] = useState<Level>(init.level);
   const [weights, setWeights] = useState<CustomWeights>(init.weights);
-  const [tab, setTabState] = useState<TabId>(init.tab);
+  const [chapter, setChapterState] = useState<ChapterId>(init.chapter);
   const [view, setView] = useState<WalkView>(init.view);
-  // Every way into a tab opens the walk-forward tab on its first segment, except one that names the
+  // Every way into a chapter opens the walk-forward test on its first segment, except one that names the
   // other: the published strip, the in-sample note and a link carrying view=published.
-  const setTab = useCallback((next: TabId, nextView: WalkView = "basket") => {
-    setTabState(next);
+  const setChapter = useCallback((next: ChapterId, nextView: WalkView = "basket") => {
+    setChapterState(next);
     setView(nextView);
   }, []);
   // The prices on screen: only a payload analyze() accepted ever lands here.
@@ -360,8 +363,8 @@ export function useWorkbench(): Workbench {
   useEffect(() => saveSettings(JSON.parse(shareKey) as ShareSettings), [shareKey]);
 
   // The address bar carries the share link once the visitor changes something (never the amount).
-  const search = shareSearch(settings, weights, tab, view);
-  const written = useRef(shareSearch(init.settings, init.weights, init.tab, init.view));
+  const search = shareSearch(settings, weights, chapter, view);
+  const written = useRef(shareSearch(init.settings, init.weights, init.chapter, init.view));
   useEffect(() => {
     if (search === written.current) return;
     written.current = search;
@@ -392,7 +395,7 @@ export function useWorkbench(): Workbench {
   const rfHistory = useMemo<RfHistory>(() => ({ basis: inUse.basis, series, loading: rfPending }), [inUse.basis, series, rfPending]);
 
   return {
-    settings, setSettings, level, setLevel, analysis, fetching: fetching || hold, failure, rf: rfView, weights, setWeights, tab, setTab,
+    settings, setSettings, level, setLevel, analysis, fetching: fetching || hold, failure, rf: rfView, weights, setWeights, chapter, entry: init.entry, setChapter,
     view, rfHistory,
   };
 }

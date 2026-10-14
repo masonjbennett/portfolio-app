@@ -172,19 +172,19 @@ check(a.rf === newRf && a.rfSource === "manual" && bits(a.tangency.w, fresh6.w) 
   "ledger:rf-live: the port recomputes tangency at the edited rate at once, with ZERO new /api/prices calls",
   `${a.rf} ${a.tangency.sharpe} vs ${fresh6.sharpe}; calls ${n0} -> ${priceCalls().length}`);
 
-// Shorting, amount, level, weights and tab: in place, no fetch.
+// Shorting, amount, level, weights and chapter: in place, no fetch.
 await act(async () => {
   wb.setSettings({ allowShort: true, amount: 98765 });
   wb.setLevel("formula");
   wb.setWeights({ VTI: 0.5, AGG: -0.25 });
-  wb.setTab("risk");
+  wb.setChapter("performance");
   await sleep(0);
 });
 await later();
 a = ready();
 check(a.allowShort && a.gmv.w.some((w) => w < 0) && priceCalls().length === n0, "shorting: the bounds change in place, with no price request");
-check(!/98765|amount/.test(location.search) && location.search.includes("w=VTI:0.5,AGG:-0.25") && location.search.includes("tab=risk") && location.search.includes("short=1"),
-  "url: the address bar carries the shorting, weights and tab, and never the amount", location.search);
+check(!/98765|amount/.test(location.search) && location.search.includes("w=VTI:0.5,AGG:-0.25") && location.search.includes("ch=performance") && location.search.includes("short=1"),
+  "url: the address bar carries the shorting, weights and chapter, and never the amount", location.search);
 const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
 check(prefs.amount === 98765 && prefs.level === "formula" && !/98765/.test(localStorage.getItem(SETTINGS_KEY)),
   "storage: the amount and level are remembered in this browser, the amount only in the prefs", JSON.stringify(prefs));
@@ -208,18 +208,18 @@ check(location.search.includes("cols=tan.1y,rp") && !/cols/.test(localStorage.ge
     });
     await later();
   };
-  await step(() => wb.setTab("walkforward", "published"));
-  const shown = `${wb.tab}/${wb.view} ${location.search}`;
-  const okShown = wb.view === "published" && /[?&]tab=walkforward&view=published(&|$)/.test(location.search);
-  await step(() => wb.setTab("walkforward", "basket"));
-  const first = `${wb.tab}/${wb.view} ${location.search}`;
-  const okFirst = wb.view === "basket" && location.search.includes("tab=walkforward") && !/view=/.test(location.search);
-  await step(() => wb.setTab("walkforward", "published"));
-  await step(() => wb.setTab("risk"));
-  const left = `${wb.tab}/${wb.view} ${location.search}`;
-  const okLeft = wb.view === "basket" && location.search.includes("tab=risk") && !/view=/.test(location.search);
+  await step(() => wb.setChapter("holdup", "published"));
+  const shown = `${wb.chapter}/${wb.view} ${location.search}`;
+  const okShown = wb.view === "published" && /[?&]ch=holdup&view=published(&|$)/.test(location.search);
+  await step(() => wb.setChapter("holdup", "basket"));
+  const first = `${wb.chapter}/${wb.view} ${location.search}`;
+  const okFirst = wb.view === "basket" && location.search.includes("ch=holdup") && !/view=/.test(location.search);
+  await step(() => wb.setChapter("holdup", "published"));
+  await step(() => wb.setChapter("performance"));
+  const left = `${wb.chapter}/${wb.view} ${location.search}`;
+  const okLeft = wb.view === "basket" && location.search.includes("ch=performance") && !/view=|tab=/.test(location.search);
   check(okShown && okFirst && okLeft,
-    "url: view=published is in the link only while the walk-forward tab shows that segment; leaving the tab opens the first next time",
+    "url: view=published is in the link only while the walk-forward test shows that segment; leaving its chapter opens the first next time",
     [shown, first, left].join(" | "));
   check(wb.rfHistory.series?.series.length > 0 && wb.rfHistory.basis === "manual" && ready()?.rfSource === "manual" && wb.rfHistory.loading === false,
     "rate history: the hook hands on the daily series it holds, and the basis of the figures on screen (a typed rate here)",
@@ -496,13 +496,17 @@ view.unmount();
   v.unmount();
 }
 
-// The walk-forward segment a link opens: published only beside the walk-forward tab.
-for (const [search, want] of [["?tab=walkforward&view=published", "walkforward/published"], ["?view=published", "returns/basket"], ["?tab=risk&view=published", "risk/basket"]]) {
+// The chapter and walk-forward segment a link opens: published only beside the walk-forward test; an older link's
+// tab opens its chapter and is kept as the tab to land on (the dashboard links ?tab=walkforward&view=published).
+for (const [search, want] of [
+  ["?tab=walkforward&view=published", "holdup/published/walkforward"], ["?ch=holdup&view=published", "holdup/published/null"],
+  ["?view=published", "overview/basket/null"], ["?tab=risk&view=published", "performance/basket/risk"], ["", "overview/basket/null"],
+]) {
   fresh(search);
   routes = {};
   const v = render(h(Probe));
   await settle();
-  check(`${wb.tab}/${wb.view}` === want, `url: ${search} opens ${want}`, `${wb.tab}/${wb.view}`);
+  check(`${wb.chapter}/${wb.view}/${wb.entry}` === want, `url: ${search || "no query"} opens ${want}`, `${wb.chapter}/${wb.view}/${wb.entry}`);
   v.unmount();
 }
 
@@ -514,9 +518,9 @@ routes = {};
 const v2 = render(h(Probe));
 await settle();
 check(bits(wb.settings.tickers, ["XLK", "XLF", "XLV"]) && wb.settings.start === "2020-01-02" && wb.settings.benchmark === "^NDX" &&
-  wb.settings.allowShort === FIRST_SETTINGS.allowShort && wb.tab === "correlation" && wb.weights.XLK === 0.5 && wb.level === "finance" && wb.settings.amount === 4200,
+  wb.settings.allowShort === FIRST_SETTINGS.allowShort && wb.chapter === "diversification" && wb.weights.XLK === 0.5 && wb.level === "finance" && wb.settings.amount === 4200,
   "precedence: the link's fields, then the stored ones, then the first settings; amount and level from this browser, never the link",
-  JSON.stringify({ ...wb.settings, tab: wb.tab, level: wb.level }));
+  JSON.stringify({ ...wb.settings, chapter: wb.chapter, level: wb.level }));
 check(wb.analysis.status === "loading", "no example yet: loading, not an empty result");
 v2.unmount();
 

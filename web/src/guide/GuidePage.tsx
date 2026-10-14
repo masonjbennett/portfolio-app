@@ -14,12 +14,12 @@ import Slug from "../components/Slug.tsx";
 import { APP_URL, AUTHOR, CREDENTIAL, SITE_URL } from "../content/about.tsx";
 import {
   GUIDE_DEK, GUIDE_EVERYWHERE, GUIDE_FIRST_SCREEN, GUIDE_IDEA, GUIDE_MARKS_INTRO, GUIDE_METHOD, GUIDE_PDF, GUIDE_INPUT, GUIDE_INPUT_IDS,
-  GUIDE_INPUT_INTRO, GUIDE_INPUT_PHONE, GUIDE_START, GUIDE_TAB_IDS, GUIDE_TABS, GUIDE_TABS_INTRO, GUIDE_TERMS, GUIDE_TITLE, type GuidePart,
+  GUIDE_INPUT_INTRO, GUIDE_INPUT_PHONE, GUIDE_START, GUIDE_TAB_IDS, GUIDE_TABS, GUIDE_CHAPTER_IDS, GUIDE_CHAPTERS, GUIDE_CHAPTERS_INTRO, GUIDE_TERMS, GUIDE_TITLE, type GuidePart,
 } from "../content/guide.ts";
 import { INPUT_HEADINGS } from "../content/inputs.ts";
 import { SCORE_TIP_NAMES, TIP_NAMES, tipText, type ScoreTipKey } from "../content/tooltips.ts";
 import { WALK_TIPS } from "../tabs/walkforward/tips.ts";
-import { TAB_LABELS, type TabId, type TipKey } from "../types.ts";
+import { CHAPTER_LABELS, CHAPTER_TABS, TAB_LABELS, type ChapterId, type TipKey } from "../types.ts";
 import { GUIDE_HREF } from "./route.ts";
 import "./Guide.css";
 
@@ -62,8 +62,8 @@ const Paras = ({ body }: { body: readonly string[] }) => (
 
 const headingOf = (h: GuidePart["heading"]) => (typeof h === "string" ? h : h.join(" · "));
 
-// The link that opens a tab of the page, with the reader's own settings. The walk-forward tab opens on its first view.
-const tabHref = (id: TabId) => `./?tab=${id}`;
+// The link that opens a chapter of the page, with the reader's own settings. The walk-forward test opens on its first view.
+const chapterHref = (id: ChapterId) => `./?ch=${id}`;
 
 /** The guide's sections, in order, for the contents and for the suite. */
 export const GUIDE_SECTIONS: readonly { id: string; title: string }[] = [
@@ -71,7 +71,7 @@ export const GUIDE_SECTIONS: readonly { id: string; title: string }[] = [
   { id: "idea", title: typeof GUIDE_IDEA.heading === "string" ? GUIDE_IDEA.heading : headingOf(GUIDE_IDEA.heading) },
   { id: "first-screen", title: "The first screen" },
   { id: "settings", title: "The settings" },
-  { id: "tabs", title: "The tabs" },
+  { id: "chapters", title: "The chapters" },
   { id: "everywhere", title: "On every tab" },
   { id: "glossary", title: "Glossary" },
   { id: "method", title: "How the figures are computed" },
@@ -155,26 +155,38 @@ export default function GuidePage() {
           ))}
         </section>
 
-        <section id="tabs" aria-labelledby="tabs-h">
-          <Slug id="tabs-h">{title("tabs")}</Slug>
-          <Paras body={GUIDE_TABS_INTRO} />
-          {GUIDE_TAB_IDS.map((id) => {
-            const tab = GUIDE_TABS[id];
+        <section id="chapters" aria-labelledby="chapters-h">
+          <Slug id="chapters-h">{title("chapters")}</Slug>
+          <Paras body={GUIDE_CHAPTERS_INTRO} />
+          {GUIDE_CHAPTER_IDS.map((ch) => {
+            const chapter = GUIDE_CHAPTERS[ch];
             return (
-              <section key={id} id={`tab-${id}`} className="guide-tab" data-tab={id} aria-labelledby={`tab-${id}-h`}>
-                <h3 className="guide-h3" id={`tab-${id}-h`}>
-                  {TAB_LABELS[id]}
+              <section key={ch} id={`chapter-${ch}`} className="guide-chapter" data-chapter={ch} aria-labelledby={`chapter-${ch}-h`}>
+                <h3 className="guide-h3" id={`chapter-${ch}-h`}>
+                  {CHAPTER_LABELS[ch]}
                 </h3>
-                <p className="guide-question">{tab.question}</p>
-                <Paras body={tab.opens} />
-                {tab.sections.map((s) => (
-                  <div key={headingOf(s.heading)} className="guide-section" data-heading={headingOf(s.heading)}>
-                    <h4 className="guide-h4">{headingOf(s.heading)}</h4>
-                    <Paras body={s.body} />
-                  </div>
-                ))}
+                <p className="guide-question">{chapter.question}</p>
+                <Paras body={chapter.opens} />
+                {CHAPTER_TABS[ch].filter((id) => GUIDE_TAB_IDS.includes(id)).map((id) => {
+                  const tab = GUIDE_TABS[id];
+                  return (
+                    <section key={id} id={`tab-${id}`} className="guide-tab" data-tab={id} aria-labelledby={`tab-${id}-h`}>
+                      <h4 className="guide-h4 guide-tab-h" id={`tab-${id}-h`}>
+                        {TAB_LABELS[id]}
+                      </h4>
+                      <p className="guide-question">{tab.question}</p>
+                      <Paras body={tab.opens} />
+                      {tab.sections.map((s) => (
+                        <div key={headingOf(s.heading)} className="guide-section" data-heading={headingOf(s.heading)}>
+                          <h5 className="guide-h5">{headingOf(s.heading)}</h5>
+                          <Paras body={s.body} />
+                        </div>
+                      ))}
+                    </section>
+                  );
+                })}
                 <p className="guide-open">
-                  <a href={tabHref(id)}>Open {TAB_LABELS[id]}</a>
+                  <a href={chapterHref(ch)}>Open {CHAPTER_LABELS[ch]}</a>
                 </p>
               </section>
             );

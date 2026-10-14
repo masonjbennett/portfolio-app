@@ -225,7 +225,7 @@ export function PublishedResult({ tickers = null }: { tickers?: readonly string[
     <button
       type="button"
       className="text-button band-published-open"
-      title="Open the published test, replayed, in the Walk-forward tab"
+      title="Open the published test, replayed, in Does it hold up?"
       onClick={() => page.setTab("walkforward", "published", true)}
     >
       Walk-forward test

@@ -76,5 +76,5 @@ export function loadSettings(): Partial<ShareSettings> {
 
 export function saveSettings(settings: ShareSettings): void {
   const { tickers, start, end, rf, benchmark, allowShort } = settings;
-  write(SETTINGS_KEY, encodeShare({ settings: { tickers, start, end, rf, benchmark, allowShort }, weights: null, tab: null }));
+  write(SETTINGS_KEY, encodeShare({ settings: { tickers, start, end, rf, benchmark, allowShort }, weights: null, chapter: null }));
 }

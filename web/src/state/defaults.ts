@@ -7,7 +7,7 @@
 // not these, or the rail and the numbers beside it would disagree.
 import { parseTickers } from "../lib/clean.ts";
 import { PUBLISHED_SETS } from "../content/published.ts";
-import type { Level, Settings, TabId } from "../types.ts";
+import type { ChapterId, Level, Settings } from "../types.ts";
 
 export interface Preset {
   name: string; // the button label
@@ -78,7 +78,7 @@ export const DEFAULT_BENCHMARK = BENCHMARKS[0].symbol; // index=0 (739)
 export const DEFAULT_ALLOW_SHORT = false; // the shorting toggle's value=False (749)
 export const DEFAULT_LEVEL: Level = "plain"; // session_state.knowledge = "Beginner" (17-18)
 export const FRONTIER_POINTS = 80; // efficient_frontier's n_points=80 (948), the Optimization tab's call (1600)
-export const DEFAULT_TAB: TabId = "returns"; // st.tabs opens on the first (1213)
+export const DEFAULT_CHAPTER: ChapterId = "overview"; // the story first; the app's st.tabs opened on its first tab (1213)
 
 // The app's sidebar as it stands before anything is touched. rf null is the live rate (706-717).
 export const DEFAULT_SETTINGS: Settings = {

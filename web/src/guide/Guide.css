@@ -90,18 +90,36 @@
   color: var(--color-ink);
 }
 
-.guide-tab {
+.guide-chapter {
   margin-top: var(--space-6);
   padding-top: var(--space-2);
   border-top: var(--line-hair) solid var(--color-hairline2);
 }
 
-.guide-tab:first-of-type {
+.guide-chapter:first-of-type {
   border-top: 0;
 }
 
-.guide-tab .guide-h3 {
+.guide-chapter .guide-h3 {
   margin-top: var(--space-3);
+}
+
+/* A tab's part of its chapter: a smaller heading under the chapter's, its sections' headings smaller again. */
+.guide-tab {
+  margin-top: var(--space-5);
+}
+
+.guide-tab-h {
+  font-size: 1.05rem;
+}
+
+.guide-h5 {
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-ink);
 }
 
 .guide .guide-question {
@@ -189,6 +207,7 @@
 
   .guide-h3,
   .guide-h4,
+  .guide-h5,
   .slug {
     break-after: avoid;
     break-inside: avoid;
@@ -200,12 +219,12 @@
     break-inside: avoid;
   }
 
-  #tabs,
+  #chapters,
   #glossary {
     break-before: page;
   }
 
-  .guide-tab {
+  .guide-chapter {
     margin-top: var(--space-5);
   }
 }

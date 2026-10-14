@@ -24,7 +24,7 @@ const { createElement: h } = await import("react");
 const G = await import("../src/content/guide.ts");
 const { default: GuidePage, markGlossary, GUIDE_SECTIONS } = await import("../src/guide/GuidePage.tsx");
 const { GUIDE_HREF, GUIDE_TITLE, isGuide } = await import("../src/guide/route.ts");
-const { TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
+const { CHAPTER_IDS, CHAPTER_LABELS, CHAPTER_TABS, TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
 const { INPUT_IDS, INPUT_HEADINGS } = await import("../src/content/inputs.ts");
 const P = await import("../src/content/published.ts");
 const A = await import("../src/content/about.tsx");
@@ -163,7 +163,7 @@ for (const id of TAB_IDS) {
   g.unmount();
 
   let opened = 0;
-  const p = render(h(CommandPalette, { level: "plain", setLevel() {}, tab: "returns", setTab() {}, openGuide: () => (opened += 1) }));
+  const p = render(h(CommandPalette, { level: "plain", setLevel() {}, chapter: "overview", setChapter() {}, jump() {}, openGuide: () => (opened += 1) }));
   key(document.body, "k", { ctrlKey: true });
   take("palette", p.container);
   const input = p.container.querySelector("input");
@@ -181,7 +181,7 @@ for (const id of TAB_IDS) {
 {
   const wb = {
     settings: S0, setSettings() {}, level: "plain", setLevel() {}, analysis: { status: "ready", value: EX }, fetching: false, failure: null,
-    rf: { status: "ready", value: VIEW }, weights: {}, setWeights() {}, tab: "returns", setTab() {}, view: "basket",
+    rf: { status: "ready", value: VIEW }, weights: {}, setWeights() {}, chapter: "overview", entry: null, setChapter() {}, view: "basket",
     rfHistory: { basis: "example", series: null, loading: false },
   };
   const stub = Object.fromEntries(TAB_IDS.map((id) => [id, () => h("p", null, `tab body ${id}`)]));
@@ -200,7 +200,10 @@ for (const id of TAB_IDS) {
 const ALL = Object.values(parts).map((p) => p.text).join(" \n ");
 const tabPart = (id) => parts[`tab.${id}`] ?? { text: "", marks: new Set(), slugs: new Set() };
 
-// ---- (a) the tabs, both ways ------------------------------------------------------------------------------------
+// ---- (a) the chapters and the tabs inside them, both ways ------------------------------------------------------
+check(sameList(G.GUIDE_CHAPTER_IDS, CHAPTER_IDS) && Object.keys(G.GUIDE_CHAPTERS).every((id) => CHAPTER_IDS.includes(id)),
+  "chapters: the guide has one entry per chapter, in the page's order, and none for a chapter the page does not have",
+  `guide ${Object.keys(G.GUIDE_CHAPTERS).join(",")} | page ${CHAPTER_IDS.join(",")}`);
 check(sameList(G.GUIDE_TAB_IDS, TAB_IDS) && Object.keys(G.GUIDE_TABS).every((id) => TAB_IDS.includes(id)),
   "tabs: the guide has one entry per tab, in the page's order, and none for a tab the page does not have",
   `guide ${Object.keys(G.GUIDE_TABS).join(",")} | page ${TAB_IDS.join(",")}`);
@@ -229,7 +232,9 @@ const SCOPES = [
   ["the first screen", G.GUIDE_FIRST_SCREEN.flatMap(bodies), parts.band.text],
   ["the settings", [...G.GUIDE_INPUT_INTRO, ...INPUT_IDS.flatMap((id) => G.GUIDE_INPUT[id] ?? [])], parts.rail.text],
   ["the phone's settings", [G.GUIDE_INPUT_PHONE], parts.chip.text],
-  ["the tabs", G.GUIDE_TABS_INTRO, ALL],
+  ["the chapters", G.GUIDE_CHAPTERS_INTRO, parts.app.text],
+  // A chapter's entry is read against the page's chapter row and the Overview, the part of the page that names chapters.
+  ...CHAPTER_IDS.map((id) => [CHAPTER_LABELS[id], [...(G.GUIDE_CHAPTERS[id]?.opens ?? [])], parts.app.text]),
   // A tab is read with the page around it (the tab bar, the band, the basket bar), which a reader on that tab also sees.
   ...TAB_IDS.map((id) => [TAB_LABELS[id], [...(G.GUIDE_TABS[id]?.opens ?? []), ...(G.GUIDE_TABS[id]?.sections ?? []).flatMap(bodies)], `${tabPart(id).text} ${parts.app.text}`]),
   ["every tab", G.GUIDE_EVERYWHERE.flatMap(bodies), ALL],
@@ -244,7 +249,7 @@ for (const [where, paras, page] of SCOPES) {
 }
 check(quoted >= 40, "names: the guide quotes the page's names, and this suite read them", `${quoted} quoted`);
 const unclosed = [G.GUIDE_START, G.GUIDE_IDEA.body, ...G.GUIDE_FIRST_SCREEN.map((p) => p.body), ...Object.values(G.GUIDE_INPUT), [G.GUIDE_INPUT_PHONE],
-  G.GUIDE_TABS_INTRO, ...Object.values(G.GUIDE_TABS).flatMap((t) => [t.opens, ...t.sections.map((s) => s.body)]), ...G.GUIDE_EVERYWHERE.map((p) => p.body), [G.GUIDE_METHOD]]
+  G.GUIDE_CHAPTERS_INTRO, ...Object.values(G.GUIDE_CHAPTERS).map((c) => c.opens), ...Object.values(G.GUIDE_TABS).flatMap((t) => [t.opens, ...t.sections.map((s) => s.body)]), ...G.GUIDE_EVERYWHERE.map((p) => p.body), [G.GUIDE_METHOD]]
   .flat().filter((p) => p.replace(/\[\[(.+?)\]\]/g, "").includes("[[") || p.replace(/\[\[(.+?)\]\]/g, "").includes("]]"));
 check(unclosed.length === 0, "names: every [[ in the guide is closed, so no quoted name escapes the check above", unclosed.join(" | "));
 
@@ -328,11 +333,14 @@ check([P.MEGA_CAP_IN_SAMPLE, mega.tangency, mega.ew, cross.tangency, cross.ew].e
 const C = guide.container;
 const h3s = [...C.querySelectorAll("#settings .guide-h3")].map(text);
 check(sameList(h3s, INPUT_IDS.map((id) => INPUT_HEADINGS[id])), "page: the settings section is filed under the page's group headings, in order", h3s.join(" | "));
-const tabsShown = [...C.querySelectorAll(".guide-tab > .guide-h3")].map(text);
-check(sameList(tabsShown, TAB_IDS.map((id) => TAB_LABELS[id])), "page: one section per tab, under the tab's label, in order", tabsShown.join(" | "));
+const chaptersShown = [...C.querySelectorAll(".guide-chapter > .guide-h3")].map(text);
+check(sameList(chaptersShown, CHAPTER_IDS.map((id) => CHAPTER_LABELS[id])), "page: one section per chapter, under the chapter's label, in order", chaptersShown.join(" | "));
+const tabsShown = [...C.querySelectorAll(".guide-chapter > .guide-tab > .guide-tab-h")].map(text);
+check(sameList(tabsShown, CHAPTER_IDS.flatMap((c) => CHAPTER_TABS[c]).map((id) => TAB_LABELS[id])),
+  "page: one part per tab, inside its chapter, in the chapter's order", tabsShown.join(" | "));
 const opens = [...C.querySelectorAll(".guide-open a")].map((a) => a.getAttribute("href"));
-check(opens.length === TAB_IDS.length && opens.every((href, i) => decodeShare(href.replace(/^\.\//, "")).tab === TAB_IDS[i]),
-  "page: each tab's section links that tab, and the page reads the link as that tab", opens.join(" "));
+check(opens.length === CHAPTER_IDS.length && opens.every((href, i) => decodeShare(href.replace(/^\.\//, "")).chapter === CHAPTER_IDS[i]),
+  "page: each chapter's section links that chapter, and the page reads the link as that chapter", opens.join(" "));
 const contents = [...C.querySelectorAll(".guide-contents a")].map((a) => a.getAttribute("href").slice(1));
 check(sameList(contents, GUIDE_SECTIONS.map((s) => s.id)) && contents.every((id) => !!C.querySelector(`section#${id}`)),
   "page: the contents list every section, and each link finds its section", contents.join(" "));

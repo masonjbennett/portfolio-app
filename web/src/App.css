@@ -38,7 +38,7 @@
   background: var(--color-paper);
 }
 
-/* The tab switch scrolls sideways and never wraps: seven labels do not fit a phone. */
+/* The chapter row scrolls sideways and never wraps: five labels do not fit a phone. */
 .app-tabs {
   margin: var(--space-5) 0 var(--space-4);
   overflow-x: auto;
@@ -83,11 +83,6 @@
   cursor: pointer;
 }
 
-/* The tab being left while the next one's chunk loads (App's transition): readable, plainly waiting. */
-.app-tab[aria-busy="true"] {
-  opacity: 0.55;
-  transition: opacity 150ms ease;
-}
 
 /* A tab's finding, the sentence that opens each of the six tabs: one element (h2), one face, one size.
    Each tab's own class keeps only its spacing. */
@@ -116,4 +111,43 @@
     margin-right: calc(-1 * var(--space-4));
     padding: 0 var(--space-4);
   }
+}
+
+/* The chapter row: underlined labels on a hairline, the chapter on screen carrying a teal bar, in place of the
+   pill tray the tabs had. */
+.app-chapters .seg {
+  gap: var(--space-5);
+  padding: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--color-hairline);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.app-chapters .seg-pill {
+  padding: var(--space-3) 0;
+  font-size: var(--type-3);
+  border-radius: 0;
+}
+
+.app-chapters .seg-pill.is-on {
+  font-weight: 600;
+  background: none;
+  box-shadow: inset 0 -3px 0 var(--color-teal);
+}
+
+.app-chapter .app-tab + .app-tab {
+  margin-top: var(--gap-section);
+}
+
+/* The chapter being left while the next one's chunks load (App's transition), or figures from the previous
+   settings while the analysis catches up: readable, plainly waiting. */
+.app-chapter[aria-busy="true"] {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
+.app-tab:focus {
+  outline: none;
 }

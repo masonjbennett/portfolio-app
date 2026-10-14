@@ -18,7 +18,7 @@ import { act, render, text } from "./_dom.mjs";
 
 const { createElement: h, useState } = await import("react");
 const { AppView, TAB_LOADERS } = await import("../src/App.tsx");
-const { TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
+const { CHAPTER_LABELS, TAB_IDS, TAB_LABELS, chapterOf } = await import("../src/types.ts");
 const { exampleAnalysis, examplePayload, fixtureAnalysis, fixturePayload, settingsFor } = await import("./_analysis.mjs");
 const TABS = Object.fromEntries(await Promise.all(TAB_IDS.map(async (id) => [id, (await TAB_LOADERS[id]()).default])));
 
@@ -33,7 +33,7 @@ const quietly = (fn) => {
 };
 
 function Harness({ analysis, settings }) {
-  const [tab, setTab] = useState("returns");
+  const [chapter, setChapter] = useState("overview");
   const [view, setView] = useState("basket");
   const [weights, setWeights] = useState({});
   const wb = {
@@ -47,9 +47,10 @@ function Harness({ analysis, settings }) {
     rf: { status: "ready", value: { rate: analysis.rf, date: analysis.asOf, source: "test" } },
     weights,
     setWeights,
-    tab,
-    setTab: (t, v) => {
-      setTab(t);
+    chapter,
+    entry: null,
+    setChapter: (c, v) => {
+      setChapter(c);
       setView(v ?? "basket");
     },
     view,
@@ -86,7 +87,8 @@ for (const [name, a, given] of cases) {
   const r = quietly(() => render(h(Harness, { analysis: a, settings })));
   const row = r.container.querySelector(".app-tabs [role=tablist]");
   for (const id of TAB_IDS) {
-    const pill = [...row.querySelectorAll("button")].find((b) => text(b) === TAB_LABELS[id]);
+    // Each tab is read in its chapter (the page around it, the chapter's other tab included, is read again: harmless).
+    const pill = [...row.querySelectorAll("button")].find((b) => text(b) === CHAPTER_LABELS[chapterOf(id)]);
     quietly(() => act(() => pill.click()));
     // Sensitivity scores the custom mix only when asked, as the app does (its checkbox).
     const include = [...r.container.querySelectorAll("label")].find((l) => /Include Custom Portfolio/i.test(text(l)))?.querySelector("input");

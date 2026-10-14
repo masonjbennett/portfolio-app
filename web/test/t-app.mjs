@@ -27,7 +27,7 @@ const { sharpeSE } = await import("../src/lib/stats.ts");
 const { MESSAGES } = await import("../src/state/analyze.ts");
 const { PRESETS, PUBLISHED_PRESETS, RF_FALLBACK } = await import("../src/state/defaults.ts");
 const { PHONE_QUERY } = await import("../src/styles/tokens.ts");
-const { TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
+const { CHAPTER_IDS, CHAPTER_LABELS, CHAPTER_TABS, TAB_IDS, TAB_LABELS, chapterOf } = await import("../src/types.ts");
 const { exampleAnalysis, examplePayload, fixtureAnalysis, settingsFor } = await import("./_analysis.mjs");
 // The tabs App routes to, loaded up front: a check about a tab itself should not wait on a chunk.
 // The lazy path App ships is checked on its own below.
@@ -84,7 +84,7 @@ const LIVE = { rate: 0.0412, date: "2026-09-25", source: "FRED DGS3MO" };
 const EX_SETTINGS = settingsFor(examplePayload(), { rf: EX.rf });
 
 function stand(over = {}) {
-  const calls = { settings: [], level: [], tab: [], view: [] };
+  const calls = { settings: [], level: [], chapter: [], view: [] };
   const wb = {
     settings: EX_SETTINGS,
     setSettings: (p) => calls.settings.push(p),
@@ -96,9 +96,11 @@ function stand(over = {}) {
     rf: { status: "ready", value: LIVE },
     weights: {},
     setWeights() {},
-    tab: "returns",
-    setTab: (t, v) => {
-      calls.tab.push(t);
+    // Performance, so the stand-in tabs the checks below read (returns, risk) are on the page.
+    chapter: "performance",
+    entry: null,
+    setChapter: (c, v) => {
+      calls.chapter.push(c);
       calls.view.push(v ?? "basket");
     },
     view: "basket",
@@ -107,20 +109,20 @@ function stand(over = {}) {
   };
   return { wb, calls };
 }
-// The workbench with a live tab and level, as useWorkbench would hold them.
+// The workbench with a live chapter and level, as useWorkbench would hold them.
 function Harness({ wb, tabs }) {
-  const [tab, setTab] = useState(wb.tab);
+  const [chapter, setChapter] = useState(wb.chapter);
   const [view, setView] = useState(wb.view);
   const [level, setLevel] = useState(wb.level);
   const live = {
     ...wb,
-    tab,
+    chapter,
     view,
     level,
-    // As useWorkbench: every way into a tab opens the walk-forward tab's first segment unless one is named.
-    setTab: (t, v) => {
-      wb.setTab(t, v);
-      setTab(t);
+    // As useWorkbench: every way into a chapter opens the walk-forward test's first segment unless one is named.
+    setChapter: (c, v) => {
+      wb.setChapter(c, v);
+      setChapter(c);
       setView(v ?? "basket");
     },
     setLevel: (l) => {
@@ -198,32 +200,47 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(lines().length === 1 && text(lines()[0]).includes(TAB_LABELS.returns),
     "ledger:boundary: the port shows one line naming the failed tab", lines().map(text).join(" | "));
   check(text(r.container).includes("Tangency Sharpe (in-sample)"), "ledger:boundary: the port's band survives a failed tab");
-  const risk = byLabel(r.container.querySelector(".app-tabs"), TAB_LABELS.risk);
-  if (risk) quietly(() => click(risk));
-  check(!!r.container.querySelector('[data-tab="risk"]') && lines().length === 0,
-    "ledger:boundary: the port's next tab renders after the failed one");
+  check(!!r.container.querySelector('[data-tab="risk"]'), "ledger:boundary: the port's next tab in the same chapter renders under the failed one");
+  const next = byLabel(r.container.querySelector(".app-tabs"), CHAPTER_LABELS.diversification);
+  if (next) quietly(() => click(next));
+  check(!!r.container.querySelector('[data-tab="correlation"]') && lines().length === 0,
+    "ledger:boundary: the port's next chapter renders after the failed one");
   r.unmount();
   }
 }
 
-// ---- the tab row and its panel: tab / tabpanel ids tie each to the other ---------------------------
+// ---- the chapter row and its panel: tab / tabpanel ids tie each to the other -----------------------
+// Five chapters; a chapter's panel holds its tabs, in CHAPTER_TABS' order, each in its own part (section-<tab>).
 {
   const r = page({});
   const row = r.container.querySelector(".app-tabs [role=tablist]");
   const pills = row ? [...row.querySelectorAll("[role=tab]")] : [];
-  check(pills.length === TAB_IDS.length && pills.every((t, i) => t.id === `analysis-tab-${TAB_IDS[i]}` && t.getAttribute("aria-controls") === `analysis-panel-${TAB_IDS[i]}`),
-    "tabs: every tab pill has an id and aria-controls naming its panel", pills.map((t) => `${t.id}>${t.getAttribute("aria-controls")}`).join(" "));
-  // The one panel on the page is the selected pill's, labelled by that pill.
+  check(row?.getAttribute("aria-label") === "Chapters" && pills.length === CHAPTER_IDS.length &&
+    pills.every((t, i) => t.id === `chapter-tab-${CHAPTER_IDS[i]}` && t.getAttribute("aria-controls") === `chapter-panel-${CHAPTER_IDS[i]}` && text(t) === CHAPTER_LABELS[CHAPTER_IDS[i]]),
+    "chapters: five pills in reading order, each with an id and aria-controls naming its panel", pills.map((t) => `${t.id}>${t.getAttribute("aria-controls")}`).join(" "));
+  // The one panel on the page is the selected pill's, labelled by that pill, holding exactly its chapter's tabs.
   const panelOk = (id) => {
     const panels = [...r.container.querySelectorAll("[role=tabpanel]")];
     const on = pills.find((t) => t.getAttribute("aria-selected") === "true");
     const label = panels[0] ? r.container.querySelector(`#${panels[0].getAttribute("aria-labelledby")}`) : null;
-    return panels.length === 1 && on?.getAttribute("aria-controls") === panels[0].id && panels[0].id === `analysis-panel-${id}` &&
-      label === on && text(label) === TAB_LABELS[id] && !!panels[0].querySelector(`[data-tab="${id}"]`);
+    const held = panels[0] ? [...panels[0].querySelectorAll("[data-tab]")].map((e) => e.getAttribute("data-tab")) : [];
+    const parts = panels[0] ? [...panels[0].querySelectorAll("[data-section]")].map((e) => e.id) : [];
+    return panels.length === 1 && on?.getAttribute("aria-controls") === panels[0].id && panels[0].id === `chapter-panel-${id}` &&
+      label === on && text(label) === CHAPTER_LABELS[id] && JSON.stringify(held) === JSON.stringify(CHAPTER_TABS[id]) &&
+      JSON.stringify(parts) === JSON.stringify(CHAPTER_TABS[id].map((t) => `section-${t}`));
   };
-  check(panelOk("returns"), "tabs: the active tab's content is its role=tabpanel, labelled by the selected pill");
-  click(byLabel(row, TAB_LABELS.correlation));
-  check(panelOk("correlation"), "tabs: switching tab moves the panel's id and label to the new pill");
+  check(panelOk("performance"), "chapters: the active chapter is the role=tabpanel, labelled by the selected pill, holding its two tabs in order");
+  for (const id of ["diversification", "build", "holdup"]) {
+    click(byLabel(row, CHAPTER_LABELS[id]));
+    check(panelOk(id), `chapters: switching to ${id} moves the panel's id and label to its pill, and shows exactly its tabs`);
+  }
+  // The Overview, for now: no tab, and one button per other chapter that opens it.
+  click(byLabel(row, CHAPTER_LABELS.overview));
+  const opens = [...r.container.querySelectorAll("[role=tabpanel] .chapter-contents-open")];
+  check(panelOk("overview") && opens.map(text).join("|") === CHAPTER_IDS.slice(1).map((c) => CHAPTER_LABELS[c]).join("|"),
+    "chapters: the Overview holds no tab and lists the other four chapters in order", opens.map(text).join(" | "));
+  if (opens[2]) click(opens[2]);
+  check(panelOk("build"), "chapters: an Overview row opens its chapter");
   r.unmount();
 }
 
@@ -254,14 +271,15 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
 }
 
 // ---- every tab opens on its finding: the same element and class on all six, above any section -----
-// The REAL tabs here, on the baked example, not the stand-ins the rest of this suite uses.
+// The REAL tabs here, on the baked example, not the stand-ins the rest of this suite uses, each read in its own
+// part of its chapter.
 {
   const r = page({}, TABS);
   const row = r.container.querySelector(".app-tabs [role=tablist]");
   const seen = [];
   for (const id of TAB_IDS) {
-    click(byLabel(row, TAB_LABELS[id]));
-    const panel = r.container.querySelector("[role=tabpanel]");
+    click(byLabel(row, CHAPTER_LABELS[chapterOf(id)]));
+    const panel = r.container.querySelector(`[role=tabpanel] #section-${id}`);
     const first = panel?.querySelector("h1, h2, h3, h4, h5, h6");
     const finding = first ? text(first) : "";
     seen.push(`${id}: ${first?.tagName}.${first?.className} "${finding.slice(0, 40)}"`);
@@ -611,32 +629,32 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     source().children.length === 2 && links.length === 1 && links[0].getAttribute("href") === P.PUBLISHED_URL,
     "walk-forward: the strip's source line turns its own first words into the control, reads as before, and keeps its one link", `${text(source() ?? {})} / ${before}`);
 
-  click(byLabel(row, TAB_LABELS.walkforward));
+  click(byLabel(row, CHAPTER_LABELS.holdup));
   check(segment() === "basket" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "Your basket",
     "walk-forward: the tab opens on Your basket", `${segment()}`);
   click(byLabel(segRow(), "As published"));
   check(segment() === "published" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "As published",
     "walk-forward: the switch shows As published", `${segment()}`);
-  check(landed.length === 0, "walk-forward: the tab row and the segment row switch where the reader already is, and scroll nothing", where());
-  click(byLabel(row, TAB_LABELS.returns));
-  click(byLabel(row, TAB_LABELS.walkforward));
-  check(segment() === "basket", "walk-forward: leaving the tab and coming back by its pill opens Your basket again", `${segment()}`);
-  click(byLabel(row, TAB_LABELS.returns));
+  check(landed.length === 0, "walk-forward: the chapter row and the segment row switch where the reader already is, and scroll nothing", where());
+  click(byLabel(row, CHAPTER_LABELS.performance));
+  click(byLabel(row, CHAPTER_LABELS.holdup));
+  check(segment() === "basket", "walk-forward: leaving its chapter and coming back by its pill opens Your basket again", `${segment()}`);
+  click(byLabel(row, CHAPTER_LABELS.performance));
   click(source().querySelector("button.text-button"));
-  check(segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "analysis-tab-walkforward",
+  check(segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "chapter-tab-holdup",
     "walk-forward: the strip's control switches to the tab on As published, without a reload", `${segment()}`);
   check(landedOn("published"), "walk-forward: the strip's control lands the reader on the tab: scrolled into view, the As published segment focused", where());
   landed.length = 0;
-  click(byLabel(row, TAB_LABELS.returns));
-  click(byLabel(row, TAB_LABELS.walkforward));
-  check(landed.length === 0, "walk-forward: a landing is taken once; the tab mounted again by its pill does not land again", where());
-  click(byLabel(row, TAB_LABELS.optimization));
+  click(byLabel(row, CHAPTER_LABELS.performance));
+  click(byLabel(row, CHAPTER_LABELS.holdup));
+  check(landed.length === 0, "walk-forward: a landing is taken once; the chapter mounted again by its pill does not land again", where());
+  click(byLabel(row, CHAPTER_LABELS.build));
   const note = panel()?.querySelector('[data-note="in-sample"] button.text-button');
   // The note itself must not link out to the method note; As published, which it opens, carries that link.
   const linksOut = !!panel()?.querySelector(`[data-note="in-sample"] a[href="${P.PUBLISHED_URL}"]`);
   landed.length = 0;
   if (note) click(note);
-  check(!!note && segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "analysis-tab-walkforward" &&
+  check(!!note && segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "chapter-tab-holdup" &&
     !linksOut,
     "walk-forward: the Optimization tab's in-sample note switches to the tab on As published", `${segment()}`);
   check(landedOn("published"), "walk-forward: the in-sample note lands the reader on the tab: scrolled into view, the As published segment focused", where());
@@ -1119,9 +1137,11 @@ function bar(over = {}) {
   const dialog = () => r.container.querySelector('[aria-label="Command palette"]');
   check(!dialog(), "palette: closed until asked for");
   key(document.body, "k", { ctrlKey: true });
-  check(!!dialog() && clickables(dialog()).length === 11 && clickables(dialog()).some((b) => text(b).endsWith(TAB_LABELS.walkforward)) &&
+  check(!!dialog() && clickables(dialog()).length === 16 && clickables(dialog()).some((b) => text(b).endsWith(TAB_LABELS.walkforward)) &&
+    CHAPTER_IDS.every((c) => clickables(dialog()).some((b) => text(b).startsWith("Chapter") && text(b).includes(CHAPTER_LABELS[c]))) &&
     text(clickables(dialog()).at(-1)).endsWith("How to read this page"),
-    "palette: Ctrl+K opens the three levels, the seven tabs (Walk-forward among them) and the guide, last", dialog() ? clickables(dialog()).map(text).join(" | ") : "closed");
+    "palette: Ctrl+K opens the three levels, the five chapters, the seven tabs' parts (Walk-forward among them) and the guide, last",
+    dialog() ? clickables(dialog()).map(text).join(" | ") : "closed");
   const input = dialog()?.querySelector("input");
   if (input) {
     setValue(input, "formula");
@@ -1135,20 +1155,41 @@ function bar(over = {}) {
     setValue(again, "risk");
     key(again, "Enter");
   }
-  check(calls.tab.at(-1) === "risk" && !!r.container.querySelector('[data-tab="risk"]'), "palette: Cmd+K then a tab's name goes to it", calls.tab.join());
+  check(calls.chapter.at(-1) === "performance" && !!r.container.querySelector('[data-tab="risk"]') && document.activeElement?.id === "section-risk",
+    "palette: Cmd+K then a tab's name opens its chapter and lands on its part", `${calls.chapter.join()} focus ${document.activeElement?.id}`);
+  key(document.body, "k", { ctrlKey: true });
+  const third = dialog()?.querySelector("input");
+  if (third) {
+    setValue(third, "diversification");
+    key(third, "Enter");
+  }
+  check(calls.chapter.at(-1) === "diversification" && !!r.container.querySelector('[data-tab="correlation"]'),
+    "palette: a chapter's name, the first match, opens that chapter", calls.chapter.join());
   key(document.body, "k", { ctrlKey: true });
   key(dialog()?.querySelector("input") ?? document.body, "Escape");
   check(!dialog(), "palette: Escape closes");
   r.unmount();
 }
 
+// ---- (h2) an older link's tab: landed on once, inside its chapter ----------------------------------------
+// ?tab=custom opens Build a portfolio (url.ts) and names Custom as the arrival's tab (Workbench.entry); the page brings
+// that part into view and focuses it. A tab already at the top of its chapter needs no landing.
+{
+  const r = page({ chapter: "build", entry: "custom" });
+  check(document.activeElement?.id === "section-custom", "legacy: an older link's tab is landed on inside its chapter, the part focused", document.activeElement?.id);
+  r.unmount();
+  const top = page({ chapter: "build", entry: "optimization" });
+  check(document.activeElement?.id !== "section-optimization", "legacy: a tab at the top of its chapter is not landed on", document.activeElement?.id);
+  top.unmount();
+}
+
 // ---- (i) each tab is its own chunk -----------------------------------------------------------------
 // App reaches its tabs through React.lazy (TABS over TAB_LOADERS), so the tabs and Recharts leave the
 // first chunk (t-split.mjs reads that off the real build). Three promises hold the page up while a
-// chunk is in flight, each checked with a chunk this suite holds open: the first tab shows a named
-// loading line in its place, never a blank panel or a thrown page; a switch keeps the tab on screen,
+// chunk is in flight, each checked with a chunk this suite holds open: the first chapter shows a named
+// loading line in its place, never a blank panel or a thrown page; a switch keeps the chapter on screen,
 // marked busy, until the next one's code is in; a chunk that never arrives names its tab and leaves
-// the band and the tab row standing.
+// the chapter's other tab, the band and the chapter row standing.
 {
   const wait = () => act(() => new Promise((res) => setTimeout(res, 5)));
   const until = async (cond, tries = 400) => {
@@ -1163,56 +1204,57 @@ function bar(over = {}) {
   const panel = (r) => r.container.querySelector("[role=tabpanel]");
   const fallback = (r) => [...r.container.querySelectorAll(".app-main [role=status]")].find((n) => /^Loading /.test(text(n)));
 
-  // The first tab: its chunk is still on the way.
+  // The first chapter: one of its tabs' chunks is still on the way.
   const first = held();
   const second = held();
   const lazies = {
     ...STAND_TABS,
     returns: lazy(() => first.p),
-    risk: lazy(() => second.p),
-    correlation: lazy(() => Promise.reject(new Error("chunk 404"))),
+    correlation: lazy(() => second.p),
+    optimization: lazy(() => Promise.reject(new Error("chunk 404"))),
   };
   const r = quietly(() => render(h(Harness, { wb: stand().wb, tabs: lazies })));
-  check(text(fallback(r) ?? {}) === `Loading ${TAB_LABELS.returns}` && !panel(r),
-    "lazy: while the first tab's chunk loads, its place holds one line naming it", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
+  check(text(fallback(r) ?? {}) === `Loading ${CHAPTER_LABELS.performance}` && !panel(r)?.querySelector("[data-tab]"),
+    "lazy: while a chapter's chunks load, its place holds one line naming it", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
   check(!!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector(".band, [class*=band]"),
-    "lazy: the band and the tab row are up before any tab's chunk");
+    "lazy: the band and the chapter row are up before any tab's chunk");
   await act(async () => {
     first.res({ default: STAND_TABS.returns });
     await first.p;
   });
   await until(() => !!r.container.querySelector('[data-tab="returns"]'));
-  check(!!panel(r)?.querySelector('[data-tab="returns"]') && !fallback(r), "lazy: the first tab replaces the line when its chunk lands");
+  check(!!panel(r)?.querySelector('[data-tab="returns"]') && !!panel(r)?.querySelector('[data-tab="risk"]') && !fallback(r),
+    "lazy: the chapter's tabs replace the line together when the last chunk lands");
 
-  // A switch to a tab whose chunk is not in yet: the old tab stays, marked busy; no loading line.
+  // A switch to a chapter whose chunk is not in yet: the old chapter stays, marked busy; no loading line.
   const row = r.container.querySelector(".app-tabs [role=tablist]");
-  quietly(() => click(byLabel(row, TAB_LABELS.risk)));
+  quietly(() => click(byLabel(row, CHAPTER_LABELS.diversification)));
   await wait();
   check(!!panel(r)?.querySelector('[data-tab="returns"]') && panel(r)?.getAttribute("aria-busy") === "true" && !fallback(r),
-    "lazy: during a switch the tab on screen stays, marked aria-busy, and the panel never blanks to a loading line",
+    "lazy: during a switch the chapter on screen stays, marked aria-busy, and the panel never blanks to a loading line",
     `busy=${panel(r)?.getAttribute("aria-busy")} fallback=${!!fallback(r)} body=${text(panel(r) ?? {}).slice(0, 40)}`);
   await act(async () => {
-    second.res({ default: STAND_TABS.risk });
+    second.res({ default: STAND_TABS.correlation });
     await second.p;
   });
-  await until(() => !!r.container.querySelector('[data-tab="risk"]'));
-  check(!!panel(r)?.querySelector('[data-tab="risk"]') && !panel(r)?.hasAttribute("aria-busy"),
-    "lazy: the next tab takes its place when its chunk lands, no longer busy");
+  await until(() => !!r.container.querySelector('[data-tab="correlation"]'));
+  check(!!panel(r)?.querySelector('[data-tab="correlation"]') && !panel(r)?.hasAttribute("aria-busy"),
+    "lazy: the next chapter takes its place when its chunk lands, no longer busy");
 
   // A chunk that never arrives (a deploy that no longer serves it, a dropped connection).
   const { error, warn } = console;
   console.error = console.warn = () => {};
   try {
     await expectUncaught(async () => {
-      click(byLabel(row, TAB_LABELS.correlation));
+      click(byLabel(row, CHAPTER_LABELS.build));
       await until(() => !!r.container.querySelector(".boundary"));
     });
   } finally {
     Object.assign(console, { error, warn });
   }
-  check(text(r.container.querySelector(".boundary") ?? {}) === `${TAB_LABELS.correlation} could not be shown.` &&
-    !!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector("header"),
-    "lazy: a chunk that fails to load names its tab, and the tab row and masthead stay", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
+  check(text(r.container.querySelector(".boundary") ?? {}) === `${TAB_LABELS.optimization} could not be shown.` &&
+    !!panel(r)?.querySelector('[data-tab="custom"]') && !!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector("header"),
+    "lazy: a chunk that fails to load names its tab, and the chapter's other tab, the chapter row and masthead stay", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
   r.unmount();
 
   // The shipped map: every tab is a lazy component, and App's own default reaches the real finding.
