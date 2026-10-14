@@ -1,7 +1,7 @@
 // The shared components that are not tables: the error boundary, the pill row, and the formats every
 // printed number goes through. Boundaries only work in a CLIENT render (server rendering never runs
 // one), so this suite renders through test/_dom.mjs's jsdom window.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, expectUncaught } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
 
@@ -56,9 +56,9 @@ const Boom = () => {
   let r = null;
   const logged = quiet(() => {
     try {
-      r = render(h("div", null,
+      r = expectUncaught(() => render(h("div", null,
         h("section", { id: "a" }, h(Boundary, { name: "Frontier chart" }, h(Boom))),
-        h("section", { id: "b" }, h(Boundary, { name: "Weights table" }, h("p", null, "GMV 41.2% AAPL")))));
+        h("section", { id: "b" }, h(Boundary, { name: "Weights table" }, h("p", null, "GMV 41.2% AAPL"))))));
     } catch (err) {
       check(false, "ledger:boundary a throw inside a card stays inside it", err.message);
     }
@@ -80,9 +80,9 @@ const Boom = () => {
   let r = null;
   quiet(() => {
     try {
-      r = render(h(Boundary, { name: "Null card" }, h(() => {
+      r = expectUncaught(() => render(h(Boundary, { name: "Null card" }, h(() => {
         throw null;
-      })));
+      }))));
     } catch (err) {
       check(false, "boundary: a falsy throw is caught too", String(err));
     }
@@ -101,7 +101,7 @@ const Boom = () => {
   let r = null;
   quiet(() => {
     try {
-      r = render(h(Boundary, { name: "Rolling chart", resetKey: 1 }, h(Flaky)));
+      r = expectUncaught(() => render(h(Boundary, { name: "Rolling chart", resetKey: 1 }, h(Flaky))));
       broken = false;
       r.rerender(h(Boundary, { name: "Rolling chart", resetKey: 1 }, h(Flaky)));
     } catch (err) {

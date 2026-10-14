@@ -19,12 +19,43 @@ export function setMedia(fn) {
   mediaAnswer = fn;
 }
 
+// Uncaught errors jsdom reports: the ones a suite planted (inside expectUncaught) and the rest.
+const UNCAUGHT = Symbol.for("portfolio-web.jsdom-uncaught");
+const uncaught = (globalThis[UNCAUGHT] ??= { open: 0, stray: [] });
+
+// Runs fn (sync or async) as a planted throw: an uncaught error jsdom reports while it runs is the
+// suite's own. React's development build replays every render error through a DOM event, so a card
+// a suite breaks on purpose is reported here even though its Boundary catches it. Keep the window
+// to the render that breaks: anything it covers is no longer checked.
+export function expectUncaught(fn) {
+  uncaught.open += 1;
+  let async = false;
+  try {
+    const out = fn();
+    if (out && typeof out.then === "function") {
+      async = true;
+      return out.finally(() => (uncaught.open -= 1));
+    }
+    return out;
+  } finally {
+    if (!async) uncaught.open -= 1;
+  }
+}
+
 if (!globalThis[KEY]) {
-  // jsdom's own "uncaught error" reports repeat, as a wall of text, an error React is about to
-  // throw anyway (its development build replays render errors through a DOM event). One line each.
+  // Any other uncaught error fails the suite, with its stack: an event handler or a timer that
+  // throws is reported only here, and nothing else in a run would see it.
   const vc = new VirtualConsole();
   vc.forwardTo(console, { jsdomErrors: "none" });
-  vc.on("jsdomError", (e) => console.warn(`jsdom: ${e.message.split("\n")[0]}`));
+  vc.on("jsdomError", (e) => {
+    if (e.type !== "unhandled-exception") return console.warn(`jsdom: ${e.message.split("\n")[0]}`);
+    if (!uncaught.open) uncaught.stray.push(e.cause instanceof Error && e.cause.stack ? e.cause.stack : e.message);
+  });
+  process.on("exit", () => {
+    if (!uncaught.stray.length) return;
+    for (const s of uncaught.stray) console.log(`  FAIL  uncaught error in the page: ${s.split("\n").slice(0, 4).join("\n        ")}`);
+    process.exitCode = 1;
+  });
   const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
     url: "http://localhost/",
     pretendToBeVisual: true,

@@ -104,7 +104,7 @@ if (probe) {
   console.warn = () => {};
   let thrown = null;
   try {
-    dom.render(h(probe.Boom));
+    dom.expectUncaught(() => dom.render(h(probe.Boom)));
   } catch (err) {
     thrown = err;
   }
@@ -122,7 +122,7 @@ if (probe) {
   }
   let caught = null;
   try {
-    caught = dom.render(h(Catch, null, h(probe.Boom)));
+    caught = dom.expectUncaught(() => dom.render(h(Catch, null, h(probe.Boom))));
   } catch {
     // reported by the check below
   }

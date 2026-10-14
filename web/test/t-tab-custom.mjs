@@ -16,7 +16,7 @@
 // the weights are the reader's, not fitted), start-date-floor.
 import { readFileSync } from "node:fs";
 import { check, done, json, near, nearAll } from "./_assert.mjs";
-import { act, render, text } from "./_dom.mjs";
+import { act, expectUncaught, render, text } from "./_dom.mjs";
 
 const { createElement: h, useState } = await import("react");
 const Custom = (await import("../src/tabs/Custom.tsx")).default;
@@ -457,7 +457,7 @@ function Harness({ a, init = {}, level = "plain" }) {
     "ledger:boundary: the port names the refusal and keeps the editor and both charts");
   r.unmount();
   const broken = { ...a, benchStats: null };
-  const b = quietly(() => render(h(Custom, tabProps(broken))));
+  const b = quietly(() => expectUncaught(() => render(h(Custom, tabProps(broken)))));
   const bt = text(b.container);
   check(bt.includes("Custom portfolio on the efficient frontier could not be shown.") && figures(b.container).length === 1 &&
     plates(b.container).length === 5 && tables(b.container).length === 1 && b.container.querySelector(".cust-headline"),

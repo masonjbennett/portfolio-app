@@ -7,7 +7,7 @@
 // portfolio_app.py or reproduced with the engine, and the port's side, rendered.
 import { readFileSync, readdirSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
-import { act, render, setMedia, text } from "./_dom.mjs";
+import { act, expectUncaught, render, setMedia, text } from "./_dom.mjs";
 
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
@@ -181,7 +181,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   };
   let r = null;
   try {
-    r = quietly(() => page({}, { ...STAND_TABS, returns: Throws }));
+    r = quietly(() => expectUncaught(() => page({}, { ...STAND_TABS, returns: Throws })));
   } catch (err) {
     check(false, "ledger:boundary: the port shows one line naming the failed tab", `the whole page threw: ${err.message}`);
   }
@@ -233,7 +233,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     let failed = [];
     let after = ["never rendered"];
     try {
-      const r = quietly(() => render(mount(id, poisoned)));
+      const r = quietly(() => expectUncaught(() => render(mount(id, poisoned))));
       failed = [...r.container.querySelectorAll(".boundary")].map(text);
       quietly(() => r.rerender(mount(id, { ...EX })));
       after = [...r.container.querySelectorAll(".boundary")].map(text);
@@ -1119,11 +1119,13 @@ function rail(over = {}) {
     "lazy: the next tab takes its place when its chunk lands, no longer busy");
 
   // A chunk that never arrives (a deploy that no longer serves it, a dropped connection).
-  quietly(() => click(byLabel(row, TAB_LABELS.correlation)));
   const { error, warn } = console;
   console.error = console.warn = () => {};
   try {
-    await until(() => !!r.container.querySelector(".boundary"));
+    await expectUncaught(async () => {
+      click(byLabel(row, TAB_LABELS.correlation));
+      await until(() => !!r.container.querySelector(".boundary"));
+    });
   } finally {
     Object.assign(console, { error, warn });
   }

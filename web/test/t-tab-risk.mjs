@@ -8,7 +8,7 @@
 //     numeric-downloads and downloads-everywhere (the tab halves), boundary (the tab half), rf-live.
 // (d) The whole tab rendered in jsdom: the headline, three charts drawn, three tables with both
 //     downloads, no NaN, and the level, window and asset controls doing what they say.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, expectUncaught } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, json, done } from "./_assert.mjs";
 import { exampleAnalysis, fixtureAnalysis, tabProps, ORACLE_RF } from "./_analysis.mjs";
@@ -390,7 +390,7 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
   Object.defineProperty(broken, "benchStats", { get() { throw new Error("no benchmark stats"); } });
   let r = null;
   try {
-    r = quiet(() => render(h(Risk, tabProps(broken))));
+    r = quiet(() => expectUncaught(() => render(h(Risk, tabProps(broken)))));
   } catch (err) {
     check(false, "ledger:boundary a failing section stays inside its own boundary", err.message);
   }

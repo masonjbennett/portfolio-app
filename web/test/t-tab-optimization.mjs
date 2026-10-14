@@ -13,7 +13,7 @@
 //     frontier's closest-point hover is the shared chart's, held by t-charts-portfolio and t-tab-custom.
 // (d) The whole tab rendered in jsdom: the headline, four charts drawn, three tables with both
 //     downloads, no NaN, series named in the charts, and the level switch changing the tooltip text.
-import { act, render, text } from "./_dom.mjs";
+import { act, expectUncaught, render, text } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, maxAbsDiff, json, done } from "./_assert.mjs";
 import { fixtureAnalysis, tabProps } from "./_analysis.mjs";
@@ -266,7 +266,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   Object.defineProperty(broken, "frontier", { get() { throw new Error("no frontier"); } });
   let r = null;
   try {
-    r = quiet(() => render(h(Optimization, tabProps(broken))));
+    r = quiet(() => expectUncaught(() => render(h(Optimization, tabProps(broken)))));
   } catch (err) {
     check(false, "ledger:boundary a failing section stays inside its own boundary", err.message);
   }

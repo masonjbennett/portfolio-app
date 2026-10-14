@@ -4,7 +4,7 @@
 // types.ts here, not retyped); both payload layouts read the same; the shared components keep the
 // promises their props make; and src/state/defaults.ts carries the app's literals, each read back
 // out of portfolio_app.py at test time.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, expectUncaught } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
 import { derive } from "./_fixtures.mjs";
@@ -241,7 +241,7 @@ const Boom = () => {
 quiet(() => {
   let r = null;
   try {
-    r = render(h("div", null, h(Boundary, { name: "Frontier chart" }, h(Boom)), h("p", null, "still here")));
+    r = expectUncaught(() => render(h("div", null, h(Boundary, { name: "Frontier chart" }, h(Boom)), h("p", null, "still here"))));
   } catch (err) {
     check(false, "boundary: a throw inside stays inside", err.message);
   }

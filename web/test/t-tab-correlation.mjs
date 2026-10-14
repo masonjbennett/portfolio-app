@@ -3,7 +3,7 @@
 // with both downloads, the tooltip following the level, and closest-cell hover.
 //
 // Every assertion here was mutation-tested by hand: the code it guards broken, the check seen red.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, expectUncaught } from "./_dom.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { check, nearAll, json, done } from "./_assert.mjs";
 import { fixtureAnalysis, tabProps } from "./_analysis.mjs";
@@ -472,7 +472,7 @@ check(line(1421) === "with tab3:" && line(1467) === "with tab4:" && !SRC.slice(1
   quiet();
   let r;
   try {
-    r = render(h(Correlation, tabProps({ ...cross, S: null })));
+    r = expectUncaught(() => render(h(Correlation, tabProps({ ...cross, S: null }))));
   } finally {
     loud();
   }

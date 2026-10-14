@@ -6,7 +6,7 @@
 // (c) spreadLabels moves colliding direct labels apart, least-squares, keeping their order.
 // (d) ChartFrame draws only from "ready", names an error, and never shows a half-drawn chart.
 // (e) Plate never prints NaN; (f) the components' CSS uses only token custom properties.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, expectUncaught } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, close, done } from "./_assert.mjs";
 
@@ -236,7 +236,7 @@ quiet(() => {
   const half = (v) => h("svg", { "data-drawn": String(v) }, h("g", { className: "axis" }), v === 1 ? h(Boom) : null);
   let r = null;
   try {
-    r = render(h("div", null, h(ChartFrame, { title: "Frontier", state: { status: "ready", value: 1 }, children: half }), h("p", null, "next card")));
+    r = expectUncaught(() => render(h("div", null, h(ChartFrame, { title: "Frontier", state: { status: "ready", value: 1 }, children: half }), h("p", null, "next card"))));
   } catch (err) {
     check(false, "chartframe: a throw while drawing stays in the frame", err.message);
   }
@@ -255,7 +255,7 @@ quiet(() => {
   };
   let e = null;
   try {
-    e = render(h("div", null, h(ChartFrame, { title: "Wealth", state: { status: "ready", value: 3 }, children: early }), h("p", null, "next card")));
+    e = expectUncaught(() => render(h("div", null, h(ChartFrame, { title: "Wealth", state: { status: "ready", value: 3 }, children: early }), h("p", null, "next card"))));
   } catch (err) {
     check(false, "chartframe: a throw from the draw function itself is caught in the frame", err.message);
   }
