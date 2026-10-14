@@ -1,7 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": []
   },
   "include": [".", "../src/types/quadprog.d.ts"]
 }
