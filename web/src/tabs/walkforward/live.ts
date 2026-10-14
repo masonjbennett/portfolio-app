@@ -559,8 +559,8 @@ export function publishedTermsNote(a: Analysis, plan: RatePlan, w: Walk, opts: W
   if (off.length === 0) return `${terms}, and all three figures print as the published note prints them.`;
   return (
     `${terms}, and ${off.length} of the three figures ${off.length === 1 ? "prints" : "print"} differently from the published ` +
-    `note: ${off.join("; ")}. This segment solves every fit exactly, on prices as the source serves them today; the published ` +
-    `weights are where the app's solver stopped, a little short of the exact solution (the solver note under As published).`
+    `note: ${off.join("; ")}. This row solves every fit exactly, on prices as the source serves them today; the published ` +
+    `weights are where the app's solver stopped, a little short of the exact solution (the solver note under the published test's Show the numbers).`
   );
 }
 

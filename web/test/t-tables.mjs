@@ -291,22 +291,18 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   console.error = console.warn = () => {};
   const found = [];
   try {
-    // Every tab (Optimization's with the Your mix panel's table in it), and the walk-forward tab on each of its two segments.
-    const screens = [["Returns"], ["Risk"], ["Correlation"], ["Optimization"], ["Sensitivity"], ["WalkForward", "Your basket"], ["WalkForward", "As published"]];
-    for (const [file, seg] of screens) {
-      const name = seg ? `${file} (${seg})` : file;
+    // Every tab (Optimization's with the Your mix panel's table in it; the walk-forward test's published card, its Your
+    // basket row and its Hold by hold row).
+    const screens = ["Returns", "Risk", "Correlation", "Optimization", "Sensitivity", "WalkForward"];
+    for (const file of screens) {
+      const name = file;
       const Tab = (await import(`../src/tabs/${file}.tsx`)).default;
       // Every More row and card fold opened: a closed one draws no table, and the sweep would pass on fewer.
       const tr = openAll(render(h(Tab, tabProps(fixtureAnalysis("cross")))));
-      const box = tr.container.querySelector(".sens-check input");
-      if (box) act(() => box.click());
-      if (seg) {
-        const pill = [...tr.container.querySelectorAll('[role=tablist][aria-label="Walk-forward"] [role=tab]')].find((b) => text(b) === seg);
-        if (pill) {
-          act(() => pill.click());
-          // Your basket solves after paint: let the deferred solve land before its tables are read.
-          await act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-        } else found.push({ tab: name, title: "(no such segment)", span: "(none)", head: null, chartBetween: false, clipped: false });
+      if (file === "WalkForward") {
+        // Your basket solves after paint: let the deferred solve land before its tables are read, then open the folds it drew.
+        await act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+        openAll(tr);
       }
       // For the heading check below: the section heading last before each table, and whether a chart's
       // own title sits between the two (4 = DOCUMENT_POSITION_FOLLOWING: the argument comes later).
@@ -323,6 +319,7 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
           head: head ? text(head) : null,
           chartBetween: head !== null && charts.some((c) => after(head, c) && after(c, tb)),
           clipped: t.classList.contains("tbl-title-clip"),
+          where: tb.closest("[data-segment]")?.getAttribute("data-segment") ?? null,
         });
       }
       tr.unmount();
@@ -334,11 +331,11 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   const bad = found.filter((f) => (TYPED.includes(f.title) ? f.span !== null : !SPAN.test(f.span ?? "")));
   // Your basket's tables exist only once its deferred solve has landed: a sweep that read it too early would pass
   // having checked none of them.
-  const basket = found.filter((f) => f.tab === "WalkForward (Your basket)" && f.span !== "(none)");
+  const basket = found.filter((f) => f.tab === "WalkForward" && f.where === "basket");
   check(basket.length >= 3, "spans: the sweep reads Your basket's tables after its solve lands, not the empty segment before it",
     `${basket.length} tables read on Your basket`);
   check(found.length >= 24 && TYPED.every((t) => found.some((f) => f.title === t)) && bad.length === 0,
-    "spans: every table on the six tabs (both walk-forward segments) states its window and return frequency; only the typed weights claim none",
+    "spans: every table in every chapter (the walk-forward test's card and both its rows) states its window and return frequency; only the typed weights claim none",
     `${found.length} tables; ${bad.map((f) => `${f.tab}/${f.title}=${f.span}`).join(" | ")}`);
 
   // A title that repeats the heading right above it, with no chart between, is clipped from the screen, and

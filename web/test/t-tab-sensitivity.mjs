@@ -22,6 +22,26 @@ import { act, expectUncaught, render, text } from "./_dom.mjs";
 
 const { createElement: h } = await import("react");
 const Sensitivity = (await import("../src/tabs/Sensitivity.tsx")).default;
+const { forgetMore } = await import("../src/components/MoreList.tsx");
+const { SENS_HEADING } = await import("../src/tabs/holdup.ts");
+
+// The part is a More list under Does it hold up?: nothing in a row is drawn until it opens. `shown` renders it as a
+// reader who opened every row but Your mix's (scored only once its row opens, the app's opt-in checkbox) and every
+// fold; `openRows` opens what is still closed, Your mix's row too when asked.
+function openRows(root, custom = false) {
+  for (let pass = 0; pass < 10; pass += 1) {
+    const closed = [...root.querySelectorAll('button.more-button[aria-expanded="false"], button.card-fold-button[aria-expanded="false"]')]
+      .filter((b) => custom || !b.closest("#sens-custom"));
+    if (!closed.length) break;
+    for (const b of closed) act(() => b.click());
+  }
+}
+function shown(el) {
+  forgetMore();
+  const r = render(el);
+  openRows(r.container);
+  return r;
+}
 const M = await import("../src/tabs/sensitivity/model.ts");
 const { portfolioPerformance, windows } = await import("../src/lib/portfolio.ts");
 const { tipText } = await import("../src/content/tooltips.ts");
@@ -266,13 +286,13 @@ for (const set of ["cross", "megacap"]) {
   check(windows(503).length === 2 && windows(504).length === 3, "windows: '2 Years' needs 504 returns (252 per year)");
 
   // Too short, rendered: the tab says why in the chart's place and draws no chart and no table.
-  const s = render(h(Sensitivity, tabProps(cut(251))));
+  const s = shown(h(Sensitivity, tabProps(cut(251))));
   const note = s.container.querySelector(".chart-note--empty");
   check(!!note && text(note) === M.tooShort(251) && !s.container.querySelector(".recharts-wrapper") && !s.container.querySelector("table"),
     "too short: the page shows the one-year message in the chart's place, and no chart or table", text(s.container));
-  check(s.container.querySelector("h2.tab-finding")?.textContent === "No estimation window could be compared." &&
-    s.container.querySelector("h1, h2, h3, h4, h5, h6") === s.container.querySelector("h2.tab-finding"),
-    "too short: the tab still opens on a finding, before its section header", text(s.container).slice(0, 120));
+  const first = s.container.querySelector("h1, h2, h3, h4, h5, h6");
+  check(first?.tagName === "H3" && first.classList.contains("more-head") && text(first) === SENS_HEADING && !s.container.querySelector(".more-row"),
+    "too short: the part keeps its list's heading over the message, and offers no row", text(s.container).slice(0, 120));
   s.unmount();
 }
 
@@ -369,12 +389,13 @@ const svgText = (root) => [...root.querySelectorAll("svg text")].map((n) => n.te
 
 const a = fixtureAnalysis("cross");
 const fits = M.fitWindows(a).value;
-const r = render(h(Sensitivity, tabProps(a)));
+const r = shown(h(Sensitivity, tabProps(a)));
 const page = () => text(r.container);
 {
-  check(text(r.container.querySelector(".sens-finding") ?? r.container) === M.headline(fits, a.tickers) && page().includes(M.headline(fits, a.tickers)),
-    "page: the headline sentence is the computed finding");
-  const T4 = ["GMV Portfolio (in-sample)", "Tangency Portfolio (in-sample)", "GMV Weights Across Windows", "Tangency Weights Across Windows"];
+  check(text(r.container.querySelector("#sens-weights .more-finding") ?? r.container) === M.headline(fits, a.tickers) && page().includes(M.headline(fits, a.tickers)),
+    "page: the weights row's finding is the computed headline sentence");
+  // The weights row first (its two tables under the chart's Show the numbers), then the metrics row.
+  const T4 = ["GMV Weights Across Windows", "Tangency Weights Across Windows", "GMV Portfolio (in-sample)", "Tangency Portfolio (in-sample)"];
   check(JSON.stringify(captions(r.container)) === JSON.stringify(T4), "page: the four tables, in order", captions(r.container).join(" | "));
   check(T4.every((t) => hasBoth(r.container, t)), "page: every table carries CSV and Excel downloads");
   check(r.container.querySelectorAll("table").length === 4, "page: every table is a Table (one <table> each)");
@@ -384,7 +405,7 @@ const page = () => text(r.container);
   check(page().includes(`Every window is scored at the same risk-free rate, ${format(a.rf, "pct2")}, the one this page uses throughout (by default the mean over the whole date range), not the rate that prevailed during each shorter window.`),
     "page: says every window uses the one current risk-free rate (the app does too, 1882, and does not say so)");
   // The metric table prints the window rows with their numbers.
-  const gmvT = r.container.querySelectorAll("table")[0];
+  const gmvT = r.container.querySelectorAll("table")[2];
   const g0 = M.metricRows(fits, "gmv", a.rf)[0];
   check(text(gmvT).includes(`${fits[0].named}${fits[0].from}${format(g0.mu, "pct2")}${format(g0.sigma, "pct2")}${format(g0.sharpe, "num3")}`),
     "page: the GMV table's first row is the 1 Year window's figures", text(gmvT).slice(0, 160));
@@ -395,11 +416,11 @@ const page = () => text(r.container);
     "ledger:in-sample-label: the app heads the window metrics \"Portfolio Metrics Across Windows\" and nothing in tab 6 says in-sample (1904-1905)");
   check(/optimize_gmv\(sub_mean, sub_cov/.test(lines(1881, 1881)) && /portfolio_performance\(gmv_r\.x, sub_mean, sub_cov, rf\)/.test(lines(1884, 1884)),
     "ledger:in-sample-label: the app optimises and scores on the SAME window's moments (1881, 1884)");
-  const heads = [...r.container.querySelectorAll(".slug-text")].map(text);
-  check(heads.includes("Portfolio Metrics Across Windows (in-sample)") &&
+  const heads = [...r.container.querySelectorAll(".more-title")].map(text);
+  check(heads.includes("Portfolio metrics across windows (in-sample)") &&
     page().includes("In-sample: each portfolio is optimised on a window's returns and then scored on those same returns"),
     "ledger:in-sample-label: the port's heading and caption say in-sample", heads.join(" | "));
-  check(captions(r.container).slice(0, 2).every((c) => c.endsWith("(in-sample)")), "ledger:in-sample-label: so do the metric tables' own titles, which name the downloads' sheets");
+  check(captions(r.container).slice(2, 4).every((c) => c.endsWith("(in-sample)")), "ledger:in-sample-label: so do the metric tables' own titles, which name the downloads' sheets");
 
   // ledger:downloads-everywhere (the tab's half)
   const dl = ORACLE.slice(1841, 2021).filter((l) => /st\.download_button\(/.test(l));
@@ -417,13 +438,12 @@ const page = () => text(r.container);
     csv.split("\n")[1] === `${fits[0].named},${fits[0].from},${mRows[0].mu},${mRows[0].sigma},${mRows[0].sharpe}` && !/%/.test(csv),
     "ledger:numeric-downloads: the port's metric rows are numbers and its CSV carries them raw", csv.split("\n")[1]);
 
-  // The level switch changes the tooltip text.
-  const tips = () => [...r.container.querySelectorAll("[role=tooltip]")].map(text);
-  const plain = tips();
-  check(plain.length === 3 && plain[2] === tipText("sharpe", "plain"), "page: three tooltips (return, volatility, Sharpe) at the chosen level", plain.join(" | "));
-  r.rerender(h(Sensitivity, tabProps(a, { level: "formula" })));
-  const formula = tips();
-  check(formula[2] === tipText("sharpe", "formula") && formula.every((t, i) => t !== plain[i]), "page: the level switch changes every tooltip's text");
+  // The three former marks (return, volatility, Sharpe) print every level's text under How it is calculated.
+  const how = [...r.container.querySelectorAll("#sens-metrics .how-tip[data-tip]")];
+  check(how.map((d) => d.getAttribute("data-tip")).join() === "return,volatility,sharpe" &&
+    how.every((d) => ["plain", "finance", "formula"].every((l) => text(d.querySelector(`dd[data-level=${l}]`) ?? {}).endsWith(tipText(d.getAttribute("data-tip"), l)))) &&
+    !r.container.querySelector("button.tip-mark"),
+    "page: the metrics row's three terms print all three levels under How it is calculated, and no info mark is left", how.map((d) => d.getAttribute("data-tip")).join());
 
   // The hero chart: the series named IN the chart, no legend; the switch redraws for the tangency.
   const hero = r.container.querySelector(".sens-hero");
@@ -462,10 +482,10 @@ const page = () => text(r.container);
   const tipRows = [...hero.querySelectorAll(".recharts-tooltip-item")].map((li) => li.style.color);
   check(tipRows.length === 1 && tipRows[0] === rgb(tokens.color.ink2), "chart: hovering a Tangency bar writes its row in ink2, not bronze", tipRows.join(" "));
 
-  // The custom section: off by default, as the app's checkbox (1950-1954).
-  const box = r.container.querySelector(".sens-check input");
-  check(!!box && box.checked === false && !page().includes("Custom weights being evaluated"), "custom: off until the box is ticked (value=False, 1951)");
-  act(() => box.click());
+  // The custom row: closed by default, as the app's checkbox (1950-1954): nothing of it is scored until it opens.
+  const box = r.container.querySelector("#sens-custom .more-button");
+  check(!!box && box.getAttribute("aria-expanded") === "false" && !page().includes("Custom weights being evaluated"), "custom: off until its row is opened (value=False, 1951)");
+  openRows(r.container, true);
   const T6 = [...T4, "Custom weights being evaluated", "Custom Portfolio (in-sample)"];
   check(JSON.stringify(captions(r.container)) === JSON.stringify(T6) && T6.every((t) => hasBoth(r.container, t)),
     "custom: its two tables appear, each with both downloads", captions(r.container).join(" | "));
@@ -489,10 +509,10 @@ const page = () => text(r.container);
   check(/if raw_total == 0:/.test(lines(1725, 1725)) && /st\.stop\(\)/.test(lines(1727, 1727)) && ORACLE[1707] === "with tab5:",
     "ledger:boundary: the app's tab 5 calls st.stop() on all-zero weights (1725-1727), ahead of tab 6 at 1842");
   const zero = Object.fromEntries(a.tickers.map((t) => [t, 0]));
-  const z = render(h(Sensitivity, tabProps(a, { weights: zero })));
+  const z = shown(h(Sensitivity, tabProps(a, { weights: zero })));
   const zt = () => text(z.container);
   check(zt().includes(M.headline(fits, a.tickers)) && captions(z.container).length === 4, "ledger:boundary: with every custom weight zero, the port's tab still shows its finding and four tables");
-  act(() => z.container.querySelector(".sens-check input").click());
+  openRows(z.container, true);
   check(zt().includes(M.CUSTOM_REFUSAL.zero) && !zt().includes("Custom weights being evaluated") && captions(z.container).length === 4,
     "ledger:boundary: and its custom section says why it cannot evaluate, in place of the tables");
   z.unmount();
@@ -512,16 +532,17 @@ const page = () => text(r.container);
   const failed = (root) => [...root.querySelectorAll(".boundary")].map(text);
   let r = null;
   try {
-    r = quietly(() => expectUncaught(() => render(h(Sensitivity, tabProps(sick)))));
+    r = quietly(() => expectUncaught(() => shown(h(Sensitivity, tabProps(sick)))));
   } catch (err) {
     check(false, "card reset: a card that throws stays inside its own boundary", err.message);
   }
   if (r) {
-    check(JSON.stringify(failed(r.container)) === JSON.stringify(["The headline could not be shown.", "Weight comparison chart could not be shown."]) &&
-      captions(r.container).length === 4,
-      "card reset: the stubbed tickers fail the headline and the weight chart, and the tab's tables stand", failed(r.container).join(" | "));
+    check(JSON.stringify(failed(r.container)) === JSON.stringify(["Weight comparison chart could not be shown."]) &&
+      text(r.container.querySelector("#sens-weights .more-finding") ?? {}) === "This finding could not be stated." &&
+      captions(r.container).length === 2,
+      "card reset: the stubbed tickers fail the weights row's finding (said) and its card, and the metrics row's tables stand", failed(r.container).join(" | "));
     quietly(() => r.rerender(h(Sensitivity, tabProps({ ...a }))));
-    check(failed(r.container).length === 0 && text(r.container.querySelector("h2.sens-finding")) === M.headline(fits, a.tickers) &&
+    check(failed(r.container).length === 0 && text(r.container.querySelector("#sens-weights .more-finding")) === M.headline(fits, a.tickers) &&
       !!r.container.querySelector(".sens-hero .recharts-wrapper"),
       "card reset: on the next analysis the headline and the weight chart draw again", failed(r.container).join(" | "));
     r.unmount();
@@ -538,9 +559,9 @@ const page = () => text(r.container);
   const hot = fixtureAnalysis("cross", { allowShort: true, rf: 5 });
   const hf = M.fitWindows(hot).value;
   check(hf.every((f) => f.tan === null && f.gmv !== null), "ledger:failed-tangency: at rf 500% with shorting, every window's tangency is null and every GMV solves");
-  const x = quietly(() => render(h(Sensitivity, tabProps(hot))));
+  const x = quietly(() => shown(h(Sensitivity, tabProps(hot))));
   const xt = text(x.container);
-  check(captions(x.container).join() === "GMV Portfolio (in-sample),GMV Weights Across Windows",
+  check(captions(x.container).join() === "GMV Weights Across Windows,GMV Portfolio (in-sample)",
     "ledger:failed-tangency: the port keeps the GMV tables and shows no tangency table", captions(x.container).join(" | "));
   // Two tables and the weight chart, which opens on Tangency.
   check((xt.match(/The Tangency optimisation failed\. It failed in every window/g) ?? []).length === 3 &&
@@ -568,11 +589,11 @@ const page = () => text(r.container);
   const head = M.headline(fits, a.tickers);
   const named = [...head.matchAll(/\(([^()]*)\)/g)].map((m) => m[1]).filter((x) => !/maximum-Sharpe|GMV/.test(x));
   check(named.length === 4 && named.every((x) => x.endsWith(` to ${end}`)), "window-ends: every window the headline names carries its end date", head);
-  const r = render(h(Sensitivity, tabProps(a)));
+  const r = shown(h(Sensitivity, tabProps(a)));
   const tables = [...r.container.querySelectorAll(".tbl")];
-  const rowHeads = [...tables[0].querySelectorAll("tbody th")].map(text);
+  const rowHeads = [...tables[2].querySelectorAll("tbody th")].map(text);
   check(JSON.stringify(rowHeads) === JSON.stringify(fits.map((f) => f.named)), "window-ends: the metric tables' rows name each window with its end date", rowHeads.join(" | "));
-  const subs = [...tables[2].querySelectorAll("thead th .tbl-sub")].map(text);
+  const subs = [...tables[0].querySelectorAll("thead th .tbl-sub")].map(text);
   check(subs.length === fits.length && subs.every((s) => s === `to ${end}`), "window-ends: each window column of the weight tables says the day it ends", subs.join(" | "));
   const spans = tables.map((t) => text(t.querySelector(".tbl-span")));
   check(spans.length === 4 && spans.every((s) => s === `Daily returns, each window ending ${end}`), "spans: every table on the tab says its returns are daily and the day each window ends", spans.join(" | "));
@@ -586,7 +607,7 @@ const page = () => text(r.container);
   const cf = M.fitWindows(cold).value;
   check(cf.every((f) => f.tan && !f.tan.beatsRf) && JSON.stringify(M.belowRf(cf)) === JSON.stringify(cf.map((f) => f.label)),
     "below rf: at a 50% rate, long-only, no window's tangency beats it");
-  const y = render(h(Sensitivity, tabProps(cold)));
+  const y = shown(h(Sensitivity, tabProps(cold)));
   check(text(y.container).includes(`In the 1 Year, 2 Years, 3 Years, 5 Years and Full Sample windows no long-only mix beat the ${format(0.5, "pct2")} risk-free rate, so the tangency row there is the mix with the least negative Sharpe ratio`),
     "below rf: the page says the tangency rows are the least-negative Sharpe, and that only long-only mixes were searched", text(y.container).slice(0, 200));
   // With shorting on, a window where no mix in the box beats the rate has no tangency at all (the solve

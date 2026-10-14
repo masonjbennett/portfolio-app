@@ -16,7 +16,7 @@
 // the module, and compared as the page prints it.
 import { readFileSync } from "node:fs";
 import { check, done, json } from "./_assert.mjs";
-import { act, render, text } from "./_dom.mjs";
+import { act, openAll, render, text } from "./_dom.mjs";
 
 const { createElement: h } = await import("react");
 const { build } = await import("./oracle/walkforward_module.mjs");
@@ -165,13 +165,17 @@ globalThis.fetch = (...args) => {
 };
 let r;
 try {
-  r = render(h(View.default, { level: "plain", rerun: (tickers) => calls.push([...tickers]) }));
+  // The chapter's lead card and the Hold by hold row's body, side by side as the chapter places them, every fold open
+  // as a reader can open it.
+  r = openAll(render(h("div", null, h(View.default, { level: "plain" }), h(View.Holds, { rerun: (tickers) => calls.push([...tickers]) }))));
 } finally {
   globalThis.fetch = realFetch;
 }
 const found = r.container.querySelector("[data-segment=published]");
-check(!!found, "view: the segment's root says it is the published one");
-const root = found ?? r.container;
+const holds = r.container.querySelector("[data-segment=holds]");
+check(!!found && !!holds && !found.contains(holds), "view: the lead card's root says it is the published one, and Hold by hold is its own");
+const root = r.container;
+const lead = found ?? r.container;
 
 const tables = [...r.container.querySelectorAll(".tbl")];
 const byTitle = (t) => tables.find((x) => text(x.querySelector(".tbl-title") ?? {}) === t) ?? null;
@@ -299,16 +303,22 @@ check(links.length === 1 && links[0].getAttribute("href") === P.PUBLISHED_URL &&
 
 // ---- 5. the chart of the nine pairs -----------------------------------------------------------------------
 
-const chart = root.querySelector('[data-chart="published-pairs"]');
-const head = chart?.querySelector("h2");
-check(!!chart && !!head && text(head) === PAIR_HEADING && chart.getAttribute("aria-labelledby") === head.id && chart.querySelectorAll(".wfl-bells").length === 1,
-  "chart: one element holds the heading and the strip, and is labelled by the heading", head ? text(head) : "(none)");
+const chart = lead.querySelector('[data-chart="published-pairs"]');
+const card = lead.querySelector("#wf-published");
+const head = card?.querySelector(".card-title");
+check(!!chart && !!head && text(head) === PAIR_HEADING && chart.getAttribute("aria-label") === PAIR_HEADING && card.getAttribute("aria-labelledby") === head.id &&
+  chart.querySelectorAll(".wfl-bells").length === 1,
+  "chart: the lead card is titled by the heading, and its one chart is named by it", head ? text(head) : "(none)");
 {
-  // It heads the segment: the first thing after the lede, above the table of the nine.
-  const order = [...root.children];
-  const tableAt = order.findIndex((x) => x.contains(nine));
-  check(order.indexOf(chart) === 1 && order[0].classList.contains("wfp-lede") && tableAt > 1,
-    "chart: it comes straight after the lede, above the table of the nine", order.map((x) => x.className || x.tagName).slice(0, 3).join(" | "));
+  // It leads the card: the first thing in its body, the card sentence word for word under it with the method note, and
+  // the table of the nine under Show the numbers.
+  const body = card?.querySelector(".card-body");
+  const quote = body?.querySelector(".wfp-quote");
+  const order = [...(body?.children ?? [])];
+  check(order[0] === chart && order[1] === quote && text(quote?.querySelector("blockquote") ?? {}) === P.CARD_SENTENCE &&
+    quote?.querySelector("figcaption a")?.getAttribute("href") === P.PUBLISHED_URL && !body.contains(nine) && card.contains(nine),
+    "chart: it leads the card, the card sentence quoted word for word under it with the method note, the nine under the folds",
+    order.map((x) => x.className || x.tagName).join(" | "));
 }
 const groups = [...(chart?.querySelectorAll(".wfl-bell-group") ?? [])];
 const rowsOf = (g) => [...g.querySelectorAll("li.wfl-bell")];
@@ -373,7 +383,7 @@ check(!/record of the same fit/.test(pairsNote) && /stored record, scored the sa
 // from a screen reader, since the row's picture reads both figures.
 check(groups.every((g) => {
   const name = g.querySelector(".wfl-bell-group-name");
-  return name?.tagName === "H3" && g.querySelector("ul")?.getAttribute("aria-labelledby") === name.id &&
+  return name?.tagName === "H4" && g.querySelector("ul")?.getAttribute("aria-labelledby") === name.id &&
     rowsOf(g).every((li) => li.querySelector(".wfl-bell-values")?.getAttribute("aria-hidden") === "true");
 }), "chart: each set's name is a heading that labels its rows, and the printed pairs are hidden from a screen reader",
   groups.map((g) => g.querySelector(".wfl-bell-group-name")?.tagName).join(" "));
@@ -395,4 +405,17 @@ check(groups.every((g) => {
 }
 
 r.unmount();
+
+// ---- 6. the chapter's finding, counted from the published strings ---------------------------------------------
+{
+  const H = await import("../src/tabs/holdup.ts");
+  const num = (x) => Number(x.replace("−", "-"));
+  const wins = P.PUBLISHED_SETS.filter((p) => num(p.ew) > num(p.gmv) && num(p.ew) > num(p.tangency)).map((p) => p.name);
+  const words = ["no", "one", "two", "three"];
+  check(same(H.equalWins(), wins) && wins.length === 2 &&
+    H.holdupFinding() === `On years the weights had not seen, an equal split beat both fitted mixes on ${words[wins.length]} of the ${words[P.PUBLISHED_SETS.length]} published baskets.`,
+    "finding: the chapter counts the published baskets where the equal split beat both fitted mixes out of sample (the mega-caps and the sectors)",
+    `${H.equalWins().join(", ")} | ${H.holdupFinding()}`);
+}
+
 done("t-walkforward-published");

@@ -14,7 +14,7 @@
 // Axis tick labels are gridline marks, not a portfolio's figure, and are not read.
 import { readdirSync, readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
-import { act, render, text } from "./_dom.mjs";
+import { act, openAll, render, text } from "./_dom.mjs";
 
 const { createElement: h, useState } = await import("react");
 const { AppView, TAB_LOADERS } = await import("../src/App.tsx");
@@ -90,31 +90,27 @@ for (const [name, a, given] of cases) {
     // Each tab is read in its chapter (the page around it, the chapter's other tab included, is read again: harmless).
     const pill = [...row.querySelectorAll("button")].find((b) => text(b) === CHAPTER_LABELS[chapterOf(id)]);
     quietly(() => act(() => pill.click()));
-    // Sensitivity scores the custom mix only when asked, as the app does (its checkbox).
-    const include = [...r.container.querySelectorAll("label")].find((l) => /Include Custom Portfolio/i.test(text(l)))?.querySelector("input");
-    if (include && !include.checked) quietly(() => act(() => include.click()));
-    // The walk-forward tab is read on both of its segments.
-    const segs = id === "walkforward" ? ["Your basket", "As published"] : [null];
-    for (const seg of segs) {
-      if (seg) {
-        const sp = [...r.container.querySelectorAll('[role=tablist][aria-label="Walk-forward"] button')].find((b) => text(b) === seg);
-        if (sp) quietly(() => act(() => sp.click()));
-        else wrong.push(`${name}: the walk-forward tab has no ${seg} segment to read`);
+    // Every More row and card fold opened, as a reader can open them: a closed row draws nothing to read (Sensitivity
+    // scores the custom mix only once its row opens, as the app does behind its checkbox).
+    quietly(() => openAll(r));
+    // The walk-forward test's Your basket row is solved after paint, a slice of work per macrotask: let it land, then
+    // open the folds it drew.
+    if (id === "walkforward") {
+      const { error, warn } = console;
+      console.error = console.warn = () => {};
+      try {
+        await act(async () => {
+          for (let i = 0; i < 40; i += 1) await new Promise((res) => setTimeout(res, 0));
+        });
+      } finally {
+        Object.assign(console, { error, warn });
       }
-      // Your basket is solved after paint, a slice of work per macrotask: let it land before reading it.
-      if (seg === "Your basket") {
-        const { error, warn } = console;
-        console.error = console.warn = () => {};
-        try {
-          await act(async () => {
-            for (let i = 0; i < 40; i += 1) await new Promise((res) => setTimeout(res, 0));
-          });
-        } finally {
-          Object.assign(console, { error, warn });
-        }
-        if (r.container.querySelector('[data-segment="basket"] .tbl')) seen.basket += 1;
-        else wrong.push(`${name}: the walk-forward tab's Your basket figures never landed to be read`);
-      }
+      quietly(() => openAll(r));
+      if (r.container.querySelector('#wf-basket [data-segment="basket"] .tbl') && r.container.querySelector('[data-segment="published"]')) seen.basket += 1;
+      else wrong.push(`${name}: the walk-forward test's published card or its Your basket figures never landed to be read`);
+    }
+    {
+      const seg = null;
       const where = `${name}, ${TAB_LABELS[id]}${seg ? ` (${seg})` : ""}`;
       // Prose. Nested blocks are read once, at the innermost element that holds the words.
       for (const el of r.container.querySelectorAll("h1, h2, h3, h4, p, figcaption, li")) {
@@ -156,7 +152,7 @@ for (const [name, a, given] of cases) {
 }
 
 check(seen.prose >= 8 && seen.plates >= 4 && seen.cells >= 10 && seen.basket === cases.length,
-  "sharpe: the suite reads Sharpe ratios in sentences, plates and tables across the seven tabs (both walk-forward segments) and the band",
+  "sharpe: the suite reads Sharpe ratios in sentences, plates and tables across every chapter (the walk-forward test's card and both its rows) and the band",
   JSON.stringify(seen));
 check(wrong.length === 0, "sharpe: every Sharpe ratio the page prints has three decimal places, the app's :.3f",
   wrong.slice(0, 6).join(" | ") + (wrong.length > 6 ? ` | and ${wrong.length - 6} more` : ""));

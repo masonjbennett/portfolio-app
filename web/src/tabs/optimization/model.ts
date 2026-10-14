@@ -683,5 +683,5 @@ export function wealthEnds(a: Analysis, custom: Vec | null, amount: number): { l
 }
 
 /** Where the headline sends the reader to see how much the in-sample answer depends on the window. */
-export const SENSITIVITY_POINTER = "the Sensitivity tab shows how much that depends on the window";
+export const SENSITIVITY_POINTER = "the last chapter's fitting-window rows show how much that depends on the window";
 

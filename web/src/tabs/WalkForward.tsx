@@ -1,37 +1,32 @@
-// The Walk-forward tab, the one tab the app does not have: weights chosen on earlier prices and held over
-// later ones, which is what the in-sample figures on the other tabs never show. Two segments sit under the
-// heading:
-//   "Your basket"   the test run on the basket in the rail (./walkforward/Live.tsx), what the tab opens on;
-//   "As published"  the published test replayed from the weights it held (./walkforward/Published.tsx).
+// Does it hold up?'s first half: the walk-forward test, the one analysis the app does not have: weights chosen on
+// earlier prices and held over later ones, which is what the in-sample figures in the other chapters never show.
+// The chapter states its finding (counted from the published strings, ./holdup.ts), then leads with the published
+// test's card (./walkforward/Published.tsx): the chart of the nine pairs, the project card's sentence word for word as
+// its caption. A More list holds the rest:
+//   "Your basket"   the test run on the basket in the bar (./walkforward/Live.tsx), solved only once the row opens;
+//   "Hold by hold"  each published set's holds, the weights they held and its rerun button.
 //
-// The segment is the page's, not this tab's (src/state/useWorkbench.ts): the published strip in the band and
-// the in-sample note on the Optimization tab open this tab on "As published", and a link carrying
-// view=published does too. Rendered on its own, outside the page, the tab keeps the segment itself.
-//
-// Those ways in, and a set's rerun button, ask the page to LAND the reader here: the tab is scrolled to the
-// top of the view and the segment's own tab takes the focus, because the control that was clicked has just
-// left the page (or sits far from where the segment opens) and would otherwise leave the reader looking at
-// nothing new, with the focus on the document. A switch made here, by the segment row or the tab row, does not.
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+// Some ways in ask the page to LAND the reader here, because the control that was clicked has just left the screen:
+// the Overview's published control and the in-sample note in Build land on the lead (the finding takes the focus);
+// the Overview's "Run the same test" and a set's rerun button open Your basket and land on that row (its button
+// takes the focus). Which one is the page's walk-forward view (src/state/useWorkbench.ts), which a link carrying
+// view=published also sets. A switch made by the chapter row does not land.
+import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import Boundary from "../components/Boundary.tsx";
-import SegControl, { tabId, tabPanelId } from "../components/SegControl.tsx";
-import Slug from "../components/Slug.tsx";
+import MoreList, { openMore, type MoreRow } from "../components/MoreList.tsx";
 import { DEFAULT_START } from "../state/defaults.ts";
 import { windowRate } from "../state/rfwindow.ts";
 import { TabContext } from "../state/useWorkbench.ts";
-import type { Analysis, RfHistory, Settings, TabProps, WalkRates, WalkView } from "../types.ts";
+import type { Analysis, RfHistory, Settings, TabProps, WalkRates } from "../types.ts";
+import { basketFinding, holdsFinding, holdupFinding, holdupSub, WF_HEADING, WF_LIST, WF_ROWS } from "./holdup.ts";
+import { said } from "./performance.ts";
 import Live from "./walkforward/Live.tsx";
-import Published from "./walkforward/Published.tsx";
+import Published, { Holds } from "./walkforward/Published.tsx";
 import { dayAfter, PUBLISHED_LAST_BAR, PUBLISHED_RF } from "./walkforward/terms.ts";
 import "./walkforward/WalkForward.css";
 
-export const SEGMENTS: readonly { value: WalkView; label: string }[] = [
-  { value: "basket", label: "Your basket" },
-  { value: "published", label: "As published" },
-];
-
-// The segment ids: pill `walkforward-tab-<segment>`, the panel it shows `walkforward-panel-<segment>`.
-const PREFIX = "walkforward";
+// The finding's id: the lead's landing focuses it.
+export const FINDING_ID = "wf-finding";
 
 // The run the published test used, its last bar and its rate, and the day after a bar: read from the stored
 // record of the run in a leaf module (./walkforward/terms.ts) and re-exported here.
@@ -59,52 +54,71 @@ export function walkRates(h: RfHistory | null, a: Analysis): WalkRates {
 
 export default function WalkForward({ analysis, settings, level, requestSettings }: TabProps) {
   const page = useContext(TabContext);
-  const [own, setOwn] = useState<WalkView>("basket");
-  const view = page ? page.view : own;
   const go = page?.setTab;
-  const show = useCallback((v: WalkView, land = false) => (go ? go("walkforward", v, land) : setOwn(v)), [go]);
-  const pick = useCallback((v: WalkView) => show(v), [show]);
   const history = page?.rfHistory ?? null;
   const rates = useMemo(() => walkRates(history, analysis), [history, analysis]);
   const rerun = useCallback(
     (tickers: readonly string[]) => {
       requestSettings(rerunSettings(tickers));
-      show("basket", true);
+      if (go) go("walkforward", "basket", true);
+      else openMore(WF_LIST, "basket");
     },
-    [requestSettings, show],
+    [requestSettings, go],
   );
-  const label = SEGMENTS.find((s) => s.value === view)?.label ?? "";
 
   // Each landing the page asks for is taken once, by whichever render of this tab sees it first (the tab may
   // mount only after its chunk arrives); a remount for any other reason finds it taken and leaves the scroll be.
   const root = useRef<HTMLDivElement>(null);
   const landing = page?.landing ?? 0;
   const take = page?.takeLanding;
+  const view = page?.view ?? "basket";
   useEffect(() => {
     if (!landing || !take?.(landing)) return;
-    const el = root.current;
+    if (view === "basket") openMore(WF_LIST, "basket");
+    // Looked up inside this part, never by document id: only its own row and finding are landed on.
+    const own = root.current;
+    const el = view === "basket" ? own?.querySelector<HTMLElement>(`#${WF_LIST}-basket`) : own;
     if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" });
-    document.getElementById(tabId(PREFIX, view))?.focus({ preventScroll: true });
-    // Only a new landing runs this; the segment it reads is the one the same switch set.
+    const target = view === "basket" ? el?.querySelector<HTMLElement>(".more-button") : own?.querySelector<HTMLElement>(`#${FINDING_ID}`);
+    target?.focus({ preventScroll: true });
+    // Only a new landing runs this; the view it reads is the one the same switch set.
   }, [landing, take]);
+
+  const rows: MoreRow[] = [
+    {
+      key: "basket",
+      title: WF_ROWS.basket,
+      finding: basketFinding(),
+      children: (
+        <Boundary name="Your basket" resetKey={analysis}>
+          <Live analysis={analysis} settings={settings} level={level} rates={rates} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "holds",
+      title: WF_ROWS.holds,
+      finding: said(WF_ROWS.holds, holdsFinding),
+      children: (
+        <Boundary name="Hold by hold" resetKey={analysis}>
+          <Holds rerun={rerun} />
+        </Boundary>
+      ),
+    },
+  ];
 
   return (
     <div className="wf" ref={root}>
-      <Slug>Walk-forward test</Slug>
-      <p className="wf-dek">
-        Weights chosen on earlier prices and then held, unchanged, over the days after them: what a fitted portfolio earned on
-        days it had not seen.
-      </p>
-      <SegControl options={SEGMENTS} value={view} onChange={pick} ariaLabel="Walk-forward" idPrefix={PREFIX} />
-      <section className="wf-panel" role="tabpanel" id={tabPanelId(PREFIX, view)} aria-labelledby={tabId(PREFIX, view)}>
-        <Boundary key={view} name={label} resetKey={analysis}>
-          {view === "published" ? (
-            <Published level={level} rerun={rerun} />
-          ) : (
-            <Live analysis={analysis} settings={settings} level={level} rates={rates} />
-          )}
-        </Boundary>
-      </section>
+      <header className="wf-lead">
+        <h2 className="tab-finding wf-finding" id={FINDING_ID} tabIndex={-1}>
+          {said("The walk-forward finding", holdupFinding)}
+        </h2>
+        <p className="wf-dek">{said("The walk-forward sub-line", holdupSub)}</p>
+      </header>
+      <Boundary name="As published" resetKey={analysis}>
+        <Published level={level} />
+      </Boundary>
+      <MoreList id={WF_LIST} rows={rows} heading={WF_HEADING} />
     </div>
   );
 }

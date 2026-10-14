@@ -310,18 +310,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     const first = panel?.querySelector("h1, h2, h3, h4, h5, h6");
     const finding = first ? text(first) : "";
     seen.push(`${id}: ${first?.tagName}.${first?.className} "${finding.slice(0, 40)}"`);
-    // The walk-forward tab is the one exception, by name: it opens on its section heading and the switch
-    // between its two segments, and each segment states its own finding under them.
     // Risk is the second half of Performance, which states the chapter's one finding above it: it opens on its
-    // More list, and the Drawdowns row carries what was its finding.
-    if (id === "risk") {
-      check(first?.tagName === "H3" && first.classList.contains("more-head") && !!panel.querySelector("#perf-risk-drawdowns .more-finding"),
-        "tabs: the risk part opens on its More list's heading, under Performance's finding", seen.at(-1));
-      continue;
-    }
-    if (id === "walkforward") {
-      check(first?.tagName === "H2" && first.classList.contains("slug-text") && finding === "Walk-forward test",
-        "tabs: the walkforward tab's first heading is its section heading, Walk-forward test, above its two segments", seen.at(-1));
+    // More list, and the Drawdowns row carries what was its finding. Sensitivity is the same under Does it hold up?:
+    // its weights row carries what was its finding.
+    const second = { risk: "#perf-risk-drawdowns .more-finding", sensitivity: "#sens-weights .more-finding" }[id];
+    if (second) {
+      check(first?.tagName === "H3" && first.classList.contains("more-head") && !!panel.querySelector(second),
+        `tabs: the ${id} part opens on its More list's heading, under its chapter's finding`, seen.at(-1));
       continue;
     }
     check(first?.tagName === "H2" && first.classList.contains("tab-finding") && /[.?]$/.test(finding) && !/NaN|undefined/.test(finding),
@@ -695,15 +690,19 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   pr.unmount();
 }
 
-// ---- (d2b) the walk-forward tab: its two segments, and the two ways in that open the published one ------
+// ---- (d2b) Does it hold up?: the published lead, the Your basket row, and the ways in that land on each ------
 {
   const { DEFAULT_START } = await import("../src/state/defaults.ts");
   const WF = await import("../src/tabs/WalkForward.tsx");
+  const { forgetMore } = await import("../src/components/MoreList.tsx");
+  forgetMore();
   const r = page({}, TABS);
   const row = r.container.querySelector(".app-tabs [role=tablist]");
   const panel = () => r.container.querySelector("[role=tabpanel]");
-  const segment = () => panel()?.querySelector("[data-segment]")?.getAttribute("data-segment") ?? null;
-  const segRow = () => panel()?.querySelector('[role=tablist][aria-label="Walk-forward"]');
+  // What the chapter shows: its published lead, and whether the Your basket row is open with the test drawn in it.
+  const lead = () => !!panel()?.querySelector('#wf-published[aria-labelledby]') && !!panel()?.querySelector('[data-segment="published"]');
+  const basketRow = () => panel()?.querySelector("#wf-basket");
+  const basketOpen = () => basketRow()?.querySelector(".more-button")?.getAttribute("aria-expanded") === "true" && !!basketRow()?.querySelector('[data-segment="basket"]');
   // The control sits in the Overview hindsight card's numbers: back on the Overview, the fold opened.
   const source = () => {
     if (!r.container.querySelector("#overview-hindsight")) click(byLabel(row, CHAPTER_LABELS.overview));
@@ -718,7 +717,12 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   proto.scrollIntoView = function scrollIntoView() {
     landed.push(this);
   };
-  const landedOn = (seg) => landed.length === 1 && landed[0].classList.contains("wf") && document.activeElement?.id === `walkforward-tab-${seg}`;
+  // The published lead: the chapter's top scrolled into view, its finding focused. Your basket: its row open, scrolled
+  // into view, its button focused.
+  const landedOn = (seg) => landed.length === 1 && (seg === "published"
+    ? landed[0].classList.contains("wf") && document.activeElement?.id === WF.FINDING_ID
+    : landed[0].id === "wf-basket" && document.activeElement === landed[0].querySelector(".more-button") &&
+      document.activeElement?.getAttribute("aria-expanded") === "true" && !!landed[0].querySelector('[data-segment="basket"]'));
   const where = () => `${landed.map((e) => e.className).join(",") || "no scroll"}; focus on ${document.activeElement?.id || document.activeElement?.tagName}`;
 
   // The quote's source line: its first words open Does it hold up? on the published test, and its one link is
@@ -731,22 +735,22 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   landed.length = 0;
 
   click(byLabel(row, CHAPTER_LABELS.holdup));
-  check(segment() === "basket" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "Your basket",
-    "walk-forward: the tab opens on Your basket", `${segment()}`);
-  click(byLabel(segRow(), "As published"));
-  check(segment() === "published" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "As published",
-    "walk-forward: the switch shows As published", `${segment()}`);
-  check(landed.length === 0, "walk-forward: the chapter row and the segment row switch where the reader already is, and scroll nothing", where());
+  check(lead() && !!basketRow() && !basketOpen(),
+    "walk-forward: the chapter leads with the published test; Your basket is a closed row", `${lead()} ${basketOpen()}`);
+  check(landed.length === 0, "walk-forward: the chapter row switches where the reader already is, and scrolls nothing", where());
+  click(basketRow().querySelector(".more-button"));
+  check(basketOpen() && landed.length === 0, "walk-forward: the reader opens Your basket in place, and nothing scrolls", where());
   click(byLabel(row, CHAPTER_LABELS.performance));
   click(byLabel(row, CHAPTER_LABELS.holdup));
-  check(segment() === "basket", "walk-forward: leaving its chapter and coming back by its pill opens Your basket again", `${segment()}`);
+  check(lead() && basketOpen(), "walk-forward: leaving its chapter and coming back keeps the row the reader opened, for the visit", `${basketOpen()}`);
+  click(basketRow().querySelector(".more-button"));
   click(byLabel(row, CHAPTER_LABELS.overview));
   const ctl = source().querySelector("button.text-button");
   landed.length = 0;
   click(ctl);
-  check(segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "chapter-tab-holdup",
-    "walk-forward: the hindsight card's control switches to the tab on As published, without a reload", `${segment()}`);
-  check(landedOn("published"), "walk-forward: the hindsight card's control lands the reader on the tab: scrolled into view, the As published segment focused", where());
+  check(lead() && row.querySelector("[aria-selected=true]")?.id === "chapter-tab-holdup" && !basketOpen(),
+    "walk-forward: the hindsight card's control switches to the chapter on its published lead, without a reload", `${lead()}`);
+  check(landedOn("published"), "walk-forward: the hindsight card's control lands the reader on the lead: scrolled into view, the finding focused", where());
   landed.length = 0;
   click(byLabel(row, CHAPTER_LABELS.performance));
   click(byLabel(row, CHAPTER_LABELS.holdup));
@@ -758,14 +762,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const how = [...(scRow?.querySelectorAll(".card-fold-button") ?? [])].find((b) => text(b) === "How it is calculated");
   if (how && how.getAttribute("aria-expanded") === "false") click(how);
   const note = panel()?.querySelector('[data-note="in-sample"] button.text-button');
-  // The note itself must not link out to the method note; As published, which it opens, carries that link.
+  // The note itself must not link out to the method note; the lead, which it opens, carries that link.
   const linksOut = !!panel()?.querySelector(`[data-note="in-sample"] a[href="${P.PUBLISHED_URL}"]`);
   landed.length = 0;
   if (note) click(note);
-  check(!!note && segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "chapter-tab-holdup" &&
-    !linksOut,
-    "walk-forward: the Optimization tab's in-sample note switches to the tab on As published", `${segment()}`);
-  check(landedOn("published"), "walk-forward: the in-sample note lands the reader on the tab: scrolled into view, the As published segment focused", where());
+  check(!!note && lead() && row.querySelector("[aria-selected=true]")?.id === "chapter-tab-holdup" && !linksOut,
+    "walk-forward: the Optimization tab's in-sample note switches to the chapter on its published lead", `${lead()}`);
+  check(landedOn("published"), "walk-forward: the in-sample note lands the reader on the lead: scrolled into view, the finding focused", where());
   check(!!note && !!open && !!note.getAttribute("title") && note.getAttribute("title") === open.getAttribute("title"),
     "walk-forward: the in-sample note's control says where it goes, as the hindsight card's does", note?.getAttribute("title") ?? "(no title)");
   r.unmount();
@@ -782,21 +785,24 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     "walk-forward: a rerun asks for the set's tickers from the default start through the day after its last bar, at the record's rate, long-only",
     JSON.stringify(asked.map(([, x]) => x)));
 
-  // On the page: a set's button hands those settings to the rail, then shows Your basket and lands the reader on it.
+  // On the page: a set's button, in the Hold by hold row, hands those settings to the bar, then opens Your basket and
+  // lands the reader on it.
+  forgetMore();
   const s = stand({ chapter: "overview" });
   const rr = render(h(Harness, { wb: s.wb, tabs: TABS }));
   openNumbers(rr.container);
   click(rr.container.querySelector(".ov-published-source button.text-button"));
+  click(rr.container.querySelector("#wf-holds > .more-button"));
   landed.length = 0;
-  const buttons = [...rr.container.querySelectorAll(".wfp-rerun-button")];
+  const buttons = [...rr.container.querySelectorAll("#wf-holds .wfp-rerun-button")];
   const last = buttons.at(-1);
   const set = last?.closest("[data-set]")?.getAttribute("data-set");
   const asks = s.calls.settings.length;
   if (last) click(last);
-  const seg = rr.container.querySelector("[role=tabpanel] [data-segment]")?.getAttribute("data-segment") ?? null;
+  const seg = rr.container.querySelector('[role=tabpanel] #wf-basket [data-segment="basket"]') ? "basket" : null;
   check(buttons.length === 3 && !!record.sets[set] && s.calls.settings.length === asks + 1 && same(s.calls.settings.at(-1), WF.rerunSettings(record.sets[set].tickers)) &&
     seg === "basket" && s.calls.view.at(-1) === "basket" && landedOn("basket"),
-    "walk-forward: a set's rerun button asks the rail for that set on the published terms, then shows Your basket and lands the reader on it",
+    "walk-forward: a set's rerun button asks the bar for that set on the published terms, then opens Your basket and lands the reader on it",
     `${set} ${JSON.stringify(s.calls.settings.at(-1))} ${seg}; ${where()}`);
   rr.unmount();
   if (hadScroll) Object.defineProperty(proto, "scrollIntoView", hadScroll);

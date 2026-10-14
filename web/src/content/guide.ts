@@ -257,7 +257,11 @@ export const GUIDE_CHAPTERS: Readonly<Record<ChapterId, GuideChapter>> = {
   },
   holdup: {
     question: "Would the best mix have done as well without hindsight?",
-    opens: ["Two parts: the walk-forward test first, then how much the answer moves with the window it is fitted on."],
+    opens: [
+      "It leads with the published walk-forward test, the project card's sentence under its chart. The rows below run the " +
+        "same test on your basket, show each published hold, and show how much the fitted weights move with the years they " +
+        "are fitted on.",
+    ],
   },
 };
 
@@ -463,30 +467,25 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
   sensitivity: {
     question: "How much do the chosen weights depend on which years they were chosen from?",
     opens: [
-      "It chooses the GMV and tangency weights again on several windows that all end on the last day, from the most recent " +
-        "year back to the whole window, and opens on how far one asset's weight moves between them.",
+      "Its rows, under [[If the fitting window changed]], choose the GMV and tangency weights again on several windows that all " +
+        "end on the last day, from the most recent year back to the whole window.",
     ],
     sections: [
       {
-        heading: "Estimation Window Sensitivity",
+        heading: "Weights across windows",
         body: [
-          "One bar per window for each asset's weight; the switch above the chart moves between [[GMV]] and [[Tangency]]. " +
-            "Weights that jump from window to window depend heavily on which years were used.",
+          "The row's line says how far one asset's weight moves between windows. Open it for one bar per window for each " +
+            "asset's weight; the switch above the chart moves between [[GMV]] and [[Tangency]], and [[Show the numbers]] " +
+            "holds the weights as tables. Weights that jump from window to window depend heavily on which years were used.",
         ],
       },
       {
-        heading: "Portfolio Metrics Across Windows (in-sample)",
+        heading: "Portfolio metrics across windows (in-sample)",
         body: ["Each window's mix, scored on that same window's prices."],
       },
       {
-        heading: "Weights Across Windows",
-        body: ["The weights behind the chart, as tables."],
-      },
-      {
-        heading: "Custom Portfolio Sensitivity",
-        body: [
-          "Tick [[Include Custom Portfolio in sensitivity analysis]] to score your own mix, held fixed, on each window too.",
-        ],
+        heading: "Your mix across windows (Custom)",
+        body: ["Your own mix, held fixed, scored on each window too, beside the GMV and tangency mixes chosen there."],
       },
     ],
   },
@@ -499,44 +498,36 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
     ],
     sections: [
       {
-        heading: "Walk-forward test",
-        body: [
-          "The switch under the heading has two views. [[Your basket]] runs the test on the tickers in your settings. " +
-            "[[As published]] replays the published test.",
-          "In your basket's view, [[Fit on]] sets what each choice of weights may look at, [[All prior history]] or only the " +
-            "most recent stretch, and [[Hold for]] sets how long each hold lasts. Both count in returns: there is one daily " +
-            "return for each trading day, so a count of returns is a count of trading days. [[Add the four other " +
-            "constructions]] adds the scorecard's other ways of building a mix.",
-        ],
-      },
-      {
         heading: "In-sample against out-of-sample",
         body: [
           "For each mix, the Sharpe ratio on the prices it was chosen from beside the one it earned afterwards. The distance " +
-            "between them is what hindsight was worth.",
+            "between them is what hindsight was worth. The chapter leads with the published test's three sets this way; under " +
+            "its chart is the sentence the project card prints, with the method note. [[Show the numbers]] holds the published " +
+            "figures in one table, and [[How it is calculated]] the rules of the published run.",
+        ],
+      },
+      {
+        heading: "Your basket: the same test, run now",
+        body: [
+          "The test run on the tickers in your settings, solved when the row opens. [[Fit on]] sets what each choice of " +
+            "weights may look at, [[All prior history]] or only the most recent stretch, and [[Hold for]] sets how long each " +
+            "hold lasts. Both count in returns: there is one daily return for each trading day, so a count of returns is a " +
+            "count of trading days. [[Add the four other constructions]] adds the scorecard's other ways of building a mix.",
         ],
       },
       {
         heading: "Hold by hold",
         body: [
-          "Each hold's dates and the Sharpe ratio each mix earned in it. Under them, [[Weights of]] picks a fitted mix to show " +
-            "the weights it held in each hold.",
+          "In your basket's row, each hold's dates and the Sharpe ratio each mix earned in it. Under them, [[Weights of]] picks " +
+            "a fitted mix to show the weights it held in each hold.",
         ],
       },
       {
-        heading: "The published figures",
-        body: ["The published out-of-sample Sharpe ratios, every set by every mix, in one table."],
-      },
-      {
-        heading: "How the test was run",
-        body: ["The rules of the published run: what each choice of weights saw, how long each hold lasted, and the rate used."],
-      },
-      {
-        heading: PUBLISHED_SETS.map((s) => s.name),
+        heading: ["Hold by hold, as published", ...PUBLISHED_SETS.map((s) => s.name)],
         body: [
           "One section per published set: each hold, and the weights the two fitted mixes held. " +
             "[[Rerun this set on fresh prices]] puts that set into your settings, on the published run's dates and rate with " +
-            "short selling off, and runs the test again on prices fetched now, in your basket's view.",
+            "short selling off, and opens your basket's row to run the test again on prices fetched now.",
         ],
       },
     ],

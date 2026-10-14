@@ -144,9 +144,9 @@ export default function Dumbbell({
       {groups ? (
         groups.map((g, i) => (
           <div key={g.key} className="wfl-bell-group" data-group={g.key}>
-            <h3 className="wfl-bell-group-name" id={`${base}-${i}`}>
+            <h4 className="wfl-bell-group-name" id={`${base}-${i}`}>
               {g.name}
-            </h3>
+            </h4>
             <ul className="wfl-bell-list" aria-labelledby={`${base}-${i}`}>
               {g.rows.map((r) => (
                 <Item key={r.key} row={r} domain={domain} ticks={ticks} group={g.name} />

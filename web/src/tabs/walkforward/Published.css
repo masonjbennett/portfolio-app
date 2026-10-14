@@ -1,5 +1,6 @@
-/* "As published": prose, the nine, the in-sample and out-of-sample pair, then one block per set. One column no
-   wider than the panel; every table scrolls sideways inside its own box (Table.css), never the page. */
+/* The published test: the lead card (the chart of the nine pairs, the card sentence under it, the folds) and the
+   Hold by hold row, one block per set. One column no wider than the panel; every table scrolls sideways inside its
+   own box (Table.css), never the page. */
 .wfp {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -29,7 +30,27 @@
   font-size: 0.9rem;
 }
 
-.wfp-lede a {
+/* The project card's sentence, word for word, under the chart: the chapter's caption, with the method note. */
+.wfp-quote {
+  margin: var(--space-3) 0 0;
+  max-width: min(60em, var(--prose-measure, 100%));
+}
+
+.wfp-quote blockquote {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-2);
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+
+.wfp-quote figcaption {
+  margin-top: var(--space-2);
+  font-size: var(--type-1);
+  color: var(--color-ink2);
+}
+
+.wfp-quote a {
   color: var(--color-teal);
 }
 

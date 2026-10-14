@@ -1,6 +1,9 @@
 // The Sensitivity tab (portfolio_app.py 1842-2021): the GMV and tangency portfolios re-estimated on
 // trailing windows of 1, 2, 3 and 5 years and the full sample, to show how far the weights move when
-// only the lookback changes. Layout: the finding in one sentence, the weight chart, then the tables.
+// only the lookback changes. It is Does it hold up?'s second half, a More list under the walk-forward test:
+// the weights row (its finding the old headline, the chart, the two weight tables under Show the numbers), the
+// in-sample metrics row, and the custom row, which stands for the app's opt-in checkbox (1950-1954): nothing of
+// it is scored until the row opens.
 //
 // Every figure comes from ./sensitivity/model.ts. What differs from the app, and why, is listed
 // there; on this page it shows as: the metrics are labelled in-sample (the app's heading and caption
@@ -9,17 +12,20 @@
 // and the too-short message states the one-year rule the code applies.
 import { memo, useMemo, useState } from "react";
 import Boundary from "../components/Boundary.tsx";
+import Card from "../components/Card.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
 import FormulaLine from "../components/FormulaLine.tsx";
+import HowTips from "../components/HowTips.tsx";
+import MoreList, { type MoreRow } from "../components/MoreList.tsx";
 import SegControl from "../components/SegControl.tsx";
-import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
-import Tip from "../components/Tip.tsx";
 import { ROLE } from "../charts/theme.ts";
 import { format, MINUS } from "../format.ts";
-import type { Column, Level, LoadState, TableRow, TabProps } from "../types.ts";
+import type { Column, LoadState, TableRow, TabProps } from "../types.ts";
 import { windowsSpan } from "./caption.ts";
 import { sensitivityFormula } from "./formula.ts";
+import { customFinding, metricsFinding, SENS_HEADING, SENS_LIST, SENS_ROWS } from "./holdup.ts";
+import { said } from "./performance.ts";
 import GroupedBars, { type Series } from "./sensitivity/GroupedBars.tsx";
 import {
   belowRf,
@@ -109,19 +115,17 @@ export function belowNote(labels: string[], rf: number, allowShort: boolean): st
 }
 
 export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
-  // A throw in fitWindows fails the whole tab, and App's own Boundary re-arms on the next analysis. The
-  // cards below re-arm on the next fit (a new analysis), the custom card on new weights as well.
+  // A throw in fitWindows fails the whole part, and App's own Boundary re-arms on the next analysis. The
+  // rows below re-arm on the next fit (a new analysis), the custom row on new weights as well.
   const fitted = useMemo(() => fitWindows(a), [a]);
   const customKey = useMemo(() => [fitted, weights], [fitted, weights]);
-  // Tangency first: the headline leads with tangency's swing, so the first picture is the one it describes.
+  // Tangency first: the weights row's finding leads with tangency's swing, so the first picture is the one it describes.
   const [port, setPort] = useState<Port>("tan");
-  const [withCustom, setWithCustom] = useState(false);
 
   if (fitted.status !== "ready") {
     return (
       <section className="sens" aria-label="Sensitivity">
-        <h2 className="tab-finding sens-finding">No estimation window could be compared.</h2>
-        <Slug>Estimation Window Sensitivity</Slug>
+        <h3 className="more-head">{SENS_HEADING}</h3>
         <ChartFrame title="Weights across estimation windows" state={fitted}>
           {() => null}
         </ChartFrame>
@@ -130,70 +134,62 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
   }
 
   const fits = fitted.value;
+  const rows: MoreRow[] = [
+    {
+      key: "weights",
+      title: SENS_ROWS.weights,
+      // The finding is the old headline whole: which weight the choice of window moves most, for each portfolio.
+      finding: said(SENS_ROWS.weights, () => headline(fits, a.tickers)),
+      note: (
+        <Boundary name="The sensitivity formula" resetKey={fitted}>
+          <FormulaLine
+            level={level}
+            build={() => sensitivityFormula(fits.length, swing(fits, "tan", a.tickers), swing(fits, "gmv", a.tickers), a.rf, a.allowShort)}
+          />
+        </Boundary>
+      ),
+      children: (
+        <Boundary name="Weight comparison chart" resetKey={fitted}>
+          <WeightCard fits={fits} port={port} setPort={setPort} tickers={a.tickers} rf={a.rf} asOf={a.asOf} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "metrics",
+      title: SENS_ROWS.metrics,
+      finding: said(SENS_ROWS.metrics, () => metricsFinding(fits, a.rf)),
+      children: (
+        <Boundary name="Portfolio metrics across windows" resetKey={fitted}>
+          <Metrics fits={fits} rf={a.rf} allowShort={a.allowShort} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "custom",
+      title: SENS_ROWS.custom,
+      finding: said(SENS_ROWS.custom, () => customFinding(fits, a.tickers, weights, a.rf, a.allowShort)),
+      children: (
+        <Boundary name="Custom portfolio sensitivity" resetKey={customKey}>
+          <CustomSection fits={fits} tickers={a.tickers} weights={weights} rf={a.rf} allowShort={a.allowShort} />
+        </Boundary>
+      ),
+    },
+  ];
   return (
     <section className="sens" aria-label="Sensitivity">
-      <Boundary name="The headline" resetKey={fitted}>
-        <Finding fits={fits} tickers={a.tickers} rf={a.rf} allowShort={a.allowShort} level={level} />
-      </Boundary>
-      <Slug>Estimation Window Sensitivity</Slug>
-      <p className="sens-caption">
-        Mean-variance optimization is sensitive to its inputs: small changes in the lookback period used to estimate returns and
-        covariances can produce very different portfolio weights. {windowsSentence(fits, a.asOf)} Every window is scored at the same risk-free rate, {format(a.rf, "pct2")}, the one this page
-        uses throughout (by default the mean over the whole date range), not the rate that prevailed during each shorter window.
-      </p>
-
-      <Boundary name="Weight comparison chart" resetKey={fitted}>
-        <WeightChart fits={fits} port={port} setPort={setPort} tickers={a.tickers} />
-      </Boundary>
-
-      <Boundary name="Portfolio metrics across windows" resetKey={fitted}>
-        <Metrics fits={fits} rf={a.rf} level={level} allowShort={a.allowShort} />
-      </Boundary>
-
-      <Boundary name="Weights across windows" resetKey={fitted}>
-        <Slug>Weights Across Windows</Slug>
-        <p className="sens-caption">Rows sorted by ticker. A dash marks a window whose optimisation found no solution.</p>
-        {(["gmv", "tan"] as const).map((p) => (
-          <TableState
-            key={p}
-            state={tableState(fits, p, weightRows(fits, p, a.tickers))}
-            title={`${PORT_NAME[p]} Weights Across Windows`}
-            columns={weightColumns(fits)}
-            filename={p === "gmv" ? "gmv_sensitivity" : "tangency_sensitivity"}
-            span={windowsSpan(fits[0].to)}
-            subs={windowSubs(fits)}
-          />
-        ))}
-      </Boundary>
-
-      <Boundary name="Custom portfolio sensitivity" resetKey={customKey}>
-        <Slug>Custom Portfolio Sensitivity</Slug>
-        <label className="sens-check">
-          <input type="checkbox" checked={withCustom} onChange={(e) => setWithCustom(e.target.checked)} />
-          <span>Include Custom Portfolio in sensitivity analysis</span>
-        </label>
-        <p className="sens-caption">Compare your custom portfolio weights against GMV and Tangency across different estimation windows.</p>
-        {withCustom ? <CustomSection fits={fits} tickers={a.tickers} weights={weights} rf={a.rf} allowShort={a.allowShort} /> : null}
-      </Boundary>
+      <MoreList id={SENS_LIST} rows={rows} heading={SENS_HEADING} />
     </section>
   );
 }
 
-const Finding = memo(function Finding(
-  { fits, tickers, rf, allowShort, level }: { fits: WindowFit[]; tickers: string[]; rf: number; allowShort: boolean; level: Level },
-) {
-  return (
-    <>
-      <h2 className="tab-finding sens-finding">{headline(fits, tickers)}</h2>
-      <FormulaLine
-        level={level}
-        build={() => sensitivityFormula(fits.length, swing(fits, "tan", tickers), swing(fits, "gmv", tickers), rf, allowShort)}
-      />
-    </>
-  );
-});
-
-const WeightChart = memo(function WeightChart({ fits, port, setPort, tickers }: { fits: WindowFit[]; port: Port; setPort: (p: Port) => void; tickers: string[] }) {
+const WeightCard = memo(function WeightCard({ fits, port, setPort, tickers, rf, asOf }: {
+  fits: WindowFit[];
+  port: Port;
+  setPort: (p: Port) => void;
+  tickers: string[];
+  rf: number;
+  asOf: string;
+}) {
   const groups = weightGroups(fits, port, tickers);
   const n = fits.length;
   // One hue per portfolio, the windows from light (shortest) to full (longest).
@@ -206,44 +202,62 @@ const WeightChart = memo(function WeightChart({ fits, port, setPort, tickers }: 
   const state: LoadState<typeof groups> = failedWindows(fits, port).length === n
     ? { status: "error", name: `The ${PORT_NAME[port]} optimisation`, message: "It failed in every window, so there are no weights to draw." }
     : { status: "ready", value: groups };
+  const numbers = (
+    <>
+      <p className="sens-caption">Rows sorted by ticker. A dash marks a window whose optimisation found no solution.</p>
+      {(["gmv", "tan"] as const).map((p) => (
+        <TableState
+          key={p}
+          state={tableState(fits, p, weightRows(fits, p, tickers))}
+          title={`${PORT_NAME[p]} Weights Across Windows`}
+          columns={weightColumns(fits)}
+          filename={p === "gmv" ? "gmv_sensitivity" : "tangency_sensitivity"}
+          span={windowsSpan(fits[0].to)}
+          subs={windowSubs(fits)}
+        />
+      ))}
+    </>
+  );
+  const how = (
+    <p className="sens-caption">
+      Mean-variance optimization is sensitive to its inputs: small changes in the lookback period used to estimate returns and
+      covariances can produce very different portfolio weights. {windowsSentence(fits, asOf)} Every window is scored at the same risk-free rate, {format(rf, "pct2")}, the one this page
+      uses throughout (by default the mean over the whole date range), not the rate that prevailed during each shorter window.
+    </p>
+  );
   return (
-    <div className="sens-hero">
-      <div className="sens-switch">
-        <SegControl options={PORT_OPTIONS} value={port} onChange={setPort} ariaLabel="Portfolio" />
+    <Card label={SENS_ROWS.weights} numbers={numbers} how={how}>
+      <div className="sens-hero">
+        <div className="sens-switch">
+          <SegControl options={PORT_OPTIONS} value={port} onChange={setPort} ariaLabel="Portfolio" />
+        </div>
+        <ChartFrame
+          title={weightChartTitle(fits, port, tickers)}
+          subtitle={`Weight in each asset, one bar per window (${fits.map((f) => f.short).join(", ")}); darker bars are longer windows.`}
+          state={state}
+          height={400}
+        >
+          {(g) => <GroupedBars groups={g} series={series} valueFormat="pct2" axis="pct" height={400} />}
+        </ChartFrame>
       </div>
-      <ChartFrame
-        title={weightChartTitle(fits, port, tickers)}
-        subtitle={`Weight in each asset, one bar per window (${fits.map((f) => f.short).join(", ")}); darker bars are longer windows.`}
-        state={state}
-        height={400}
-      >
-        {(g) => <GroupedBars groups={g} series={series} valueFormat="pct2" axis="pct" height={400} />}
-      </ChartFrame>
-    </div>
+    </Card>
   );
 });
 
-const Metrics = memo(function Metrics({ fits, rf, level, allowShort }: { fits: WindowFit[]; rf: number; level: TabProps["level"]; allowShort: boolean }) {
+const Metrics = memo(function Metrics({ fits, rf, allowShort }: { fits: WindowFit[]; rf: number; allowShort: boolean }) {
   const below = belowRf(fits);
-  return (
+  const how = (
     <>
-      <Slug>Portfolio Metrics Across Windows (in-sample)</Slug>
       <p className="sens-caption">
         Annualized return, volatility, and Sharpe ratio for each optimized portfolio under different estimation windows. In-sample:
         each portfolio is optimised on a window's returns and then scored on those same returns, so these figures describe the fit,
         not what the weights went on to earn.
       </p>
-      <p className="sens-tips">
-        <span>
-          Ann. Return <Tip tip="return" level={level} allowShort={allowShort} />
-        </span>
-        <span>
-          Ann. Volatility <Tip tip="volatility" level={level} allowShort={allowShort} />
-        </span>
-        <span>
-          Sharpe <Tip tip="sharpe" level={level} allowShort={allowShort} />
-        </span>
-      </p>
+      <HowTips keys={["return", "volatility", "sharpe"]} allowShort={allowShort} />
+    </>
+  );
+  return (
+    <Card label={SENS_ROWS.metrics} how={how}>
       <div className="sens-pair">
         {(["gmv", "tan"] as const).map((p) => (
           <TableState
@@ -271,7 +285,7 @@ const Metrics = memo(function Metrics({ fits, rf, level, allowShort }: { fits: W
           {belowNote(below, rf, allowShort)}
         </p>
       ) : null}
-    </>
+    </Card>
   );
 });
 
@@ -297,13 +311,17 @@ const CustomSection = memo(function CustomSection({ fits, tickers, weights, rf, 
     { name: "Tangency", label: "Tangency", color: ROLE.tangency },
     { name: "Custom", label: "Custom", color: ROLE.custom },
   ];
+  const how = (
+    <p className="sens-caption">
+      Your custom weights are held fixed and scored on each window's mean returns and covariance: unlike GMV and Tangency, the
+      weights do not change, only the estimates do. Each window's tangency portfolio is, by construction, the highest Sharpe ratio
+      any mix within the bounds reached on that window, so a fixed mix can at best tie it. The GMV and Tangency figures for the
+      same windows are in the metrics row above.
+    </p>
+  );
   return (
-    <div className="sens-custom">
-      <p className="sens-caption">
-        Your custom weights are held fixed and scored on each window's mean returns and covariance: unlike GMV and Tangency, the
-        weights do not change, only the estimates do. Each window's tangency portfolio is, by construction, the highest Sharpe ratio
-        any mix within the bounds reached on that window, so a fixed mix can at best tie it.
-      </p>
+    <Card label={SENS_ROWS.custom} how={how}>
+      <div className="sens-custom">
       {c.clamped ? (
         <p className="sens-note" role="status">
           Some custom weights were outside the current bounds and were clamped to them before normalising.
@@ -318,7 +336,6 @@ const CustomSection = memo(function CustomSection({ fits, tickers, weights, rf, 
         filename="custom_window_metrics"
         span={windowsSpan(fits[0].to)}
       />
-      <p className="sens-caption">The GMV and Tangency figures for the same windows are in the in-sample tables above.</p>
       <ChartFrame
         title={sharpeChartTitle(groups)}
         subtitle="Sharpe Ratio Comparison Across Estimation Windows: GMV, Tangency and Custom, each scored in-sample."
@@ -327,6 +344,7 @@ const CustomSection = memo(function CustomSection({ fits, tickers, weights, rf, 
       >
         {(g) => <GroupedBars groups={g} series={series} valueFormat="num3" axis="num" height={380} />}
       </ChartFrame>
-    </div>
+      </div>
+    </Card>
   );
 });

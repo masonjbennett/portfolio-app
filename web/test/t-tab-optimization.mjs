@@ -167,7 +167,7 @@ for (const set of ["cross", "megacap"]) {
   check(M.mixPhrase([0.7, 0.3, 0.0004, -0.0004], T) === "holds 70.0% AAA and 30.0% BBB", "phrase: a weight that prints as 0.0% is not a holding");
 
   const a = fixtureAnalysis("cross");
-  check(M.headline(a) === "With hindsight, the maximum-Sharpe portfolio holds 54.2% GLD and 45.8% VTI, for an in-sample Sharpe of 0.946 against 0.597 for equal weights; the Sensitivity tab shows how much that depends on the window.",
+  check(M.headline(a) === "With hindsight, the maximum-Sharpe portfolio holds 54.2% GLD and 45.8% VTI, for an in-sample Sharpe of 0.946 against 0.597 for equal weights; the last chapter's fitting-window rows show how much that depends on the window.",
     "headline: cross, long-only, literal", M.headline(a));
   check(M.frontierTitle(a) === `Tangency has the highest Sharpe ratio on the frontier, at ${format(a.tangency.sigma, "pct2")} volatility; GMV the lowest volatility, ${format(a.gmv.sigma, "pct2")}`,
     "frontier title: where Tangency and GMV sit", M.frontierTitle(a));

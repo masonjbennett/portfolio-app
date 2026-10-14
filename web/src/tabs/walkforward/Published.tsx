@@ -1,11 +1,13 @@
-// "As published": the published walk-forward test replayed from the weights it held, its figures quoted
-// from src/content/published.ts. Nothing here fetches prices or solves anything.
+// The published walk-forward test replayed from the weights it held, its figures quoted from
+// src/content/published.ts. Nothing here fetches prices or solves anything. Two parts, both placed by
+// src/tabs/WalkForward.tsx: the default export is Does it hold up?'s lead card (the chart of the nine pairs, the
+// project card's sentence as its caption); Holds is the "Hold by hold" row.
 //
-// PROPS CONTRACT (src/tabs/WalkForward.tsx builds them):
-//   level: Level                                  the explanation level for tooltips
-//   rerun: (tickers: readonly string[]) => void   "Rerun this set on fresh prices": sets the rail to these
-//          tickers, the published run's start, an end that makes its last bar the last one loaded, its rate
-//          typed into the rail and shorting off, then shows "Your basket". Call it with a set's tickers.
+// PROPS CONTRACT:
+//   Published  level: Level                                  the explanation level for the formula line
+//   Holds      rerun: (tickers: readonly string[]) => void   "Rerun this set on fresh prices": sets the bar to these
+//              tickers, the published run's start, an end that makes its last bar the last one loaded, its rate
+//              typed in and shorting off, then opens Your basket. Call it with a set's tickers.
 //
 // Two sources, never mixed within a figure:
 //   - the published strings (the nine, 1.107, the AGG weight and the five Apple weights) are printed exactly as
@@ -23,12 +25,15 @@
 // The chart of the nine pairs: per set and construction, a hollow dot at the portfolio scored on the run's whole
 // window (the record's wholeWindow, the app's own fit; in-sample, the held-out years included) and a filled dot
 // at the published out-of-sample string, which is printed as published.ts holds it and placed where it reads.
-// The mega-caps' maximum Sharpe prints the published 1.107 itself. Its root, heading included, is
-// [data-chart="published-pairs"].
+// The mega-caps' maximum Sharpe prints the published 1.107 itself. Its root is
+// [data-chart="published-pairs"], named for a screen reader by the card's title.
+import { memo } from "react";
+import Card from "../../components/Card.tsx";
 import FormulaLine from "../../components/FormulaLine.tsx";
 import Slug from "../../components/Slug.tsx";
 import Table from "../../components/Table.tsx";
 import {
+  CARD_SENTENCE,
   CROSS_AGG_INTO_2022,
   MEGA_CAP_APPLE,
   MEGA_CAP_IN_SAMPLE,
@@ -48,7 +53,6 @@ import "./Published.css";
 
 export interface PublishedProps {
   level: Level;
-  rerun: (tickers: readonly string[]) => void;
 }
 
 type Key = keyof ByConstruction<unknown>;
@@ -146,15 +150,20 @@ export function wholeDiffers(): { set: string; label: string; exact: string; sho
 export const PAIR_MARKS: BellMarks = { inSample: "in-sample, the run's whole window", oos: "out-of-sample, as published" };
 
 function Pairs() {
+  return (
+    <figure className="wfp-pairs" data-chart="published-pairs" aria-label={PAIR_HEADING}>
+      <Dumbbell groups={publishedPairs()} marks={PAIR_MARKS} />
+    </figure>
+  );
+}
+
+// What the chart's two dots are, and which whole-window figures an exact solve prints differently.
+function PairsHow() {
   const run = WALK_RUNS[0];
   const differs = wholeDiffers();
   const total = PAIRS.length * KEYS.length;
   return (
     <>
-      <figure className="wfp-pairs" data-chart="published-pairs" aria-labelledby="wfp-pairs-head">
-        <Slug id="wfp-pairs-head">{PAIR_HEADING}</Slug>
-        <Dumbbell groups={publishedPairs()} marks={PAIR_MARKS} />
-      </figure>
       <p className="wfp-text" data-note="pairs">
         Each row is one set and construction, scored twice. The hollow dot scores the portfolio on the run's whole
         window, daily returns {day(run.folds[0].fitFirst)} to {day(run.lastBar)}, the held-out years included, at the
@@ -186,7 +195,8 @@ function pubName(key: string): string {
   return PAIRS.find((p) => p.run.key === key)?.pub.name.toLowerCase() ?? "";
 }
 
-function NineTable() {
+// Memo: it takes nothing, so a level change (which redraws the card for its formula line) never redraws the table.
+const NineTable = memo(function NineTable() {
   const folds = WALK_RUNS[0].folds;
   const columns: Column[] = [
     { key: "set", label: "Set", format: "text", first: true },
@@ -211,7 +221,7 @@ function NineTable() {
       subs={Object.fromEntries(FITTED_KEYS.map((k) => [LABEL[k], FITTED_EACH]))}
     />
   );
-}
+});
 
 function Decay({ level }: { level: Level }) {
   // 1.107 belongs to the mega-caps' run alone: found by its key, never by position.
@@ -388,7 +398,7 @@ function SetSection({ run, pub, rerun }: { run: PublishedRun; pub: PublishedSet;
         <>
           <p className="wfp-text">
             The published note's other measured figure: how far the maximum-Sharpe weight in AAPL moves with the lookback alone,
-            at the Sensitivity tab's {format(WALK_APPLE.length, "int")} lookbacks, each ending {day(run.lastBar)}, at the same{" "}
+            at the estimation windows' {format(WALK_APPLE.length, "int")} lookbacks, each ending {day(run.lastBar)}, at the same{" "}
             {format(WALK_RF, "pct1")} rate. Fitted again by the app's own solver on the run's frozen prices (the stored record of
             that refit), each weight rounds to the published figure.
           </p>
@@ -399,38 +409,60 @@ function SetSection({ run, pub, rerun }: { run: PublishedRun; pub: PublishedSet;
   );
 }
 
-export default function Published({ level, rerun }: PublishedProps) {
-  return (
-    <div className="wfp" data-segment="published">
-      <p className="wfp-lede">
+// The chapter's lead: the chart of the nine pairs, the project card's sentence word for word as its caption with the
+// method note, the nine published figures and the pair the sentence quotes under "Show the numbers", and how the
+// test was run under "How it is calculated".
+export default function Published({ level }: PublishedProps) {
+  const numbers = (
+    <>
+      <Decay level={level} />
+      <NineTable />
+      <SolverNote />
+    </>
+  );
+  const how = (
+    <>
+      <p className="wfp-text">
         The walk-forward test published in {PUBLISHED_WHEN}, replayed from the weights it held. Its figures are quoted as the
         published note prints them; every other number here is read from a stored record of the same run (its schedule, the
         weights held in each hold, each hold's result, and each construction scored on the whole window), which this
         page's tests replay on the run's own frozen prices
         (the Apple lookbacks are held to the stored record of their refit).
-        Nothing is fetched and nothing is solved again. <a href={PUBLISHED_URL}>Method note on masonjbennett.com</a>
+        Nothing is fetched and nothing is solved again.
       </p>
-
-      <Pairs />
-      <Decay level={level} />
-
-      <Slug>The published figures</Slug>
-      <NineTable />
-      <SolverNote />
-
-      <Slug>How the test was run</Slug>
+      <PairsHow />
       <Convention />
       <p className="wfp-text">
-        Each set's button below loads its tickers in the rail with prices from {day(RERUN_START)} through{" "}
+        Each set's button under Hold by hold loads its tickers in the bar with prices from {day(RERUN_START)} through{" "}
         {day(WALK_RUNS[0].lastBar)}, a typed{" "}
-        {format(WALK_RF, "pct1")} risk-free rate and shorting off, then opens Your basket. That segment solves every fit
+        {format(WALK_RF, "pct1")} risk-free rate and shorting off, then opens Your basket. That row solves every fit
         exactly, on prices as the source serves them today, so its figures can differ from these in the third decimal: see the
-        solver note above.
+        solver note under Show the numbers.
       </p>
+    </>
+  );
+  return (
+    <div className="wfp" data-segment="published">
+      <Card id="wf-published" title={PAIR_HEADING} sub={`As published in ${PUBLISHED_WHEN}: hollow dots fitted to the whole window, filled dots on days held out.`} numbers={numbers} how={how}>
+        <Pairs />
+        <figure className="wfp-quote">
+          <blockquote>{CARD_SENTENCE}</blockquote>
+          <figcaption>
+            Walk-forward test, published {PUBLISHED_WHEN}. <a href={PUBLISHED_URL}>Method note on masonjbennett.com</a>
+          </figcaption>
+        </figure>
+      </Card>
+    </div>
+  );
+}
 
+/** Hold by hold: each published set's holds, the weights they held, and its rerun button. Memo: a level change leaves it be. */
+export const Holds = memo(function PublishedHolds({ rerun }: { rerun: (tickers: readonly string[]) => void }) {
+  return (
+    <div className="wfp wfp-holds" data-segment="holds">
       {PAIRS.map(({ run, pub }) => (
         <SetSection key={run.key} run={run} pub={pub} rerun={rerun} />
       ))}
     </div>
   );
-}
+});

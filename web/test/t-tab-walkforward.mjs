@@ -23,6 +23,13 @@ const L = await import("../src/tabs/walkforward/live.ts");
 const W = await import("../src/lib/walkforward.ts");
 const { default: WalkForward, walkRates } = await import("../src/tabs/WalkForward.tsx");
 const { TabContext } = await import("../src/state/useWorkbench.ts");
+const { forgetMore } = await import("../src/components/MoreList.tsx");
+
+// Opens the part's Your basket row as a reader does (it draws nothing until then).
+function openBasket(root) {
+  const b = root.querySelector("#wf-basket > .more-button");
+  if (b?.getAttribute("aria-expanded") === "false") act(() => b.click());
+}
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
 const { format } = await import("../src/format.ts");
 const { parseRfSeries } = await import("../src/state/rfwindow.ts");
@@ -259,6 +266,7 @@ async function setAdded(root, on) {
   const settings = settingsFor(examplePayload(), { rf: PUB_RF });
   const ctx = { view: "basket", setTab() {}, rfHistory: hist({ basis: "manual" }), landing: 0, takeLanding: () => false };
   const r = await quietly(() => render(h(TabContext.Provider, { value: ctx }, h(WalkForward, { analysis: an, settings, level: "plain", weights: {}, setWeights() {}, requestSettings() {} }))));
+  openBasket(r.container);
   await quietly(flush);
   const label = text(r.container.querySelector(".wfl-label") ?? { textContent: "" });
   const flat = `Recomputed on prices through ${longDay(typed.asOf)} at a ${format(PUB_RF, "pct1")} risk-free rate; the published note used prices through ${longDay(PUB_LAST)} at a ${format(PUB_RF, "pct1")} risk-free rate.`;
@@ -667,7 +675,7 @@ for (const [name, a] of [
     const { r, root } = await mount(a, TYPED);
     const got = text(termsOf(root) ?? { textContent: "" });
     check(a.asOf === T.PUBLISHED_LAST_BAR && off.length > 0 && got.includes(`${off.length} of the three figures ${off.length === 1 ? "prints" : "print"} differently from the published note: ${off.join("; ")}.`) &&
-      got.endsWith("a little short of the exact solution (the solver note under As published)."),
+      got.endsWith("a little short of the exact solution (the solver note under the published test's Show the numbers)."),
       `published terms: ${set.name} at the published rate typed names exactly the figures that print differently, read from published.ts`, got || "(none)");
     r.unmount();
     // Off the published terms in any one way, the line is gone.
@@ -703,9 +711,16 @@ for (const [name, a] of [
 
 {
   const settings = settingsFor(examplePayload(), { rf: EX.rf });
+  forgetMore();
   const r = await quietly(() => render(h(WalkForward, { analysis: EX, settings, level: "plain", weights: {}, setWeights() {}, requestSettings() {} })));
   await quietly(flush);
-  check(!!r.container.querySelector('[data-segment="basket"] .tbl'), "tab: the tab opens on Your basket and its figures land", text(r.container).slice(0, 120));
+  // Your basket is a More row: nothing of it is solved until the row opens.
+  check(!r.container.querySelector('[data-segment="basket"]') && !!r.container.querySelector("#wf-published") &&
+    r.container.querySelector("#wf-basket > .more-button")?.getAttribute("aria-expanded") === "false",
+    "tab: the part leads with the published card; Your basket is a closed row, nothing solved", text(r.container).slice(0, 120));
+  openBasket(r.container);
+  await quietly(flush);
+  check(!!r.container.querySelector('#wf-basket [data-segment="basket"] .tbl'), "tab: opened, the Your basket row's figures land", text(r.container).slice(0, 120));
   allText.push(segText(r.container));
   r.unmount();
 }

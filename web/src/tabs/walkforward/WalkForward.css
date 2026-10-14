@@ -1,10 +1,10 @@
-/* The Walk-forward tab: the heading, one line saying what the test is, the segment switch, then the
-   segment. One column no wider than the page; a wide table inside a segment scrolls in its own box. */
+/* Does it hold up?'s walk-forward half: the finding and its sub-line, the published card, then the More list. One
+   column no wider than the page; a wide table inside a row scrolls in its own box. */
 .wf {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
-  /* A landing (src/tabs/WalkForward.tsx) leaves this much paper above the heading. */
+  /* A landing (src/tabs/WalkForward.tsx) leaves this much paper above the finding. */
   scroll-margin-top: var(--space-4);
 }
 
@@ -14,8 +14,17 @@
   color: var(--color-ink2);
 }
 
-.wf-panel {
-  min-width: 0;
+.wf-lead {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.wf-finding {
+  margin: 0;
+}
+
+.wf-finding:focus {
+  outline: none;
 }
 
 .wf-line {

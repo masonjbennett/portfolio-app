@@ -20,7 +20,7 @@
 //     screen reader.
 import { readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
-import { act, render, text } from "./_dom.mjs";
+import { act, openAll, render, text } from "./_dom.mjs";
 import { exampleAnalysis, fixtureAnalysis, settingsFor, tabProps } from "./_analysis.mjs";
 
 const { createElement: h } = await import("react");
@@ -99,6 +99,12 @@ async function mountTab(name, a, level, extra = {}) {
   const r = await quietly(() => render(tabElement(name, a, level, extra)));
   await quietly(flush);
   if (name === "optimization") await openBuild(r.container);
+  // Does it hold up? keeps its lines' figures in rows and folds (the sensitivity row's rate under How it is calculated,
+  // the published pair under Show the numbers): opened as a reader opens them.
+  if (name === "sensitivity" || name === "published") {
+    openAll(r);
+    await quietly(flush);
+  }
   seen.renders += 1;
   return r;
 }
@@ -114,7 +120,14 @@ async function openBuild(root) {
 
 // The finding each tab's line sits under.
 // Risk is the second half of Performance: its finding is the Drawdowns row's, and the line sits under that row's button.
-const FINDING = { live: ".wfl-finding", published: ".wfp-decay", risk: "#perf-risk-drawdowns .more-finding", custom: ".build-mix .card-sub" };
+// Sensitivity is the second half of Does it hold up?: its finding is the weights row's, its line under that row's button.
+const FINDING = {
+  live: ".wfl-finding",
+  published: ".wfp-decay",
+  risk: "#perf-risk-drawdowns .more-finding",
+  custom: ".build-mix .card-sub",
+  sensitivity: "#sens-weights .more-finding",
+};
 // Build draws two findings, each with its line: the chapter's (optimization) and the Your mix panel's (custom).
 const ownLine = (name) => (l) => (name === "custom" ? !!l.closest(".build-mix") : name === "optimization" ? !l.closest(".build-mix") : true);
 const findingOf = (root, name) => root.querySelector(FINDING[name] ?? "h2.tab-finding");
