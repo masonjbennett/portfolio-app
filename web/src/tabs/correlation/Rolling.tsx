@@ -114,5 +114,5 @@ function RollChart({ v }: { v: RollView }) {
   );
 }
 
-// Drawn again only when the analysis changes, not when the tab renders for an explanation level.
+// Drawn again only when the analysis changes, not when the tab renders again.
 export default memo(Rolling);

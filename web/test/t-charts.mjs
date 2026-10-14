@@ -276,7 +276,7 @@ for (const value of [null, NaN, Infinity, -Infinity]) {
   r.unmount();
 }
 {
-  const r = render(h(Plate, { label: "Tangency Return", value: 0.1234, format: "pct2", tip: "tangency_return", level: "formula", allowShort: true }));
+  const r = render(h(Plate, { label: "Tangency Return", value: 0.1234, format: "pct2", tip: "tangency_return", allowShort: true }));
   const t = text(r.container.querySelector(".plate-value"));
   check(t === format(0.1234, "pct2") && !text(r.container).includes("not available"), "plate: a number prints through format()", t);
   const tip = r.container.querySelector("[role=tooltip]");

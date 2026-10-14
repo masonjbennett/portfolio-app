@@ -460,7 +460,7 @@ function frontierAdded(root) {
     "The redraw row is empty: the covariance matrix has no Cholesky factor, so no means could be drawn.",
   ]) && JSON.stringify(notes([])) === JSON.stringify(notes(alone.columns)),
   "redraw note: with no added column the note reads as it always has", JSON.stringify(notes(alone.columns)));
-  const r = render(h(Scorecard, { model: withAdded, redraws: FAILED, level: "plain", allowShort: false, filename: "scorecard" }));
+  const r = render(h(Scorecard, { model: withAdded, redraws: FAILED, allowShort: false, filename: "scorecard" }));
   const said = [...r.container.querySelectorAll(".sc-note")].map((x) => text(x));
   check(said.includes(`The redraw row is empty for ${both}: the redraws failed. The solver stopped.`) && !said.some((x) => x.startsWith("The redraw row is empty:")),
     "redraw note: on the page, the scorecard's note names GMV and Tangency when an added column's draw cell is filled", said.join(" | "));

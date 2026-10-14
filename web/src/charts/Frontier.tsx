@@ -989,7 +989,7 @@ function layout(plot: Plot) {
 const axisTitle = { fill: chartTheme.axis.fill, fontFamily: tokens.font.sans, fontSize: 12 };
 
 // Drawn again only when the plot, the height or its own measured width changes (memo): an edit that
-// leaves the frontier's inputs alone, an explanation level or an amount, does not redraw it.
+// leaves the frontier's inputs alone, an amount, does not redraw it.
 const FrontierPlot = memo(function FrontierPlot({ plot, height }: { plot: Plot; height: number }) {
   const [ref, width] = useBoxWidth(FALLBACK_WIDTH);
   const { line, assets, marks, bench, cal, added } = plot;

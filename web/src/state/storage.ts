@@ -1,15 +1,14 @@
-// What this browser remembers: the explanation level and the dollar amount (Prefs), and the last
+// What this browser remembers: the dollar amount (Prefs), and the last
 // settings, in localStorage, never in a URL. The app remembers nothing between visits (its session
-// state dies with the tab); the level and the amount are what a returning visitor should not retype.
+// state dies with the tab); the amount is what a returning visitor should not retype.
 //
 // Every access is in try/catch, the accessor included: private browsing, a full quota and a
 // browser with site data blocked all throw, some on merely reading `localStorage`. The page works
 // without storage. Every read is shape-checked field by field, so a value of the wrong shape (an
 // older build's, or one edited by hand) is treated as absent rather than handed to the page.
-import { DEFAULT_AMOUNT, DEFAULT_LEVEL, MIN_AMOUNT } from "./defaults.ts";
+import { DEFAULT_AMOUNT, MIN_AMOUNT } from "./defaults.ts";
 import { decodeShare, encodeShare } from "./url.ts";
-import { LEVELS } from "../types.ts";
-import type { Level, Prefs, ShareSettings } from "../types.ts";
+import type { Prefs, ShareSettings } from "../types.ts";
 
 export const PREFS_KEY = "portfolio-web.prefs";
 export const SETTINGS_KEY = "portfolio-web.settings";
@@ -38,13 +37,13 @@ function write(key: string, value: string): void {
   }
 }
 
-const isLevel = (x: unknown): x is Level => LEVELS.some((l) => l.id === x);
 // min_value=100 (724); the app has no maximum.
 const isAmount = (x: unknown): x is number =>
   typeof x === "number" && Number.isFinite(x) && x >= MIN_AMOUNT && x <= MAX_AMOUNT;
 
-// The remembered prefs, or the defaults when storage is empty, blocked or holds a bad shape. Each
-// field falls back on its own, so a bad amount does not also forget the level.
+// The remembered prefs, or the defaults when storage is empty, blocked or holds a bad shape. A browser that
+// remembered an explanation level (the page had one until Oct 2026) still holds it beside the amount: it is
+// read past, and the next save drops it.
 export function loadPrefs(): Prefs {
   let v: Record<string, unknown> = {};
   try {
@@ -54,14 +53,13 @@ export function loadPrefs(): Prefs {
     // not JSON: absent
   }
   return {
-    level: isLevel(v.level) ? v.level : DEFAULT_LEVEL,
     amount: isAmount(v.amount) ? v.amount : DEFAULT_AMOUNT,
   };
 }
 
 // Remembers the prefs; a storage failure is swallowed (the page works without it).
 export function savePrefs(prefs: Prefs): void {
-  write(PREFS_KEY, JSON.stringify({ level: prefs.level, amount: prefs.amount }));
+  write(PREFS_KEY, JSON.stringify({ amount: prefs.amount }));
 }
 
 // The last settings, stored as a share query string so a stored value passes the same defensive

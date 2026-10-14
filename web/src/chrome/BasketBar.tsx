@@ -11,16 +11,14 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { ASSUMPTIONS } from "../content/inputs.ts";
 import { format } from "../format.ts";
 import { benchDisplay } from "../state/defaults.ts";
-import type { Analysis, Level, LoadState, RfRate, Settings } from "../types.ts";
-import { AmountGroup, BenchField, DateFields, LevelField, PresetList, RfField, ShortField, TickerField, rateInUse, useTickers } from "./Settings.tsx";
+import type { Analysis, LoadState, RfRate, Settings } from "../types.ts";
+import { AmountGroup, BenchField, DateFields, PresetList, RfField, ShortField, TickerField, rateInUse, useTickers } from "./Settings.tsx";
 import { monthYear } from "./when.ts";
 import "./BasketBar.css";
 
 export interface BasketBarProps {
   settings: Settings;
   setSettings: (patch: Partial<Settings>) => void;
-  level: Level;
-  setLevel: (l: Level) => void;
   rf: LoadState<RfRate>;
   /** A price request is in flight. */
   fetching: boolean;
@@ -61,7 +59,7 @@ function PanelButton({ id, open, onToggle, className, children }: { id: string; 
   );
 }
 
-export default function BasketBar({ settings, setSettings, level, setLevel, rf, fetching, analysis }: BasketBarProps) {
+export default function BasketBar({ settings, setSettings, rf, fetching, analysis }: BasketBarProps) {
   const uid = useId();
   const ids = { tickers: `${uid}-tickers`, baskets: `${uid}-baskets`, dates: `${uid}-dates`, drawer: `${uid}-drawer` };
   const t = useTickers(settings, setSettings);
@@ -177,7 +175,6 @@ export default function BasketBar({ settings, setSettings, level, setLevel, rf, 
             <BenchField settings={settings} setSettings={setSettings} />
             <ShortField settings={settings} setSettings={setSettings} />
             <AmountGroup settings={settings} setSettings={setSettings} />
-            <LevelField level={level} setLevel={setLevel} />
           </>
         ) : null}
       </div>
@@ -186,7 +183,7 @@ export default function BasketBar({ settings, setSettings, level, setLevel, rf, 
 }
 
 /** Every group inline, bar then drawer: the phone's sheet. */
-export function SettingsSheetBody({ settings, setSettings, level, setLevel, rf }: Omit<BasketBarProps, "fetching" | "analysis">) {
+export function SettingsSheetBody({ settings, setSettings, rf }: Omit<BasketBarProps, "fetching" | "analysis">) {
   const t = useTickers(settings, setSettings);
   return (
     <div className="set set-stack">
@@ -197,7 +194,6 @@ export function SettingsSheetBody({ settings, setSettings, level, setLevel, rf }
       <BenchField settings={settings} setSettings={setSettings} />
       <ShortField settings={settings} setSettings={setSettings} />
       <AmountGroup settings={settings} setSettings={setSettings} />
-      <LevelField level={level} setLevel={setLevel} />
     </div>
   );
 }

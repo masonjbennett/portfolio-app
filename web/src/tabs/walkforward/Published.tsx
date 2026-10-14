@@ -4,7 +4,7 @@
 // project card's sentence as its caption); Holds is the "Hold by hold" row.
 //
 // PROPS CONTRACT:
-//   Published  level: Level                                  the explanation level for the formula line
+//   Published  (none)
 //   Holds      rerun: (tickers: readonly string[]) => void   "Rerun this set on fresh prices": sets the bar to these
 //              tickers, the published run's start, an end that makes its last bar the last one loaded, its rate
 //              typed in and shorting off, then opens Your basket. Call it with a set's tickers.
@@ -44,16 +44,12 @@ import {
 } from "../../content/published.ts";
 import { WALK_AGG, WALK_APPLE, WALK_RF, WALK_RUNS, type ByConstruction, type PublishedRun } from "../../content/walkforward.ts";
 import { format } from "../../format.ts";
-import type { Column, Level, TableRow } from "../../types.ts";
+import type { Column, TableRow } from "../../types.ts";
 import { FITTED, tableSpan, windowsSpan } from "../caption.ts";
 import { publishedFormula } from "../formula.ts";
 import Dumbbell, { type BellGroup, type BellMarks } from "./Dumbbell.tsx";
 import { PAIR_HEADING, RERUN_START } from "./terms.ts";
 import "./Published.css";
-
-export interface PublishedProps {
-  level: Level;
-}
 
 type Key = keyof ByConstruction<unknown>;
 const KEYS: readonly Key[] = ["ew", "gmv", "tan"];
@@ -195,7 +191,7 @@ function pubName(key: string): string {
   return PAIRS.find((p) => p.run.key === key)?.pub.name.toLowerCase() ?? "";
 }
 
-// Memo: it takes nothing, so a level change (which redraws the card for its formula line) never redraws the table.
+// Memo: it takes nothing, so the card rendering again never redraws the table.
 const NineTable = memo(function NineTable() {
   const folds = WALK_RUNS[0].folds;
   const columns: Column[] = [
@@ -223,7 +219,7 @@ const NineTable = memo(function NineTable() {
   );
 });
 
-function Decay({ level }: { level: Level }) {
+function Decay() {
   // 1.107 belongs to the mega-caps' run alone: found by its key, never by position.
   const mega = PAIRS.find((p) => p.run.key === "megacap5");
   if (!mega) return null;
@@ -257,7 +253,7 @@ function Decay({ level }: { level: Level }) {
           </dd>
         </div>
       </dl>
-      <FormulaLine level={level} build={() => publishedFormula(MEGA_CAP_IN_SAMPLE, pub.tangency, WALK_RF)} />
+      <FormulaLine build={() => publishedFormula(MEGA_CAP_IN_SAMPLE, pub.tangency, WALK_RF)} />
     </>
   );
 }
@@ -412,10 +408,10 @@ function SetSection({ run, pub, rerun }: { run: PublishedRun; pub: PublishedSet;
 // The chapter's lead: the chart of the nine pairs, the project card's sentence word for word as its caption with the
 // method note, the nine published figures and the pair the sentence quotes under "Show the numbers", and how the
 // test was run under "How it is calculated".
-export default function Published({ level }: PublishedProps) {
+export default function Published() {
   const numbers = (
     <>
-      <Decay level={level} />
+      <Decay />
       <NineTable />
       <SolverNote />
     </>

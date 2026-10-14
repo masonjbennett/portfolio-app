@@ -19,7 +19,7 @@ import HowTips from "../../components/HowTips.tsx";
 import Plate from "../../components/Plate.tsx";
 import Table from "../../components/Table.tsx";
 import { format, MINUS } from "../../format.ts";
-import type { Analysis, CustomWeights, Level } from "../../types.ts";
+import type { Analysis, CustomWeights } from "../../types.ts";
 import { customFormula } from "../formula.ts";
 import { finiteSE } from "../optimization/model.ts";
 import {
@@ -138,7 +138,7 @@ const Editor = memo(function Editor({ a, v, weights, setWeights }: { a: Analysis
 });
 
 // The five figures (1739-1749), and their span and rate under them.
-const Figures = memo(function Figures({ a, v, level }: { a: Analysis; v: CustomView; level: Level }) {
+const Figures = memo(function Figures({ a, v }: { a: Analysis; v: CustomView }) {
   const w = customWeights(v);
   const p = useMemo(() => (w ? customMetrics(a, w) : null), [a, w]);
   // The Sharpe plate carries its standard error, as the scorecard does.
@@ -147,7 +147,7 @@ const Figures = memo(function Figures({ a, v, level }: { a: Analysis; v: CustomV
     <div className="cust-figures" aria-label="Custom portfolio figures" role="group">
       <div className="cust-plates">
         {PLATES.map((d) => (
-          <Plate key={d.key} label={d.label} value={p ? p[d.key] : null} format={d.format} level={level} allowShort={a.allowShort} se={d.key === "sharpe" ? se : null} />
+          <Plate key={d.key} label={d.label} value={p ? p[d.key] : null} format={d.format} allowShort={a.allowShort} se={d.key === "sharpe" ? se : null} />
         ))}
       </div>
       <p className="cust-note">{p ? platesNote(a) : "No figures: the weights entered were refused."}</p>
@@ -185,13 +185,11 @@ export default memo(function YourMix({
   v,
   weights,
   setWeights,
-  level,
 }: {
   a: Analysis;
   v: CustomView;
   weights: CustomWeights;
   setWeights: (w: CustomWeights) => void;
-  level: Level;
 }) {
   const numbers = (
     <Boundary name="Normalized weights" resetKey={v}>
@@ -208,10 +206,9 @@ export default memo(function YourMix({
       <HowTips keys={PLATES.map((d) => d.tip)} allowShort={a.allowShort} />
     </>
   );
-  // At the Formula level, the Sharpe ratio worked out under the verdict that compares it.
+  // The Sharpe ratio worked out, in a fold under the verdict that compares it.
   const note = (
     <FormulaLine
-      level={level}
       build={() => {
         const w = customWeights(v);
         return customFormula(v.custom.ok, w ? customMetrics(a, w) : null, a.rf, a.tangency ? a.tangency.sharpe : null);
@@ -225,7 +222,7 @@ export default memo(function YourMix({
           <Editor a={a} v={v} weights={weights} setWeights={setWeights} />
         </Boundary>
         <Boundary name="Custom portfolio figures" resetKey={v}>
-          <Figures a={a} v={v} level={level} />
+          <Figures a={a} v={v} />
         </Boundary>
       </Card>
     </div>

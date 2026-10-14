@@ -91,7 +91,7 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const ANALYSIS = fields("Analysis");
 const WORKBENCH = fields("Workbench");
 const TABPROPS = fields("TabProps");
-check(ANALYSIS.length === 23 && WORKBENCH.length === 15 && TABPROPS.length === 6,
+check(ANALYSIS.length === 23 && WORKBENCH.length === 13 && TABPROPS.length === 5,
   "types: the field reader finds Analysis, Workbench and TabProps", `${ANALYSIS.length} / ${WORKBENCH.length} / ${TABPROPS.length}`);
 // The walk-forward tab's wiring, by name: the page's segment and rate history on Workbench, what reaches a
 // tab through TabContext, the rate history itself and the rate input the test on the reader's basket gets.
@@ -102,7 +102,7 @@ check(WORKBENCH.includes("view") && WORKBENCH.includes("rfHistory") && WORKBENCH
 // TabContextValue also carries the landing a way in asks for (landing, takeLanding: src/App.tsx).
 check(same(fields("TabContextValue"), ["view", "setTab", "rfHistory", "landing", "takeLanding"]) && same(fields("RfHistory"), ["basis", "series", "loading"]) &&
   same(fields("WalkRates"), ["basis", "points", "flat"]) &&
-  same(TABPROPS, ["analysis", "settings", "level", "weights", "setWeights", "requestSettings"]),
+  same(TABPROPS, ["analysis", "settings", "weights", "setWeights", "requestSettings"]),
   "types: TabContextValue, RfHistory and WalkRates have exactly their fields, and TabProps is unchanged",
   `${fields("TabContextValue")} / ${fields("RfHistory")} / ${fields("WalkRates")} / ${TABPROPS}`);
 
@@ -277,7 +277,7 @@ check(typeof format?.(0.1234, "pct2") === "string" && format?.(null, "pct2") ===
 check(typeof m("src/download.ts").csvText?.([{ key: "a", label: "A", format: "num2" }], [{ a: 1 }]) === "string", "download: csvText returns text");
 check(typeof m("src/content/tooltips.ts").tipText?.("sharpe", "plain") === "string", "tooltips: tipText returns text");
 const prefs = m("src/state/storage.ts").loadPrefs?.();
-check(prefs && same(Object.keys(prefs), fields("Prefs")) && T.LEVELS?.some((l) => l.id === prefs.level),
+check(prefs && same(Object.keys(prefs), fields("Prefs")) && same(fields("Prefs"), ["amount"]),
   "storage: loadPrefs returns exactly Prefs", JSON.stringify(prefs));
 const share = m("src/state/url.ts").decodeShare?.("");
 check(share && same(Object.keys(share), fields("ShareState")) && !("amount" in share.settings),
@@ -324,7 +324,8 @@ check(D.DEFAULT_ALLOW_SHORT === (shortDefault === "True") && D.DEFAULT_SETTINGS?
 const levelNames = grab(/"Tooltip Detail Level",\s*options=\[([^\]]+)\]/, "the level radio")[1]?.match(/"(\w+)"/g)?.map((s) => s.slice(1, -1));
 check(JSON.stringify(T.LEVELS?.map((l) => l.oracle)) === JSON.stringify(levelNames), "types: LEVELS are the app's radio options, in order (650-653)", JSON.stringify(levelNames));
 const knowledge = grab(/st\.session_state\.knowledge = "(\w+)"/, "the knowledge default")[1];
-check(T.LEVELS?.find((l) => l.id === D.DEFAULT_LEVEL)?.oracle === knowledge, "defaults: the level starts at the app's (17-18)", `${D.DEFAULT_LEVEL} vs ${knowledge}`);
+// The app opened at Beginner; the page has no level and prints all three texts, the Beginner one first.
+check(T.LEVELS?.[0]?.oracle === knowledge && D.DEFAULT_LEVEL === undefined, "defaults: the app's default text (17-18) leads every explanation, and no level is kept", `${T.LEVELS?.[0]?.oracle} vs ${knowledge}`);
 const points = Number(grab(/def efficient_frontier\([^)]*n_points=(\d+)/, "efficient_frontier's n_points")[1]);
 check(D.FRONTIER_POINTS === points, "defaults: FRONTIER_POINTS (948)", `${D.FRONTIER_POINTS} vs ${points}`);
 const tabs = grab(/st\.tabs\(\[([\s\S]*?)\]\)/, "the tab labels")[1]?.match(/"([^"]+)"/g)?.map((s) => s.slice(1, -1).trim());
@@ -373,7 +374,7 @@ check(T.TAB_IDS?.length === 6 && T.TAB_IDS[5] === "walkforward" && T.PART_IDS?.l
   // The settings as rendered: the published row first, the app's under More baskets.
   const Rail = m("src/chrome/BasketBar.tsx").SettingsSheetBody;
   const r = render(h(Rail, {
-    settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
+    settings: D.DEFAULT_SETTINGS, setSettings: () => {}, setLevel: () => {},
     rf: { status: "loading" }, fetching: false, failure: null,
   }));
   const buttons = [...r.container.querySelectorAll("button.set-preset")];
@@ -395,7 +396,7 @@ check(T.TAB_IDS?.length === 6 && T.TAB_IDS[5] === "walkforward" && T.PART_IDS?.l
   const view = { rate: 0.0455, date: "2026-09-25", source: "FRED DGS3MO", basis: "window", inUse: 0.0312,
     window: { rate: 0.0312, from: "2019-01-02", to: "2026-09-28", days: 1900 } };
   const v = render(h(Rail, {
-    settings: D.DEFAULT_SETTINGS, setSettings: (x) => patches.push(x), level: "plain", setLevel: () => {},
+    settings: D.DEFAULT_SETTINGS, setSettings: (x) => patches.push(x), setLevel: () => {},
     rf: { status: "ready", value: view }, fetching: false, failure: null,
   }));
   const rfGroup = v.container.querySelector('[name="rf"]')?.closest(".set-group");
@@ -406,7 +407,7 @@ check(T.TAB_IDS?.length === 6 && T.TAB_IDS[5] === "walkforward" && T.PART_IDS?.l
   act(() => today?.click());
   check(inOrder(patches.at(-1), { rf: 0.0455 }), "rail: 'Use today's rate instead' sets the rate to today's yield", JSON.stringify(patches.at(-1)));
   const many = render(h(Rail, {
-    settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
+    settings: D.DEFAULT_SETTINGS, setSettings: () => {}, setLevel: () => {},
     rf: { status: "ready", value: { ...view, window: { ...view.window, days: 1935 } } }, fetching: false, failure: null,
   }));
   const manyText = text(many.container.querySelector('[name="rf"]')?.closest(".set-group"));
@@ -417,7 +418,7 @@ check(T.TAB_IDS?.length === 6 && T.TAB_IDS[5] === "walkforward" && T.PART_IDS?.l
   // A fixed rate that no longer matches today's yield: set by the button on an earlier day, or typed.
   // Either way the note says it is fixed, and never that someone typed it.
   const fixed = render(h(Rail, {
-    settings: { ...D.DEFAULT_SETTINGS, rf: 0.0421 }, setSettings: () => {}, level: "plain", setLevel: () => {},
+    settings: { ...D.DEFAULT_SETTINGS, rf: 0.0421 }, setSettings: () => {}, setLevel: () => {},
     rf: { status: "ready", value: { ...view, basis: "manual", inUse: 0.0421 } }, fetching: false, failure: null,
   }));
   const note = text(fixed.container.querySelector('[name="rf"]')?.closest(".set-group")?.querySelector(".set-note"));
@@ -429,7 +430,7 @@ check(T.TAB_IDS?.length === 6 && T.TAB_IDS[5] === "walkforward" && T.PART_IDS?.l
   // Today's yield in use: while the window's series is still loading, and once its lookup has failed.
   const todayNote = (loading) => {
     const t = render(h(Rail, {
-      settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
+      settings: D.DEFAULT_SETTINGS, setSettings: () => {}, setLevel: () => {},
       rf: { status: "ready", value: { ...view, basis: "today", window: null, inUse: 0.0455, loading } }, fetching: false, failure: null,
     }));
     const s = text(t.container.querySelector('[name="rf"]')?.closest(".set-group")?.querySelector(".set-note"));

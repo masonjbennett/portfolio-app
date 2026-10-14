@@ -1,10 +1,10 @@
-// The formula line (src/tabs/formula.ts, src/components/FormulaLine.tsx): at the Formula explanation level
-// each tab prints one line under its finding, the formula behind the finding's figure with the tab's own
-// numbers in it. Run with `node --import ./test/_tsx.mjs test/t-formula.mjs`.
+// The formula line (src/tabs/formula.ts, src/components/FormulaLine.tsx): each tab prints one line in a fold
+// directly under its finding, the formula behind the finding's figure with the tab's own numbers in it. Until
+// Oct 2026 the line showed at the page's Formula explanation level only; the level is gone. Run with `node --import ./test/_tsx.mjs test/t-formula.mjs`.
 //
-// (a) Every tab and segment, rendered at the three levels, on the first-screen example and the mega-cap
-//     prices (the Optimization, Custom and Sensitivity tabs also with shorting on and at a rate no asset
-//     beats): the finding's text is the same at every level; the line is drawn at Formula only, once.
+// (a) Every tab and segment, on the first-screen example and the mega-cap prices (the Optimization, Custom and
+//     Sensitivity tabs also with shorting on and at a rate no asset beats): one line, in a fold of its own
+//     directly under the finding, closed until it is opened.
 // (b) The line's numbers: every numeral in it, but the formula's own constants, is a figure the tab prints
 //     outside the line, to the precision it is printed at; and the finding's own figures are in the line,
 //     so the two cannot disagree.
@@ -43,7 +43,7 @@ const TABS = {
 const { default: Live } = await import("../src/tabs/walkforward/Live.tsx");
 const { default: Published } = await import("../src/tabs/walkforward/Published.tsx");
 
-const LEVELS = ["plain", "finance", "formula"];
+const { FORMULA_FOLD } = await import("../src/components/FormulaLine.tsx");
 const NONE = { basis: "fallback", points: null, flat: "unavailable" };
 
 const quietly = async (fn) => {
@@ -85,18 +85,18 @@ const FIGURES = {
 
 const seen = { renders: 0, lines: 0, numerals: 0 };
 
-function tabElement(name, a, level, extra = {}) {
+function tabElement(name, a, extra = {}) {
   const el =
     name === "live"
-      ? h(Live, { analysis: a, settings: settingsFor({ tickers: a.tickers, start: a.requested.start, end: a.requested.end, benchmark: a.benchmark }, { allowShort: a.allowShort }), level, rates: NONE })
+      ? h(Live, { analysis: a, settings: settingsFor({ tickers: a.tickers, start: a.requested.start, end: a.requested.end, benchmark: a.benchmark }, { allowShort: a.allowShort }), rates: NONE })
       : name === "published"
-        ? h(Published, { level, rerun() {} })
-        : h(TABS[name], tabProps(a, { level, ...extra }));
+        ? h(Published, {})
+        : h(TABS[name], tabProps(a, extra));
   return h(Boundary, { name, resetKey: a }, el);
 }
 
-async function mountTab(name, a, level, extra = {}) {
-  const r = await quietly(() => render(tabElement(name, a, level, extra)));
+async function mountTab(name, a, extra = {}) {
+  const r = await quietly(() => render(tabElement(name, a, extra)));
   await quietly(flush);
   if (name === "optimization") await openBuild(r.container);
   // Does it hold up? keeps its lines' figures in rows and folds (the sensitivity row's rate under How it is calculated,
@@ -133,41 +133,36 @@ const ownLine = (name) => (l) => (name === "custom" ? !!l.closest(".build-mix") 
 const findingOf = (root, name) => root.querySelector(FINDING[name] ?? "h2.tab-finding");
 
 /**
- * Renders one tab, then moves it through the three levels as the rail's control does (a rerender with the new
- * level), and holds its line to the checks in (a) and (b). Returns the line.
+ * Renders one tab and holds its line to the checks in (a) and (b). Returns the line. The page has no explanation level
+ * since Oct 2026: the line is always drawn, in its own fold directly under the finding.
  */
 async function holdTab(tag, name, a, extra = {}) {
-  const at = {};
-  const r = await mountTab(name, a, LEVELS[0], extra);
-  for (const level of LEVELS) {
-    if (level !== LEVELS[0]) {
-      await quietly(() => act(() => r.rerender(tabElement(name, a, level, extra))));
-      await quietly(flush);
-    }
-    const f = findingOf(r.container, name);
-    const lines = [...r.container.querySelectorAll(".formula-line")].filter(ownLine(name));
-    const symbols = lines.map((l) => l.querySelector(".formula-line-symbols"));
-    at[level] = {
-      finding: f ? text(f) : null,
-      lines: symbols.map((x) => (x ? text(x) : "")),
-      words: lines.map((l) => l.querySelector(".formula-line-words")),
-      hidden: symbols.every((x) => x?.getAttribute("aria-hidden") === "true"),
-      printed: printed(r.container),
-      next: lines[0]?.previousElementSibling ?? null,
-      f,
-      root: r.container.cloneNode(true),
-    };
-  }
+  const r = await mountTab(name, a, extra);
+  const f = findingOf(r.container, name);
+  const lines = [...r.container.querySelectorAll(".formula-line")].filter(ownLine(name));
+  const symbols = lines.map((l) => l.querySelector(".formula-line-symbols"));
+  const fold = lines[0]?.closest(".formula-fold") ?? null;
+  const button = fold?.querySelector(":scope > button") ?? null;
+  const formula = {
+    finding: f ? text(f) : null,
+    lines: symbols.map((x) => (x ? text(x) : "")),
+    words: lines.map((l) => l.querySelector(".formula-line-words")),
+    hidden: symbols.every((x) => x?.getAttribute("aria-hidden") === "true"),
+    printed: printed(r.container),
+    next: fold?.previousElementSibling ?? null,
+    f,
+    root: r.container.cloneNode(true),
+  };
+  // The fold: its button names it, controls the line, and the line shows exactly when the button says it is open.
+  const open = button?.getAttribute("aria-expanded") === "true";
+  check(!!button && text(button) === FORMULA_FOLD && button.getAttribute("aria-controls") === lines[0]?.id && lines[0].hidden === !open,
+    `${tag}: the line sits in its own fold, "${FORMULA_FOLD}", which shows it only when open`, button?.outerHTML.slice(0, 160));
   r.unmount();
-  const { plain, finance, formula } = at;
-  check(!!plain.finding, `${tag}: the finding renders`);
-  check(plain.finding === finance.finding && plain.finding === formula.finding, `${tag}: the finding's text is the same at every level`,
-    `${plain.finding?.slice(0, 60)} | ${formula.finding?.slice(0, 60)}`);
-  check(plain.lines.length === 0 && finance.lines.length === 0, `${tag}: no formula line at Plain or Finance`, `${plain.lines.length}, ${finance.lines.length}`);
-  check(formula.lines.length === 1, `${tag}: one formula line at Formula`, String(formula.lines.length));
+  check(!!formula.finding, `${tag}: the finding renders`);
+  check(formula.lines.length === 1, `${tag}: one formula line`, String(formula.lines.length));
   const line = formula.lines[0] ?? "";
-  // Directly under the finding: the line's previous sibling is the finding itself.
-  check(formula.next === formula.f || (formula.next && formula.next.contains(formula.f)), `${tag}: the line sits directly under the finding`);
+  // Directly under the finding: the fold's previous sibling is the finding itself.
+  check(formula.next === formula.f || (formula.next && formula.next.contains(formula.f)), `${tag}: the fold sits directly under the finding`);
   seen.lines += 1;
 
   // (b) Every numeral but the constants is printed on the tab, at the precision it is printed at.
@@ -346,7 +341,7 @@ function placed(name, a, line, finding, root) {
   return out;
 }
 
-// ---- (a) and (b): every tab, every level -----------------------------------------------------------------
+// ---- (a) and (b): every tab -----------------------------------------------------------------------------
 const EX = exampleAnalysis();
 const MEGA = fixtureAnalysis("megacap");
 const SHORT = exampleAnalysis({ allowShort: true });
@@ -386,9 +381,9 @@ check(F.publishedFormula("", "0.5", 0.02) === null, "no figure: no published fig
 {
   // A refused mix, rendered: weights that sum to zero.
   const zero = Object.fromEntries(EX.tickers.map((t) => [t, 0]));
-  const r = await mountTab("custom", EX, "formula", { weights: zero });
+  const r = await mountTab("custom", EX, { weights: zero });
   const f = text(findingOf(r.container, "custom") ?? { textContent: "" });
-  check(/^No custom portfolio/.test(f) && !r.container.querySelector(".build-mix .formula-line"), "no figure: a refused custom mix draws no line at Formula", f);
+  check(/^No custom portfolio/.test(f) && !r.container.querySelector(".build-mix .formula-line"), "no figure: a refused custom mix draws no line", f);
   r.unmount();
 }
 {
@@ -409,6 +404,21 @@ check(F.publishedFormula("", "0.5", 0.02) === null, "no figure: no published fig
     "builder: a ratio says ≈ where its printed operands give another third digit, and = where they give it", `${near} | ${exact}`);
   check(F.spoken("(16.89% − 2.85%) / 14.06% ≈ 0.998") === "(16.89% minus 2.85%) over 14.06% is about 0.998",
     "spoken: a ratio reads as words", F.spoken("(16.89% − 2.85%) / 14.06% ≈ 0.998"));
+}
+
+// ---- the fold, as a reader meets it: closed on arrival, opened and closed by its button -------------------------
+{
+  const r = await mountTab("returns", EX);
+  const button = r.container.querySelector(".formula-fold > button");
+  const line = r.container.querySelector(".formula-fold > .formula-line");
+  check(button?.getAttribute("aria-expanded") === "false" && line?.hidden === true, "fold: closed on arrival, the line hidden", button?.outerHTML);
+  act(() => button.click());
+  check(button.getAttribute("aria-expanded") === "true" && line.hidden === false, "fold: a click opens it and shows the line");
+  act(() => button.click());
+  check(button.getAttribute("aria-expanded") === "false" && line.hidden === true, "fold: a second click closes it");
+  r.unmount();
+  const css = readFileSync(new URL("../src/components/FormulaLine.css", import.meta.url), "utf8");
+  check(/\.formula-line\[hidden\]\s*\{\s*display:\s*none;/.test(css), "fold: a closed line takes no room (its display rule cannot override hidden)");
 }
 
 // ---- (d) the face -----------------------------------------------------------------------------------------

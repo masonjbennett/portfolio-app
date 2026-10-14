@@ -133,7 +133,7 @@ function centre(root, role) {
   const root = r.container;
   const lead = root.querySelector(".build-lead");
   const parts = [...(lead?.children ?? [])].map((el) => el.id || el.className);
-  check(parts.join() === "build-frontier,section-custom" && lead.previousElementSibling?.matches(".formula-line, .opt-headline") &&
+  check(parts.join() === "build-frontier,section-custom" && lead.previousElementSibling?.matches(".formula-fold, .opt-headline") &&
     root.querySelector(".build-lead + section.more") !== null,
     "order: the frontier card, then the Your mix panel, after the headline and before the More list", parts.join());
   const fig = root.querySelector("#build-frontier figure");

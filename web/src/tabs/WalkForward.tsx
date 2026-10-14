@@ -52,7 +52,7 @@ export function walkRates(h: RfHistory | null, a: Analysis): WalkRates {
   return { basis, points: h.series.series, flat: null };
 }
 
-export default function WalkForward({ analysis, settings, level, requestSettings }: TabProps) {
+export default function WalkForward({ analysis, settings, requestSettings }: TabProps) {
   const page = useContext(TabContext);
   const go = page?.setTab;
   const history = page?.rfHistory ?? null;
@@ -91,7 +91,7 @@ export default function WalkForward({ analysis, settings, level, requestSettings
       finding: basketFinding(),
       children: (
         <Boundary name="Your basket" resetKey={analysis}>
-          <Live analysis={analysis} settings={settings} level={level} rates={rates} />
+          <Live analysis={analysis} settings={settings} rates={rates} />
         </Boundary>
       ),
     },
@@ -116,7 +116,7 @@ export default function WalkForward({ analysis, settings, level, requestSettings
         <p className="wf-dek">{said("The walk-forward sub-line", holdupSub)}</p>
       </header>
       <Boundary name="As published" resetKey={analysis}>
-        <Published level={level} />
+        <Published />
       </Boundary>
       <MoreList id={WF_LIST} rows={rows} heading={WF_HEADING} />
     </div>

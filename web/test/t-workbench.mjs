@@ -172,10 +172,9 @@ check(a.rf === newRf && a.rfSource === "manual" && bits(a.tangency.w, fresh6.w) 
   "ledger:rf-live: the port recomputes tangency at the edited rate at once, with ZERO new /api/prices calls",
   `${a.rf} ${a.tangency.sharpe} vs ${fresh6.sharpe}; calls ${n0} -> ${priceCalls().length}`);
 
-// Shorting, amount, level, weights and chapter: in place, no fetch.
+// Shorting, amount, weights and chapter: in place, no fetch.
 await act(async () => {
   wb.setSettings({ allowShort: true, amount: 98765 });
-  wb.setLevel("formula");
   wb.setWeights({ VTI: 0.5, AGG: -0.25 });
   wb.setChapter("performance");
   await sleep(0);
@@ -186,8 +185,8 @@ check(a.allowShort && a.gmv.w.some((w) => w < 0) && priceCalls().length === n0, 
 check(!/98765|amount/.test(location.search) && location.search.includes("w=VTI:0.5,AGG:-0.25") && location.search.includes("ch=performance") && location.search.includes("short=1"),
   "url: the address bar carries the shorting, weights and chapter, and never the amount", location.search);
 const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
-check(prefs.amount === 98765 && prefs.level === "formula" && !/98765/.test(localStorage.getItem(SETTINGS_KEY)),
-  "storage: the amount and level are remembered in this browser, the amount only in the prefs", JSON.stringify(prefs));
+check(prefs.amount === 98765 && !Object.hasOwn(prefs, "level") && !Object.hasOwn(wb, "level") && !Object.hasOwn(wb, "setLevel") && !/98765/.test(localStorage.getItem(SETTINGS_KEY)),
+  "storage: the amount is remembered in this browser, in the prefs only, and no level is kept anywhere", JSON.stringify(prefs));
 
 // The scorecard's added columns: into the link, in the fixed order, never into storage; the analysis is not rebuilt.
 await act(async () => {
@@ -518,9 +517,9 @@ routes = {};
 const v2 = render(h(Probe));
 await settle();
 check(bits(wb.settings.tickers, ["XLK", "XLF", "XLV"]) && wb.settings.start === "2020-01-02" && wb.settings.benchmark === "^NDX" &&
-  wb.settings.allowShort === FIRST_SETTINGS.allowShort && wb.chapter === "diversification" && wb.weights.XLK === 0.5 && wb.level === "finance" && wb.settings.amount === 4200,
-  "precedence: the link's fields, then the stored ones, then the first settings; amount and level from this browser, never the link",
-  JSON.stringify({ ...wb.settings, chapter: wb.chapter, level: wb.level }));
+  wb.settings.allowShort === FIRST_SETTINGS.allowShort && wb.chapter === "diversification" && wb.weights.XLK === 0.5 && wb.settings.amount === 4200 && !Object.hasOwn(wb, "level"),
+  "precedence: the link's fields, then the stored ones, then the first settings; the amount from this browser (beside an old stored level, read past), never the link",
+  JSON.stringify({ ...wb.settings, chapter: wb.chapter }));
 check(wb.analysis.status === "loading", "no example yet: loading, not an empty result");
 v2.unmount();
 
@@ -638,7 +637,7 @@ v3.unmount();
   };
   function Page() {
     wb = useWorkbenchSafe();
-    return h(Rail, { settings: wb.settings, setSettings: wb.setSettings, level: wb.level, setLevel: wb.setLevel, rf: wb.rf, fetching: wb.fetching });
+    return h(Rail, { settings: wb.settings, setSettings: wb.setSettings, rf: wb.rf, fetching: wb.fetching });
   }
   const pv = render(h(Page));
   await settle();
@@ -648,19 +647,6 @@ v3.unmount();
   const box = root.querySelector('[name="tickers"]');
   const keep = () => [...root.querySelectorAll("button")].find((b) => text(b) === `Keep the first ${MAX_TICKERS}`);
   check(!!box && !keep() && !text(root).includes(MESSAGES["too-many"]), "cap: at the example's five tickers neither the reason nor the button shows");
-  // The level's note: the app's caption at Plain, so the rail keeps its length; the Formula level's line named at Formula.
-  const levelNote = () => text(root.querySelector('[data-input="level"] .set-note') ?? { textContent: "" });
-  const CAPTION = "How much the info marks beside each figure explain. Plain = plain English. Finance = finance terms. Formula = formulas.";
-  const atPlain = levelNote();
-  act(() => wb.setLevel("formula"));
-  const atFormula = levelNote();
-  act(() => wb.setLevel("finance"));
-  const atFinance = levelNote();
-  act(() => wb.setLevel("plain"));
-  check(atPlain === CAPTION && atFinance === CAPTION && atFormula.startsWith(CAPTION) &&
-    atFormula.includes("a line under each tab's finding: the formula behind its figure, with the numbers that finding shows"),
-    "level note: the app's caption at Plain and Finance; at Formula it adds that each finding gets a formula line with the numbers it shows",
-    `${atPlain} | ${atFormula}`);
 
   const type = (v) => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(box, v);

@@ -79,8 +79,7 @@ export const betaTip = (v: unknown, _n: unknown, item?: { payload?: unknown }): 
   return [format(num(v), "num3"), typeof name === "string" && name ? `${name} beta` : "Beta"];
 };
 
-// Each plot below is memo'd: it draws again when its data changes, not when the card around it renders
-// for an explanation level.
+// Each plot below is memo'd: it draws again when its data changes, not when the card around it renders again.
 export const DRAWDOWN_HEIGHT = 320;
 export const VOL_HEIGHT = 360;
 export const BETA_HEIGHT = 320;

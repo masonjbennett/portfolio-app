@@ -3,13 +3,13 @@
 // names them, so a renamed heading is renamed in both; test/t-guide.mjs holds the guide's entries to this list,
 // and this list to the headings the page renders, both ways.
 
-export type InputId = "tickers" | "baskets" | "dates" | "rf" | "bench" | "short" | "amount" | "level";
+export type InputId = "tickers" | "baskets" | "dates" | "rf" | "bench" | "short" | "amount";
 
 /** The basket bar's groups, in its order. */
 export const BAR_IDS: readonly InputId[] = ["tickers", "baskets", "dates"];
 
-/** The Assumptions drawer's groups, in its order. The explanation level sits last until it is retired. */
-export const DRAWER_IDS: readonly InputId[] = ["rf", "bench", "short", "amount", "level"];
+/** The Assumptions drawer's groups, in its order. */
+export const DRAWER_IDS: readonly InputId[] = ["rf", "bench", "short", "amount"];
 
 /** Every group, bar then drawer: the order the phone's sheet shows them in. */
 export const INPUT_IDS: readonly InputId[] = [...BAR_IDS, ...DRAWER_IDS];
@@ -23,7 +23,6 @@ export const INPUT_HEADINGS: Readonly<Record<InputId, string>> = {
   bench: "Benchmark",
   short: "Short selling",
   amount: "Starting amount",
-  level: "Explanation level",
 };
 
 /** The drawer's name, on the button that opens it and in the guide. */

@@ -26,7 +26,7 @@ import { fittedLines, wealthCaption, wealthPlot, WealthLines, type WealthData } 
 import { monthYear } from "../chrome/when.ts";
 import { overviewWealth } from "../overview/OverviewWealth.tsx";
 import { format } from "../format.ts";
-import type { Analysis, Column, CustomWeights, Level, LoadState, TabProps } from "../types.ts";
+import type { Analysis, Column, CustomWeights, LoadState, TabProps } from "../types.ts";
 import { tableSpan } from "./caption.ts";
 import { returnsFormula } from "./formula.ts";
 import { customWeights } from "./optimization/model.ts";
@@ -51,12 +51,12 @@ import "./returns/Returns.css";
 const GROWTH_H = 420;
 const DIST_H = 360;
 
-const Lead = memo(function Lead({ a, amount, level }: { a: Analysis; amount: number; level: Level }) {
+const Lead = memo(function Lead({ a, amount }: { a: Analysis; amount: number }) {
   const g = useMemo(() => growth(a, amount), [a, amount]);
   return (
     <header className="ret-lead">
       <h2 className="tab-finding ret-finding">{headline(g)}</h2>
-      <FormulaLine level={level} build={() => returnsFormula(g, amountOk(g.amount))} />
+      <FormulaLine build={() => returnsFormula(g, amountOk(g.amount))} />
       <p className="ret-dek">{dek(a)}</p>
     </header>
   );
@@ -373,14 +373,14 @@ const More = memo(function More({ a, weights }: { a: Analysis; weights: CustomWe
   return <MoreList id={PERF_LIST} rows={rows} heading={PERF_HEADING} />;
 });
 
-export default function Returns({ analysis, settings, level, weights, requestSettings }: TabProps) {
+export default function Returns({ analysis, settings, weights, requestSettings }: TabProps) {
   const amount = settings.amount;
   // Held steady so the memo'd cards skip a render their inputs do not call for.
   const onAmount = useCallback((n: number) => requestSettings({ amount: n }), [requestSettings]);
   return (
     <div className="ret">
       <Boundary name="Returns headline" resetKey={analysis}>
-        <Lead a={analysis} amount={amount} level={level} />
+        <Lead a={analysis} amount={amount} />
       </Boundary>
       <Boundary name="Cumulative growth" resetKey={analysis}>
         <GrowthCard a={analysis} amount={amount} onAmount={onAmount} weights={weights} />

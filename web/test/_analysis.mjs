@@ -46,7 +46,6 @@ export function tabProps(analysis, over = {}) {
   return {
     analysis,
     settings: settingsFor(requested, { allowShort: analysis.allowShort }),
-    level: "plain",
     weights: {},
     setWeights() {},
     requestSettings() {},

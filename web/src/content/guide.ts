@@ -11,13 +11,13 @@
 // engine uses, and a figure that moves with the prices is described, never quoted. The suite reads this file's own
 // text and fails on a digit outside a [[quoted name]] (a name the page prints is checked against the page instead).
 //
-// The voice is the Plain level's: short sentences, every term defined where it first appears or in the glossary.
+// The voice is the plain words': short sentences, every term defined where it first appears or in the glossary.
 import { monthYear } from "../chrome/when.ts";
 import { format } from "../format.ts";
 import { MAX_TICKERS, MIN_TICKERS } from "../lib/clean.ts";
 import { TRADING_DAYS } from "../lib/stats.ts";
 import { BENCHMARKS } from "../state/defaults.ts";
-import { CHAPTER_IDS, CHAPTER_LABELS, LEVELS, TAB_IDS, type ChapterId, type TabId } from "../types.ts";
+import { CHAPTER_IDS, CHAPTER_LABELS, TAB_IDS, type ChapterId, type TabId } from "../types.ts";
 import { MEGA_CAP_IN_SAMPLE, MEGA_CAP_IN_SAMPLE_END, MEGA_CAP_IN_SAMPLE_RF, PUBLISHED_SETS } from "./published.ts";
 import { ASSUMPTIONS, INPUT_HEADINGS, INPUT_IDS, type InputId } from "./inputs.ts";
 import { QUESTION } from "../overview/model.ts";
@@ -58,7 +58,6 @@ export interface GuideTerm {
   find?: string;
 }
 
-const [plain, finance, formula] = LEVELS.map((l) => l.label);
 const [mega, , cross] = PUBLISHED_SETS;
 const benchList = BENCHMARKS.map((b) => b.label);
 const listed = (xs: readonly string[]) => `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
@@ -206,12 +205,6 @@ export const GUIDE_INPUT: Readonly<Record<InputId, readonly string[]>> = {
     "The sum every growth chart starts from. It changes the dollar figures only, never a return or a ratio. The growth " +
       "charts carry the same field, so a change in either place moves both; it is kept in this browser and never travels " +
       "in a shared link.",
-  ],
-  level: [
-    `How much the small i marks beside the figures explain. [[${plain}]], the default, uses everyday words; [[${finance}]] ` +
-      `uses the terms a finance course would; [[${formula}]] gives the formula, and also adds a line under each part's opening ` +
-      "sentence with the formula behind its figure. The level changes the explanations, never a figure. This guide uses the " +
-      `${plain} wording.`,
   ],
 };
 
@@ -541,7 +534,9 @@ export const GUIDE_EVERYWHERE: readonly GuidePart[] = [
     heading: "The i marks",
     body: [
       "A small i beside a figure or a column explains it. Point at it, move to it with the Tab key, or tap it; tap again or " +
-        "press Escape to close it. Its words follow the explanation level.",
+        "press Escape to close it. It gives the explanation three ways: in plain words, in finance terms and as the formula.",
+      "Under the opening sentence of a part, [[The formula]] opens the formula behind that sentence's figure, with the " +
+        "page's own numbers in it.",
     ],
   },
   {
@@ -559,8 +554,8 @@ export const GUIDE_EVERYWHERE: readonly GuidePart[] = [
   {
     heading: "The keyboard",
     body: [
-      "Press Ctrl and K together (Command and K on a Mac) to open a small box that sets the explanation level, opens a " +
-        "chapter or a part of one, or opens this guide, as you type its name.",
+      "Press Ctrl and K together (Command and K on a Mac) to open a small box that opens a chapter or a " +
+        "part of one, or opens this guide, as you type its name.",
     ],
   },
 ];
@@ -689,8 +684,8 @@ export const GUIDE_TERMS: readonly GuideTerm[] = [
 
 /** The words before the info marks' half of the glossary. */
 export const GUIDE_MARKS_INTRO: readonly string[] = [
-  "The page explains these figures in the small i mark beside each one. Here are those explanations in their " +
-    `${plain} words; the page also has each in ${finance} and ${formula} words.`,
+  "The page explains these figures in the small i mark beside each one, or under How it is calculated. Here is each in " +
+    "plain words; the page also gives it in finance terms and as the formula.",
 ];
 
 // ---- how the figures are computed -------------------------------------------------------------------------------

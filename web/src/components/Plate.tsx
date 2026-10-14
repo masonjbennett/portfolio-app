@@ -12,14 +12,14 @@ import "./Plate.css";
 // figure stays level with its neighbours'. Printed only beside a figure that is itself printed.
 // tip: one of the app's tooltips, or one of the port's own (the Overview's equal-weight, minimum-variance and
 // benchmark Sharpe plates carry the port's), as the Tip itself accepts.
-export default function Plate({ label, value, format: id, tip, level, allowShort = false, se = null }: Omit<PlateProps, "tip"> & { tip?: TipKey | ScoreTipKey }) {
+export default function Plate({ label, value, format: id, tip, allowShort = false, se = null }: Omit<PlateProps, "tip"> & { tip?: TipKey | ScoreTipKey }) {
   const ok = value !== null && Number.isFinite(value);
   const err = ok && se !== null && Number.isFinite(se) ? se : null;
   return (
     <div className="plate">
       <div className="plate-label">
         <span>{label}</span>
-        {tip ? <Tip tip={tip} level={level} allowShort={allowShort} /> : null}
+        {tip ? <Tip tip={tip} allowShort={allowShort} /> : null}
       </div>
       {ok && err !== null ? (
         <div className="plate-figure">

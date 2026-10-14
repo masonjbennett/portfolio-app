@@ -162,10 +162,10 @@ const segText = (root) => {
   return c.textContent;
 };
 
-async function mount(a, rates, level = "plain") {
+async function mount(a, rates) {
   const settings = settingsFor({ tickers: a.tickers, start: a.requested.start, end: a.requested.end, benchmark: a.benchmark }, { allowShort: a.allowShort });
   // Inside a Boundary, as the tab mounts it, so a segment that fails shows its named line instead of ending the suite.
-  const r = await quietly(() => render(h(Boundary, { name: "Your basket", resetKey: a }, h(Live, { analysis: a, settings, level, rates }))));
+  const r = await quietly(() => render(h(Boundary, { name: "Your basket", resetKey: a }, h(Live, { analysis: a, settings, rates }))));
   await quietly(flush);
   seen.renders += 1;
   return { r, root: r.container, settings };
@@ -265,7 +265,7 @@ async function setAdded(root, on) {
   const an = { ...typed, rfSource: "manual" };
   const settings = settingsFor(examplePayload(), { rf: PUB_RF });
   const ctx = { view: "basket", setTab() {}, rfHistory: hist({ basis: "manual" }), landing: 0, takeLanding: () => false };
-  const r = await quietly(() => render(h(TabContext.Provider, { value: ctx }, h(WalkForward, { analysis: an, settings, level: "plain", weights: {}, setWeights() {}, requestSettings() {} }))));
+  const r = await quietly(() => render(h(TabContext.Provider, { value: ctx }, h(WalkForward, { analysis: an, settings, weights: {}, setWeights() {}, requestSettings() {} }))));
   openBasket(r.container);
   await quietly(flush);
   const label = text(r.container.querySelector(".wfl-label") ?? { textContent: "" });
@@ -431,18 +431,18 @@ for (const [name, a] of [
   const before = L.SOLVES.count;
   const fresh = exampleAnalysis();
   const settings = settingsFor({ tickers: fresh.tickers, start: fresh.requested.start, end: fresh.requested.end, benchmark: fresh.benchmark });
-  const pr = await quietly(() => render(h(Live, { analysis: fresh, settings, level: "plain", rates: NONE })));
+  const pr = await quietly(() => render(h(Live, { analysis: fresh, settings, rates: NONE })));
   const busy = pr.container.querySelector(".wfl-results[aria-busy=true] [role=status]");
   check(!!busy && /^Solving the test/.test(text(busy)) && !pr.container.querySelector(".tbl") && !!pr.container.querySelector(".wfl-label") && L.SOLVES.count === before,
     "solving: before the run lands the figures are marked busy and say so, nothing is solved inside the render, and the label is already up", busy ? text(busy) : "no status");
   await quietly(flush);
   check(L.SOLVES.count === before + 1 && !!pr.container.querySelector(".tbl") && !pr.container.querySelector("[aria-busy=true]"),
     "solving: after paint the run is solved once and lands", `${L.SOLVES.count - before}`);
-  // A repaint (a new explanation level) does not solve again; an option change does; an option seen before does not.
+  // A repaint (the same props again) does not solve again; an option change does; an option seen before does not.
   let n = L.SOLVES.count;
-  await quietly(() => act(() => pr.rerender(h(Live, { analysis: fresh, settings, level: "formula", rates: NONE }))));
+  await quietly(() => act(() => pr.rerender(h(Live, { analysis: fresh, settings, rates: NONE }))));
   await quietly(flush);
-  check(L.SOLVES.count === n, "solving: an explanation level repaints without solving again", `${L.SOLVES.count - n}`);
+  check(L.SOLVES.count === n, "solving: a repaint does not solve again", `${L.SOLVES.count - n}`);
   await setOptions(pr.container, OPTS[1]);
   check(L.SOLVES.count === n + 1, "solving: an option change solves once", `${L.SOLVES.count - n}`);
   n = L.SOLVES.count;
@@ -712,7 +712,7 @@ for (const [name, a] of [
 {
   const settings = settingsFor(examplePayload(), { rf: EX.rf });
   forgetMore();
-  const r = await quietly(() => render(h(WalkForward, { analysis: EX, settings, level: "plain", weights: {}, setWeights() {}, requestSettings() {} })));
+  const r = await quietly(() => render(h(WalkForward, { analysis: EX, settings, weights: {}, setWeights() {}, requestSettings() {} })));
   await quietly(flush);
   // Your basket is a More row: nothing of it is solved until the row opens.
   check(!r.container.querySelector('[data-segment="basket"]') && !!r.container.querySelector("#wf-published") &&

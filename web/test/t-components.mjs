@@ -203,7 +203,7 @@ const OPTS = [
 // a missing figure or a non-finite error prints no error at all.
 {
   const one = (props) => {
-    const r = render(h(Plate, { label: "Sharpe", format: "num3", level: "plain", ...props }));
+    const r = render(h(Plate, { label: "Sharpe", format: "num3", ...props }));
     const out = { value: text(r.container.querySelector(".plate-value") ?? {}), se: r.container.querySelector(".plate-se"), na: !!r.container.querySelector(".plate-na") };
     r.unmount();
     return out;

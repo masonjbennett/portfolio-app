@@ -23,6 +23,7 @@ const TIPS = JSON.parse(committed);
 const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, PLAIN_OVERRIDES, TIP_NAMES, NOTES } = await import("../src/content/tooltips.ts");
 const { LEVELS } = await import("../src/types.ts");
 const Tip = (await import("../src/components/Tip.tsx")).default;
+const { LEVEL_HEADS } = await import("../src/components/HowTips.tsx");
 const LEVEL_IDS = LEVELS.map((l) => l.id);
 // A text as tipText should return it: the closing line on file for that key and level, if any, after it.
 const withNote = (key, level, t) => (NOTES[key]?.[level] ? `${t} ${NOTES[key][level]}` : t);
@@ -188,13 +189,17 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
 
 // ---- (e) Tip ---------------------------------------------------------------------------------------
 {
-  const r = render(h(Tip, { tip: "sharpe", level: "plain" }));
+  const r = render(h(Tip, { tip: "sharpe" }));
   const btn = r.container.querySelector("button");
   const pop = btn && r.container.querySelector(`#${CSS.escape(btn.getAttribute("aria-describedby") ?? "none")}`);
   check(btn?.getAttribute("type") === "button" && btn.getAttribute("aria-label") === "About Sharpe ratio",
     "tip: a real button, named for its key", btn?.outerHTML);
-  check(pop?.getAttribute("role") === "tooltip" && text(pop) === tipText("sharpe", "plain") && text(pop).length > 40,
-    "tip: the button is described by the tooltip, which holds the level's text", pop ? text(pop) : "no tooltip");
+  // The page has no level: the tooltip holds all three texts, in order, each under its head, word for word.
+  const layers = pop ? [...pop.querySelectorAll(".tip-layer")] : [];
+  const layered = (key, short = false) => LEVEL_IDS.map((l) => `${LEVEL_HEADS[l]}: ${tipText(key, l, short)}`);
+  check(pop?.getAttribute("role") === "tooltip" && same(layers.map((x) => x.dataset.level), LEVEL_IDS) &&
+      same(layers.map((x) => text(x)), layered("sharpe")) && text(pop).length > 120,
+    "tip: the button is described by the tooltip, which holds all three texts in order, each headed", pop ? text(pop) : "no tooltip");
   check(text(btn) === "i" && !/\p{Extended_Pictographic}/u.test(r.container.innerHTML),
     "tip: the mark is a typographic i, no emoji", btn ? text(btn) : "");
   check(btn?.getAttribute("aria-expanded") === "false" && !r.container.querySelector(".tip[data-open]"), "tip: starts closed");
@@ -207,13 +212,18 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
   act(() => btn.click());
   act(() => document.body.dispatchEvent(new window.Event("pointerdown", { bubbles: true })));
   check(btn.getAttribute("aria-expanded") === "false", "tip: a tap elsewhere closes it");
-  r.rerender(h(Tip, { tip: "sharpe", level: "formula" }));
-  check(text(r.container.querySelector("[role=tooltip]")) === TIPS.sharpe.formula, "tip: follows the level");
-  r.rerender(h(Tip, { tip: "best_sharpe", level: "formula", allowShort: true }));
-  check(text(r.container.querySelector("[role=tooltip]")) === withNote("best_sharpe", "formula", SHORT_OVERRIDES.best_sharpe.formula.short),
+  check(text(r.container.querySelector(".tip-layer[data-level=formula]")) === `${LEVEL_HEADS.formula}: ${TIPS.sharpe.formula}`,
+    "tip: the formula text is the app's own");
+  r.rerender(h(Tip, { tip: "best_sharpe", allowShort: true }));
+  check(text(r.container.querySelector(".tip-layer[data-level=formula]")) === `${LEVEL_HEADS.formula}: ${withNote("best_sharpe", "formula", SHORT_OVERRIDES.best_sharpe.formula.short)}`,
     "ledger:short-bounds-copy: the Tip shows the shorting text when shorting is on");
+  // A tab's own tip (the walk-forward's), given whole, prints its three texts the same way.
+  const own = { name: "test", texts: { plain: "Plain words here.", finance: "Finance words here.", formula: "f = x" } };
+  r.rerender(h(Tip, { own }));
+  check(same([...r.container.querySelectorAll(".tip-layer")].map((x) => text(x)), LEVEL_IDS.map((l) => `${LEVEL_HEADS[l]}: ${own.texts[l]}`)),
+    "tip: a tab's own tip prints its three texts");
   r.unmount();
-  const none = render(h(Tip, { tip: "no_such_key", level: "plain" }));
+  const none = render(h(Tip, { tip: "no_such_key" }));
   check(none.container.innerHTML === "", "tip: no text, no mark (586)", none.container.innerHTML);
   none.unmount();
 }

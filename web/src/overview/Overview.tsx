@@ -27,7 +27,7 @@ import { parseTickers } from "../lib/clean.ts";
 import { PUBLISHED_PRESETS } from "../state/defaults.ts";
 import { TabContext } from "../state/useWorkbench.ts";
 import { tokens } from "../styles/tokens.ts";
-import type { Analysis, Column, Level } from "../types.ts";
+import type { Analysis, Column } from "../types.ts";
 import { figuresLine, finding, hindsight, lede, MIX, mixRows, QUESTION, snapshotPlates, whyFacts, type Bar, type BarGroup, type Hindsight, type MixKey } from "./model.ts";
 import "./Overview.css";
 
@@ -122,7 +122,7 @@ function HindsightBars({ h, narrow }: { h: Hindsight; narrow: boolean }) {
 
 // ---- the cards -----------------------------------------------------------------------------------------
 
-function HindsightCard({ a, level }: { a: Analysis; level: Level }) {
+function HindsightCard({ a }: { a: Analysis }) {
   const phone = usePhone();
   const page = useContext(TabContext);
   const h = useMemo(() => hindsight(a), [a]);
@@ -138,7 +138,7 @@ function HindsightCard({ a, level }: { a: Analysis; level: Level }) {
       <p className="ov-finding">{finding(a)}</p>
       <div className="ov-plates">
         {snapshotPlates(a).map((p) => (
-          <Plate key={p.tip} label={p.label} value={p.value} format={p.format} level={level} se={p.se} />
+          <Plate key={p.tip} label={p.label} value={p.value} format={p.format} se={p.se} />
         ))}
       </div>
       <figure className="ov-published" aria-label="Published result">
@@ -235,14 +235,13 @@ export interface OverviewProps {
   analysis: Analysis;
   /** The starting amount (Settings.amount). */
   amount: number;
-  level: Level;
   /** Load another basket, as the basket bar would. */
   setTickers: (tickers: string[]) => void;
   /** The figures are the previous settings' while new ones are worked in. */
   settling?: boolean;
 }
 
-export default function Overview({ analysis: a, amount, level, setTickers, settling = false }: OverviewProps) {
+export default function Overview({ analysis: a, amount, setTickers, settling = false }: OverviewProps) {
   const page = useContext(TabContext);
   const l = useMemo(() => lede(a, amount), [a, amount]);
   const facts = useMemo(() => whyFacts(a), [a]);
@@ -266,7 +265,7 @@ export default function Overview({ analysis: a, amount, level, setTickers, settl
       </header>
       <div className="ov-grid">
         <WealthCard a={a} amount={amount} />
-        <HindsightCard a={a} level={level} />
+        <HindsightCard a={a} />
       </div>
       <ul className="ov-why" aria-label="Why">
         {facts.map((f) => (

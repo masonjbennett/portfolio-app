@@ -1,4 +1,4 @@
-// A segmented pill row: the six-tab switch and the three-way reading level. It is one row that NEVER
+// A segmented pill row: the chapter switch and a chart's choice of view. It is one row that NEVER
 // wraps: on a phone the row scrolls sideways inside its own box, and the selected pill is scrolled
 // into view whenever the selection changes, so a six-tab row never grows to two lines and never
 // hides the tab the reader is on.
@@ -10,8 +10,8 @@
 // With an idPrefix the row switches panels, so it is a tablist: each pill names the panel it controls
 // (tabPanelId) and the page gives the panel it shows that id. Only the selected tab's panel is mounted;
 // an unselected tab's aria-controls points at a panel that is not in the page until it is chosen, which
-// the tab pattern allows. Without one the row is a choice that controls no panel (the reading level, a
-// chart's asset or window), so it is a radio group: the same keys and single tab stop, the choice
+// the tab pattern allows. Without one the row is a choice that controls no panel (a chart's asset or
+// window), so it is a radio group: the same keys and single tab stop, the choice
 // aria-checked. A tablist there would announce "tab 3 of 9" with no panel behind it.
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import type { SegControlProps } from "../types.ts";

@@ -108,12 +108,10 @@ const LIVE = { rate: 0.0412, date: "2026-09-25", source: "FRED DGS3MO" };
 const EX_SETTINGS = settingsFor(examplePayload(), { rf: EX.rf });
 
 function stand(over = {}) {
-  const calls = { settings: [], level: [], chapter: [], view: [] };
+  const calls = { settings: [], chapter: [], view: [] };
   const wb = {
     settings: EX_SETTINGS,
     setSettings: (p) => calls.settings.push(p),
-    level: "plain",
-    setLevel: (l) => calls.level.push(l),
     analysis: { status: "ready", value: EX },
     fetching: false,
     failure: null,
@@ -133,25 +131,19 @@ function stand(over = {}) {
   };
   return { wb, calls };
 }
-// The workbench with a live chapter and level, as useWorkbench would hold them.
+// The workbench with a live chapter, as useWorkbench would hold it.
 function Harness({ wb, tabs }) {
   const [chapter, setChapter] = useState(wb.chapter);
   const [view, setView] = useState(wb.view);
-  const [level, setLevel] = useState(wb.level);
   const live = {
     ...wb,
     chapter,
     view,
-    level,
     // As useWorkbench: every way into a chapter opens the walk-forward test's first segment unless one is named.
     setChapter: (c, v) => {
       wb.setChapter(c, v);
       setChapter(c);
       setView(v ?? "basket");
-    },
-    setLevel: (l) => {
-      wb.setLevel(l);
-      setLevel(l);
     },
   };
   return h(AppView, { wb: live, tabs });
@@ -277,7 +269,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
 // throw, then a good one: something must fail the first time and nothing may stay failed the second.
 {
   const poisoned = new Proxy(EX, { get: (t, k) => { if (k === "returns") throw new Error("poisoned returns"); return Reflect.get(t, k); } });
-  const props = (analysis) => ({ analysis, settings: EX_SETTINGS, level: "plain", weights: {}, setWeights() {}, requestSettings() {} });
+  const props = (analysis) => ({ analysis, settings: EX_SETTINGS, weights: {}, setWeights() {}, requestSettings() {} });
   const mount = (id, analysis) => h(Boundary, { name: TAB_LABELS[id], resetKey: analysis }, h(TABS[id], props(analysis)));
   for (const id of TAB_IDS) {
     let failed = [];
@@ -498,7 +490,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   for (const [name, tickers] of baskets) {
     const q = publishedSetOf(tickers) ?? mega;
     const needed = [q.ew, q.gmv, q.tangency, ...(q === mega ? [P.MEGA_CAP_IN_SAMPLE] : [])];
-    const r = render(h(Overview, { analysis: { ...EX, tickers }, amount: 10000, level: "plain", setTickers() {} }));
+    const r = render(h(Overview, { analysis: { ...EX, tickers }, amount: 10000, setTickers() {} }));
     openNumbers(r.container);
     const strip = r.container.querySelector("#overview-hindsight .ov-published");
     const st = text(strip ?? {});
@@ -823,7 +815,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   // Rendered text of the Overview (both folds open), the what-if panel (open), the masthead and the footer,
   // the tooltips' own text included (ledger:plain-tip-words), and every accessible name on them.
   const names = [];
-  const ov = render(h(Overview, { analysis: EX, amount: 10000, level: "plain", setTickers() {} }));
+  const ov = render(h(Overview, { analysis: EX, amount: 10000, setTickers() {} }));
   openNumbers(ov.container);
   ov.container.querySelectorAll('.card-fold-button[aria-expanded="false"]').forEach((b) => click(b));
   const wf = render(whatIfList());
@@ -853,7 +845,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(Number.isFinite(se) && tan === 1 && plates[tan].label === "Tangency Sharpe (in-sample)" && plates[tan].se === se &&
     plates.every((p, i) => i === tan || p.se === undefined),
     "numbers: the tangency Sharpe plate's standard error is sharpeSE on the tangency portfolio's daily returns, and no other plate has one", `${plates[tan]?.se} ${se}`);
-  const r = render(h(Overview, { analysis: EX, amount: 10000, level: "plain", setTickers() {} }));
+  const r = render(h(Overview, { analysis: EX, amount: 10000, setTickers() {} }));
   openNumbers(r.container);
   const shown = r.container.querySelectorAll(".ov-plates .plate")[tan];
   check(!!shown && text(shown.querySelector(".plate-se") ?? {}) === `± ${format(se, "num3")} SE` &&
@@ -861,7 +853,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     "numbers: the plate prints the figure alone and plus or minus one standard error beside it", shown ? shown.innerHTML.slice(0, 200) : "no plate");
   r.unmount();
   const failed = exampleAnalysis({ allowShort: true, rf: 0.4 });
-  const rf = render(h(Overview, { analysis: failed, amount: 10000, level: "plain", setTickers() {} }));
+  const rf = render(h(Overview, { analysis: failed, amount: 10000, setTickers() {} }));
   openNumbers(rf.container);
   check(snapshotPlates(failed)[tan].se === null && rf.container.querySelectorAll(".ov-plates .plate").length === 4 && !rf.container.querySelector(".plate-se"),
     "numbers: no tangency, no standard error beside the dash");
@@ -902,16 +894,16 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
 // ---- (f) the settings' fields, every group inline as the phone's sheet holds them -----------------------
 function rail(over = {}) {
   const { wb, calls } = stand(over);
-  const r = render(h(SettingsSheetBody, { settings: wb.settings, setSettings: wb.setSettings, level: wb.level, setLevel: wb.setLevel, rf: wb.rf }));
+  const r = render(h(SettingsSheetBody, { settings: wb.settings, setSettings: wb.setSettings, rf: wb.rf }));
   return { r, calls, root: r.container };
 }
 {
   const { r, calls, root } = rail();
-  const levels = root.querySelector('[aria-label="Explanation level"]');
-  check(!!levels && ["Plain", "Finance", "Formula"].every((l) => byLabel(levels, l)), "rail: the level is a named three-way control", levels ? text(levels) : "none");
-  check([...root.querySelectorAll(".set-group")].at(-1) === levels?.closest(".set-group"), "rail: the level group comes last, until it is retired");
-  if (levels) click(byLabel(levels, "Finance"));
-  check(calls.level.join() === "finance", "rail: choosing Finance sets the level", calls.level.join());
+  // The explanation level is retired (Oct 2026): no control names one, and the amount's group is the last.
+  const groups = [...root.querySelectorAll(".set-group")];
+  check(!root.querySelector('[aria-label="Explanation level"], [data-input="level"]') && !/Explanation level/.test(text(root)) &&
+      groups.at(-1)?.getAttribute("data-input") === "amount",
+    "rail: no explanation level, and the amount's group comes last", groups.map((g) => g.getAttribute("data-input")).join());
 
   // Tickers: presets apply at once; a typed list commits only when the app's checks pass.
   click(byLabel(root, PRESETS[1].name));
@@ -1007,7 +999,7 @@ function rail(over = {}) {
   down.r.unmount();
 
   const { wb: bw } = stand({ fetching: true });
-  const busy = render(h(BasketBar, { settings: bw.settings, setSettings: bw.setSettings, level: bw.level, setLevel: bw.setLevel, rf: bw.rf, fetching: true, analysis: { status: "loading" } }));
+  const busy = render(h(BasketBar, { settings: bw.settings, setSettings: bw.setSettings, rf: bw.rf, fetching: true, analysis: { status: "loading" } }));
   check(/Fetching prices/.test(text(busy.container)), "bar: says when prices are being fetched");
   busy.unmount();
 }
@@ -1015,7 +1007,7 @@ function rail(over = {}) {
 // ---- (f2) the basket bar: chips, panels, the drawer ----------------------------------------------------
 function bar(over = {}) {
   const { wb, calls } = stand(over);
-  const r = render(h(BasketBar, { settings: wb.settings, setSettings: wb.setSettings, level: wb.level, setLevel: wb.setLevel, rf: wb.rf, fetching: false, analysis: wb.analysis }));
+  const r = render(h(BasketBar, { settings: wb.settings, setSettings: wb.setSettings, rf: wb.rf, fetching: false, analysis: wb.analysis }));
   const panelOf = (btn) => document.getElementById(btn.getAttribute("aria-controls"));
   return { r, calls, root: r.container, panelOf };
 }
@@ -1059,15 +1051,15 @@ function bar(over = {}) {
   check(JSON.stringify(b.calls.settings.at(-1)) === JSON.stringify({ tickers: parseTickers(PUBLISHED_PRESETS[0].tickers) }) && b.panelOf(baskets).hidden,
     "bar: a basket applies and its menu closes", JSON.stringify(b.calls.settings.at(-1)));
 
-  // Assumptions: a drawer of the rate, the benchmark, shorting, the amount and the level; its button says what is set.
+  // Assumptions: a drawer of the rate, the benchmark, shorting and the amount; its button says what is set.
   const assume = b.root.querySelector(".bar-assumptions");
   const drawer = b.panelOf(assume);
   check(!!assume && drawer.hidden && !drawer.querySelector("[name=rf]"), "bar: the drawer starts closed, its fields not drawn");
   check(text(assume) === `Assumptions${assumptionsLabel(EX_SETTINGS, stand({}).wb.rf)}` && /^S&P 500 · rf \d+\.\d\d% · long only$/.test(assumptionsLabel(EX_SETTINGS, stand({}).wb.rf)),
     "bar: the Assumptions button carries the benchmark, the rate and the shorting setting", text(assume));
   click(assume);
-  check(!drawer.hidden && ["rf", "benchmark", "allowShort", "amount"].every((nm) => !!field(drawer, nm)) && !!drawer.querySelector('[aria-label="Explanation level"]'),
-    "bar: the drawer holds the rate, the benchmark, shorting, the amount and the level");
+  check(!drawer.hidden && ["rf", "benchmark", "allowShort", "amount"].every((nm) => !!field(drawer, nm)) && !drawer.querySelector('[aria-label="Explanation level"]'),
+    "bar: the drawer holds the rate, the benchmark, shorting and the amount, and no level");
   click(assume);
   check(drawer.hidden, "bar: the same button closes it");
   b.r.unmount();
@@ -1098,7 +1090,8 @@ function bar(over = {}) {
   check(!!chip && !r.container.querySelector('[aria-label="Explanation level"]') && !r.container.querySelector(".bar"), "phone: the chip stands in for the basket bar");
   if (chip) click(chip);
   const sheet = document.querySelector("[role=dialog]");
-  check(!!sheet && !!sheet.querySelector('[aria-label="Explanation level"]') && !!sheet.querySelector('[name="tickers"]'), "phone: the chip opens a sheet holding every setting");
+  check(!!sheet && !!sheet.querySelector('[name="tickers"]') && !!sheet.querySelector('[name="amount"]') && !sheet.querySelector('[aria-label="Explanation level"]'),
+    "phone: the chip opens a sheet holding every setting, and no level");
   key(document.body, "Escape");
   check(!document.querySelector("[role=dialog]"), "phone: Escape closes the sheet");
   r.unmount();
@@ -1261,18 +1254,20 @@ function bar(over = {}) {
   const dialog = () => r.container.querySelector('[aria-label="Command palette"]');
   check(!dialog(), "palette: closed until asked for");
   key(document.body, "k", { ctrlKey: true });
-  check(!!dialog() && clickables(dialog()).length === 16 && clickables(dialog()).some((b) => text(b).endsWith(TAB_LABELS.walkforward)) &&
+  check(!!dialog() && clickables(dialog()).length === 13 && !/Explanation level/.test(text(dialog())) && clickables(dialog()).some((b) => text(b).endsWith(TAB_LABELS.walkforward)) &&
     CHAPTER_IDS.every((c) => clickables(dialog()).some((b) => text(b).startsWith("Chapter") && text(b).includes(CHAPTER_LABELS[c]))) &&
     text(clickables(dialog()).at(-1)).endsWith("How to read this page"),
-    "palette: Ctrl+K opens the three levels, the five chapters, the seven tabs' parts (Walk-forward among them) and the guide, last",
+    "palette: Ctrl+K opens the five chapters, the seven tabs' parts (Walk-forward among them) and the guide, last, and no level",
     dialog() ? clickables(dialog()).map(text).join(" | ") : "closed");
   const input = dialog()?.querySelector("input");
   if (input) {
+    setValue(input, "walk");
+    check(clickables(dialog()).length === 1 && text(clickables(dialog())[0]).endsWith(TAB_LABELS.walkforward), "palette: typing filters", clickables(dialog()).map(text).join());
     setValue(input, "formula");
-    check(clickables(dialog()).length === 1 && text(clickables(dialog())[0]).endsWith("Formula"), "palette: typing filters", clickables(dialog()).map(text).join());
-    key(input, "Enter");
+    check(clickables(dialog()).length === 0, "palette: no level command is left to match", clickables(dialog()).map(text).join());
+    key(input, "Escape");
   }
-  check(calls.level.at(-1) === "formula" && !dialog(), "palette: Enter sets the level and closes", calls.level.join());
+  check(!dialog(), "palette: Escape closes it after a search that matched nothing");
   key(document.body, "K", { metaKey: true });
   const again = dialog()?.querySelector("input");
   if (again) {

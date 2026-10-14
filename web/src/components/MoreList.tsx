@@ -17,7 +17,7 @@ export interface MoreRow {
   finding: ReactNode;
   /** The full card, drawn when the row first opens. */
   children: ReactNode;
-  /** A line under the row's button, shown open or closed (the formula behind the finding, at the Formula level). */
+  /** A line under the row's button, shown open or closed (the formula behind the finding, in its own fold). */
   note?: ReactNode;
   /**
    * For a row whose card is fetched on demand: asks for its code. Called when the reader points at, presses or

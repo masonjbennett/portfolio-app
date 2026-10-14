@@ -10,12 +10,13 @@ import type { AnnualStats } from "./lib/stats.ts";
 import type { ScoreTipKey } from "./content/tooltips.ts";
 import type { RfBasis, RfPoint, RfSeries } from "./state/rfwindow.ts";
 
-// ---- explanation level -----------------------------------------------------------------------
+// ---- the three texts of an explanation ------------------------------------------------------------
 
-/** How much each tooltip explains: the app's Beginner / Intermediate / Advanced radio (650-656). */
+/** The three texts every tooltip carries: the app's Beginner / Intermediate / Advanced (650-656). The app chose one
+ *  with a radio; the page has no such control and prints all three, in this order (components/Tip, HowTips). */
 export type Level = "plain" | "finance" | "formula";
 
-/** The three levels in the app's order, each with its page label and the app's own name (650-653). */
+/** The three texts in the app's order, each with its old label and the app's own name (650-653). */
 export const LEVELS: readonly { id: Level; label: string; oracle: "Beginner" | "Intermediate" | "Advanced" }[] = [
   { id: "plain", label: "Plain", oracle: "Beginner" },
   { id: "finance", label: "Finance", oracle: "Intermediate" },
@@ -27,7 +28,7 @@ export const LEVELS: readonly { id: Level; label: string; oracle: "Beginner" | "
 /**
  * What the visitor chose in the rail. Every field except `amount` travels in the share URL (the
  * custom weights travel beside them, see ShareState); `amount` NEVER does, it lives in
- * localStorage with the level (see Prefs). There is no Run button: a change recomputes at once,
+ * localStorage (see Prefs). There is no Run button: a change recomputes at once,
  * and only `tickers`, `start`, `end` and `benchmark` fetch prices.
  */
 export interface Settings {
@@ -72,8 +73,6 @@ export interface ShareState {
 
 /** What this browser remembers in localStorage: never shared, never in a URL. */
 export interface Prefs {
-  /** The explanation level last chosen. */
-  level: Level;
   /** The starting dollar amount last entered. */
   amount: number;
 }
@@ -335,10 +334,6 @@ export interface Workbench {
   settings: Settings;
   /** Merge a change into the settings; a price-affecting field starts a fetch. */
   setSettings: (patch: Partial<Settings>) => void;
-  /** The explanation level. */
-  level: Level;
-  /** Change the level (remembered in localStorage). */
-  setLevel: (level: Level) => void;
   /** The analysis on screen. */
   analysis: LoadState<Analysis>;
   /** A price request is in flight; `analysis` still holds the previous result meanwhile. */
@@ -417,8 +412,6 @@ export interface TabProps {
   analysis: Analysis;
   /** The current settings (amount and allowShort are read live, 1196, 1258). */
   settings: Settings;
-  /** The explanation level for tooltips. */
-  level: Level;
   /** Raw custom weights by ticker. */
   weights: CustomWeights;
   /** Replace the custom weights wholesale. */
@@ -552,22 +545,20 @@ export type TipKey =
   | "beta"
   | "alpha";
 
-/** An info mark that shows one tooltip at the chosen level. */
 /** A tooltip a tab carries itself, outside the page's tooltip modules: its name and its three texts. */
 export interface OwnTip {
   /** A short name, for the info mark's accessible label. */
   name: string;
-  /** The text at each level. */
+  /** Its three texts. */
   texts: Readonly<Record<Level, string>>;
 }
 
+/** An info mark that shows one tooltip's three texts. */
 export interface TipProps {
   /** Which tooltip: one of the app's, or one of the scorecard's own. Ignored when `own` is given. */
   tip?: TipKey | ScoreTipKey;
   /** A tab's own tooltip, given whole (src/tabs/walkforward/tips.ts), so its text loads with the tab. */
   own?: OwnTip;
-  /** Which of its three texts. */
-  level: Level;
   /** The shorting toggle: two formula-level texts follow it (content/tooltips.ts). Default off. */
   allowShort?: boolean;
 }
@@ -582,8 +573,6 @@ export interface PlateProps {
   format: FormatId;
   /** The tooltip beside the label, if any. */
   tip?: TipKey;
-  /** The explanation level for that tooltip. */
-  level: Level;
   /** The shorting toggle, passed to the tooltip, whose text follows it. Default off. */
   allowShort?: boolean;
   /** One standard error of the figure, in the figure's own format; null or non-finite prints nothing. */

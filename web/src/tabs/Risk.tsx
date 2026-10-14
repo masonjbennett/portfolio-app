@@ -19,7 +19,7 @@ import SegControl from "../components/SegControl.tsx";
 import Table from "../components/Table.tsx";
 import { format } from "../format.ts";
 import { tableSpan } from "./caption.ts";
-import type { Analysis, CustomWeights, Level, TabProps } from "../types.ts";
+import type { Analysis, CustomWeights, TabProps } from "../types.ts";
 import { riskFormula } from "./formula.ts";
 import { customWeights } from "./optimization/model.ts";
 import type { ScoreColId } from "./optimization/scorecard.ts";
@@ -66,7 +66,6 @@ import "./risk/Risk.css";
 
 interface SectionProps {
   a: Analysis;
-  level: Level;
   allowShort: boolean;
 }
 
@@ -256,9 +255,9 @@ const Capm = memo(function Capm({ a, allowShort }: SectionProps) {
   );
 });
 
-export default function Risk({ analysis: a, level, weights }: TabProps) {
+export default function Risk({ analysis: a, weights }: TabProps) {
   // The shorting the analysis was built with (the bar's switch can be a render ahead of it).
-  const p = { a, level, allowShort: a.allowShort };
+  const p = { a, allowShort: a.allowShort };
   const rows: MoreRow[] = [
     {
       key: "falls",
@@ -274,10 +273,10 @@ export default function Risk({ analysis: a, level, weights }: TabProps) {
       key: "drawdowns",
       title: RISK_ROWS.drawdowns,
       finding: said(RISK_ROWS.drawdowns, () => drawdownsFinding(a)),
-      // The formula behind the finding's figure, under the row, at the Formula level only.
+      // The formula behind the finding's figure, under the row, in its own fold.
       note: (
         <Boundary name="The drawdowns formula" resetKey={a}>
-          <FormulaLine level={level} build={() => riskFormula(worstDrawdown(tickerDrawdowns(a)))} />
+          <FormulaLine build={() => riskFormula(worstDrawdown(tickerDrawdowns(a)))} />
         </Boundary>
       ),
       children: (

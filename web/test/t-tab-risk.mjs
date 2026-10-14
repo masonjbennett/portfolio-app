@@ -354,8 +354,6 @@ const sectionOf = (r, id) => r.container.querySelector(`#perf-risk-${ROW_OF[id]}
   const levels = (k) => ["plain", "finance", "formula"].map((l) => tipText(k, l));
   check(["max_dd", "volatility", "sharpe", "sortino", "beta", "alpha"].every((k) => JSON.stringify(tipsOf(k)) === JSON.stringify(levels(k))),
     "tab: every term the cards' marks carried has its three texts under How it is calculated", tipsOf("max_dd").join(" / "));
-  quiet(() => r.rerender(h(Risk, { ...props, level: "formula" })));
-  check(JSON.stringify(tipsOf("beta")) === JSON.stringify(levels("beta")), "tab: the level switch leaves them as they were");
 
   // The hero opens on the asset the headline names; another asset's pill switches chart and plate.
   const heroTitle = () => text(dd.querySelector(".card-title"));

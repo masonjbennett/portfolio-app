@@ -39,7 +39,7 @@ import { format, MINUS } from "../format.ts";
 import { ADDED_IDS, unavailable, type AddedId } from "../lib/constructions.ts";
 import type { Vec } from "../lib/num.ts";
 import type { Custom } from "../lib/portfolio.ts";
-import type { Analysis, Level, LoadState, TabProps } from "../types.ts";
+import type { Analysis, LoadState, TabProps } from "../types.ts";
 import { BUILD_HEADING, BUILD_LIST, BUILD_ROWS, holdingsFinding, prcFinding, redrawsFinding, scorecardFinding, WHATIF_FINDING } from "./build.ts";
 import { fittedSubs, tableSpan } from "./caption.ts";
 import { customView, frontierTitle as mixFrontierLine, type CustomView } from "./custom/model.ts";
@@ -134,11 +134,11 @@ const spanOf = (a: Analysis) => tableSpan(a.dates[0], a.asOf);
 
 const shortNote = `Shorting is on: each weight is bounded to [${MINUS}100%, 100%], and the weights sum to 100%.`;
 
-const Headline = memo(function Headline({ a, level }: { a: Analysis; level: Level }) {
+const Headline = memo(function Headline({ a }: { a: Analysis }) {
   return (
     <>
       <h2 className="tab-finding opt-headline">{headline(a)}</h2>
-      <FormulaLine level={level} build={() => optimizationFormula(a.tangency, a.gmv, portRow(a, a.ew), a.rf, a.allowShort)} />
+      <FormulaLine build={() => optimizationFormula(a.tangency, a.gmv, portRow(a, a.ew), a.rf, a.allowShort)} />
     </>
   );
 });
@@ -213,7 +213,6 @@ const ScorecardCard = memo(function ScorecardCard({
   a,
   c,
   redraws,
-  level,
   amount,
   chosen,
   shown,
@@ -223,7 +222,6 @@ const ScorecardCard = memo(function ScorecardCard({
   a: Analysis;
   c: Custom;
   redraws: RedrawState;
-  level: Level;
   amount: number;
   chosen: readonly AddedId[];
   shown: readonly AddedId[];
@@ -255,7 +253,7 @@ const ScorecardCard = memo(function ScorecardCard({
     <Card label={BUILD_ROWS.scorecard} how={how}>
       <AddColumns options={options} onToggle={onToggle} note={note} />
       <Failures a={a} />
-      <Scorecard model={model} redraws={redraws} level={level} allowShort={a.allowShort} filename="scorecard" book={book} />
+      <Scorecard model={model} redraws={redraws} allowShort={a.allowShort} filename="scorecard" book={book} />
     </Card>
   );
 });
@@ -314,7 +312,7 @@ const RiskContribution = memo(function RiskContribution({ a, c, height }: { a: A
 const NO_COLS: readonly AddedId[] = [];
 const NO_MARKS: readonly AddedMark[] = [];
 
-export default function Optimization({ analysis: a, settings, level, weights, setWeights, requestSettings }: TabProps) {
+export default function Optimization({ analysis: a, settings, weights, setWeights, requestSettings }: TabProps) {
   const phone = usePhone();
   const barHeight = phone ? 320 : 400;
   // c changes with the analysis or the custom weights, so the cards that draw the custom book re-arm on either.
@@ -349,7 +347,7 @@ export default function Optimization({ analysis: a, settings, level, weights, se
   const weightsKey = useMemo(() => [a, c, shown], [a, c, shown]);
   const scoreKey = useMemo(() => [c, redraws, shown, addedDraws], [c, redraws, shown, addedDraws]);
   // Each card is memo'd, so one whose own inputs did not change is skipped when the chapter renders again: an
-  // explanation level reaches the tooltips, an amount the scorecard's workbook. A row draws nothing until it
+  // amount reaches the scorecard's workbook. A row draws nothing until it
   // first opens (MoreList); the findings beside the rows are computed from the same models the cards draw.
   const rows: MoreRow[] = [
     {
@@ -362,7 +360,6 @@ export default function Optimization({ analysis: a, settings, level, weights, se
             a={a}
             c={c}
             redraws={redraws}
-            level={level}
             amount={settings.amount}
             chosen={chosen}
             shown={shown}
@@ -419,7 +416,7 @@ export default function Optimization({ analysis: a, settings, level, weights, se
   return (
     <div className="opt" data-tab="optimization">
       <Boundary name="The headline" resetKey={a}>
-        <Headline a={a} level={level} />
+        <Headline a={a} />
       </Boundary>
       {/* The lead: the frontier, then the panel that moves the mix on it. On a desktop wide enough for both they sit
           side by side (./optimization/Optimization.css); narrower, the panel follows the chart. */}
@@ -428,7 +425,7 @@ export default function Optimization({ analysis: a, settings, level, weights, se
           <FrontierCard a={a} v={v} custom={custom} added={marks} />
         </Boundary>
         <Boundary name="Your mix" resetKey={v}>
-          <YourMix a={a} v={v} weights={weights} setWeights={setWeights} level={level} />
+          <YourMix a={a} v={v} weights={weights} setWeights={setWeights} />
         </Boundary>
       </div>
       <MoreList id={BUILD_LIST} rows={rows} heading={BUILD_HEADING} />

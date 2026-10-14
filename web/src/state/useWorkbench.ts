@@ -1,4 +1,4 @@
-// The page's state in one hook: settings, level, the analysis, the live rate, custom weights and
+// The page's state in one hook: settings, the analysis, the live rate, custom weights and
 // the active tab, with the walk-forward tab's segment.
 //
 // The app computes nothing until Run is pressed, and then freezes the rate with the prices
@@ -6,7 +6,7 @@
 // Run button. The only thing that fetches is a change to what the prices ARE (tickers, dates,
 // benchmark): it waits FETCH_DELAY_MS for typing to settle, and a newer request aborts the older,
 // whose answer is then dropped even if it arrives. Everything else (the rate, shorting, the
-// amount, the level, the custom weights) recomputes from the prices already held.
+// amount, the custom weights) recomputes from the prices already held.
 //
 // The first screen is never empty: the baked example (public/example-cross.json, preloaded by
 // index.html) is computed through the same analyze() and labelled "example" with its own price
@@ -26,7 +26,7 @@ import { isIsoDay, readRfSeries, windowRate, type RfResolved, type RfSeries, typ
 import { loadPrefs, loadSettings, savePrefs, saveSettings } from "./storage.ts";
 import { decodeShare, encodeShare } from "./url.ts";
 import type {
-  Analysis, AnalysisError, CustomWeights, Level, LoadState, PricePayload, RfChoice, RfHistory, RfRate, Settings,
+  Analysis, AnalysisError, CustomWeights, LoadState, PricePayload, RfChoice, RfHistory, RfRate, Settings,
   ChapterId, ShareSettings, TabContextValue, WalkView, Workbench,
 } from "../types.ts";
 
@@ -162,7 +162,7 @@ function initialState() {
   const prefs = loadPrefs();
   const settings: Settings = { ...FIRST_SETTINGS, ...loadSettings(), ...share.settings, amount: prefs.amount };
   return {
-    settings, level: prefs.level, weights: share.weights ?? {}, chapter: share.chapter ?? DEFAULT_CHAPTER,
+    settings, weights: share.weights ?? {}, chapter: share.chapter ?? DEFAULT_CHAPTER,
     entry: share.tab ?? null, view: share.view ?? "basket",
   };
 }
@@ -179,7 +179,6 @@ function shareSearch(settings: Settings, weights: CustomWeights, chapter: Chapte
 export function useWorkbench(): Workbench {
   const [init] = useState(initialState);
   const [settings, setSettingsState] = useState<Settings>(init.settings);
-  const [level, setLevel] = useState<Level>(init.level);
   const [weights, setWeights] = useState<CustomWeights>(init.weights);
   const [chapter, setChapterState] = useState<ChapterId>(init.chapter);
   const [view, setView] = useState<WalkView>(init.view);
@@ -357,8 +356,8 @@ export function useWorkbench(): Workbench {
     return { status: "loading" };
   }, [computed, exampleFailed, fetching, failure]);
 
-  // Remembered in this browser: the level and amount, and the last settings (never the amount).
-  useEffect(() => savePrefs({ level, amount: settings.amount }), [level, settings.amount]);
+  // Remembered in this browser: the amount, and the last settings (never the amount).
+  useEffect(() => savePrefs({ amount: settings.amount }), [settings.amount]);
   const shareKey = JSON.stringify(shareOf(settings));
   useEffect(() => saveSettings(JSON.parse(shareKey) as ShareSettings), [shareKey]);
 
@@ -395,7 +394,7 @@ export function useWorkbench(): Workbench {
   const rfHistory = useMemo<RfHistory>(() => ({ basis: inUse.basis, series, loading: rfPending }), [inUse.basis, series, rfPending]);
 
   return {
-    settings, setSettings, level, setLevel, analysis, fetching: fetching || hold, failure, rf: rfView, weights, setWeights, chapter, entry: init.entry, setChapter,
+    settings, setSettings, analysis, fetching: fetching || hold, failure, rf: rfView, weights, setWeights, chapter, entry: init.entry, setChapter,
     view, rfHistory,
   };
 }

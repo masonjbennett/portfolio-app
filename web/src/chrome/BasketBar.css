@@ -144,9 +144,9 @@
   display: none;
 }
 
-/* The drawer: the four assumptions side by side, and the level wide enough for its three pills, which do not wrap. */
+/* The drawer: the four assumptions side by side. */
 .bar-drawer.set {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(16.5rem, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-5);
   padding-block: var(--space-4) var(--space-5);
   border-top: var(--line-hair) solid var(--color-hairline2);

@@ -46,7 +46,7 @@
   left: 50%;
   transform: translateX(-50%);
   width: max-content;
-  max-width: 18rem;
+  max-width: 22rem;
   padding: var(--space-2) var(--space-3);
   background: var(--color-paper);
   border: var(--line-hair) solid var(--color-hairline);
@@ -61,6 +61,20 @@
   text-align: left;
   text-transform: none;
   white-space: normal;
+}
+
+/* The three texts, one under another, each led by its head. */
+.tip-layer {
+  display: block;
+}
+
+.tip-layer + .tip-layer {
+  margin-top: var(--space-1);
+}
+
+.tip-layer-head {
+  font-weight: 500;
+  color: var(--color-ink2);
 }
 
 .tip-mark:focus-visible + .tip-text,
@@ -91,4 +105,27 @@
     width: auto;
     max-width: none;
   }
+}
+
+/* A mark inside a sticky table cell (a scorecard row's name): each sticky cell is its own stacking context, so the
+   cells of the rows below would paint over the open text. The cell holding an open, focused or hovered mark is
+   lifted above them. */
+th:has(.tip[data-open]),
+th:has(.tip-mark:focus-visible) {
+  z-index: 5;
+}
+
+@media (hover: hover) {
+  th:has(.tip:hover) {
+    z-index: 5;
+  }
+}
+
+/* A row name's mark sits near the left edge of a table that scrolls, which clips anything past that edge: its text
+   opens rightward from the mark instead of centring on it,
+   narrow enough on a phone to end inside the screen. */
+th[scope="row"] .tip-text {
+  left: -8px;
+  max-width: min(22rem, 70vw);
+  transform: none;
 }

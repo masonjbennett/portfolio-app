@@ -39,8 +39,6 @@ function Harness({ analysis, settings }) {
   const wb = {
     settings,
     setSettings() {},
-    level: "finance",
-    setLevel() {},
     analysis: { status: "ready", value: analysis },
     fetching: false,
     failure: null,

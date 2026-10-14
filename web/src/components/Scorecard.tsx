@@ -13,7 +13,7 @@
 // screen reader.
 //
 // Each row's label carries its explanation: an info mark where the tooltip component takes the key, and
-// every visible row's text at the chosen level under "What each row means", which works on touch too. The
+// every visible row's plain words under "What each row means" (the mark carries all three texts), which works on touch too. The
 // head of each column the reader added carries its own mark, and its text joins that list.
 //
 // Handed `book`, the download row offers a third file: the same figures as a workbook of formulas over the
@@ -35,7 +35,7 @@ import {
   type ScoreColId,
   type ScoreModel,
 } from "../tabs/optimization/scorecard.ts";
-import type { Analysis, Level } from "../types.ts";
+import type { Analysis } from "../types.ts";
 import { Downloads } from "./Table.tsx";
 import Tip from "./Tip.tsx";
 import "./Table.css";
@@ -45,7 +45,6 @@ export interface ScorecardProps {
   model: ScoreModel;
   /** The redraws behind the fragility group's draw row, for the note that says why it may be empty. */
   redraws: RedrawState;
-  level: Level;
   allowShort: boolean;
   /** Download file name without extension. */
   filename: string;
@@ -126,7 +125,7 @@ function BookLink({ model, book }: { model: ScoreModel; book: ScoreBookSource })
   );
 }
 
-export default function Scorecard({ model, redraws, level, allowShort, filename, focus, book }: ScorecardProps) {
+export default function Scorecard({ model, redraws, allowShort, filename, focus, book }: ScorecardProps) {
   const [full, setFull] = useState(false);
   const lines = visibleLines(model, full);
   const sheet = useMemo(() => scoreSheet(model), [model]);
@@ -153,7 +152,7 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
               {model.columns.map((c) => (
                 <th key={c.id} scope="col" className={colClass(c.id)} data-col={c.id}>
                   {c.label}
-                  {isAddedId(c.id) ? <Tip tip={ADDED_TIP[c.id]} level={level} allowShort={allowShort} /> : null}
+                  {isAddedId(c.id) ? <Tip tip={ADDED_TIP[c.id]} allowShort={allowShort} /> : null}
                   {c.sub ? <span className="tbl-sub">{c.sub}</span> : null}
                 </th>
               ))}
@@ -173,7 +172,7 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
                   <tr key={l.metric.id} data-metric={l.metric.id} className={l.metric.short ? "sc-short" : undefined}>
                     <th scope="row" className="txt first">
                       {l.metric.label}
-                      <Tip tip={l.metric.tip} level={level} allowShort={allowShort} />
+                      <Tip tip={l.metric.tip} allowShort={allowShort} />
                     </th>
                     {l.cells.map((cell, k) => (
                       <td key={model.columns[k].id} className={colClass(model.columns[k].id)}>
@@ -222,13 +221,13 @@ export default function Scorecard({ model, redraws, level, allowShort, filename,
           {lines.map((l) => (
             <div key={l.metric.id}>
               <dt>{l.metric.label}</dt>
-              <dd>{tipText(l.metric.tip, level, allowShort)}</dd>
+              <dd>{tipText(l.metric.tip, "plain", allowShort)}</dd>
             </div>
           ))}
           {added.map((x) => (
             <div key={x.tip} data-col-def={x.tip}>
               <dt>{x.label}</dt>
-              <dd>{tipText(x.tip, level, allowShort)}</dd>
+              <dd>{tipText(x.tip, "plain", allowShort)}</dd>
             </div>
           ))}
         </dl>

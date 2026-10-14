@@ -513,7 +513,7 @@ for (const [what, make, why, act2] of failures) {
 const a0 = cases[0].source.analysis;
 const shown = SC.scorecard(a0, customWeights(a0, {}), { status: "ready", value: null });
 const card = () =>
-  h(Scorecard, { model: shown, redraws: { status: "ready", value: null }, level: "plain", allowShort: false, filename: "scorecard", book: { analysis: a0, amount: 10_000, refused: null } });
+  h(Scorecard, { model: shown, redraws: { status: "ready", value: null }, allowShort: false, filename: "scorecard", book: { analysis: a0, amount: 10_000, refused: null } });
 const button = (root) => [...root.container.querySelectorAll(".tbl-dl button")].find((b) => text(b) === BOOK_LINK);
 const busyLine = (root) => [...root.container.querySelectorAll(".sc-busy")].find((s) => text(s) === BOOK_BUSY);
 const region = (root) => root.container.querySelector('[data-note="book"]');

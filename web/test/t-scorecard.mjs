@@ -179,7 +179,7 @@ for (const { label, a } of baskets) {
   const c = M.customWeights(a, {});
   const rd = solveRedraws(a, DEFAULT_SEED);
   const m = SC.scorecard(a, c, rd);
-  const r = quiet(() => render(h(Scorecard, { model: m, redraws: rd, level: "plain", allowShort: false, filename: "scorecard" })));
+  const r = quiet(() => render(h(Scorecard, { model: m, redraws: rd, allowShort: false, filename: "scorecard" })));
   const heads = [...r.container.querySelectorAll("thead th")];
   check(heads.map((th) => th.dataset.col ?? "label").join() === "label,ew,gmv,tangency,custom,bench", "scorecard: the rendered columns in order, the benchmark last");
   const benchCells = [...r.container.querySelectorAll(".sc-bench")];
@@ -246,8 +246,8 @@ for (const { label, a } of baskets) {
     check(rows.length > 0 && off.length === 0 && rows.some((tr) => isScoreTip(SC.SCORE_METRICS.find((x) => x.id === tr.dataset.metric).tip)),
       "tips: every scorecard row carries its own info mark, named for the row", off.map((tr) => tr.dataset.metric).join(" "));
   }
-  quiet(() => r.rerender(h(Scorecard, { model: m, redraws: rd, level: "formula", allowShort: false, filename: "scorecard" })));
-  check(text(r.container.querySelector(".sc-defs dd")) === tipText("annual_return", "formula"), "tips: the level switch changes the row texts");
+  // No level: the list gives each row's plain words; the row's mark carries all three texts.
+  check(text(r.container.querySelector(".sc-defs dd")) === tipText("annual_return", "plain"), "tips: What each row means gives the plain words");
   check([...r.container.querySelectorAll(".tbl-dl button")].map(text).join() === "Download CSV,Download Excel", "downloads: the scorecard has both downloads");
   r.unmount();
 

@@ -302,10 +302,10 @@ const quietRender = (el) => quietly(() => render(el));
 
 // A chapter that holds its own weights, as useWorkbench does, so typing reaches the page.
 let latest = null;
-function Harness({ a, init = {}, level = "plain" }) {
+function Harness({ a, init = {} }) {
   const [w, setW] = useState(init);
   latest = w;
-  return h(Optimization, tabProps(a, { weights: w, setWeights: setW, level }));
+  return h(Optimization, tabProps(a, { weights: w, setWeights: setW }));
 }
 
 {
@@ -396,11 +396,10 @@ function Harness({ a, init = {}, level = "plain" }) {
   if (reset) act(() => reset.click());
   check(Object.keys(latest).length === 0 && verdictOf(root) === M.verdict(a, v0), "reset: every weight back to 1/n, and the verdict with them");
 
-  // The level reaches the formula line under the panel's figures; nothing on the panel hides a level.
-  r.rerender(h(Harness, { a, level: "formula" }));
+  // The formula line, in its fold under the panel's verdict.
   const line = mix().querySelector(".formula-line");
   check(!!line && /at the tangency weights, in-sample: \d\.\d{3}$/.test(text(line.querySelector(".formula-line-symbols") ?? line)),
-    "level: at Formula the panel's line sets the mix's Sharpe ratio beside the tangency's", line ? text(line) : "none");
+    "formula: the panel's line sets the mix's Sharpe ratio beside the tangency's", line ? text(line) : "none");
   r.unmount();
 }
 

@@ -39,7 +39,7 @@ import "./App.css";
 type TabModule = { default: ComponentType<TabProps> };
 
 // The chrome renders again only when its own props change: an edited amount or custom weight leaves
-// the masthead and the basket bar alone, and a new explanation level reaches only what shows it.
+// the masthead and the basket bar alone.
 const CommandPalette = memo(CommandPaletteView);
 const Footer = memo(FooterView);
 const Masthead = memo(MastheadView);
@@ -196,7 +196,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   //
   // Only the active tab is mounted, so an edit never renders a tab the reader cannot see. Each card
   // inside renders again only when its own inputs change (memo on the cards and on the charts'
-  // drawing components): an explanation level reaches the tooltips, an amount the growth charts.
+  // drawing components): an amount reaches the growth charts.
   const ready = wb.analysis.status === "ready" ? wb.analysis.value : null;
   // The settings have changed and the analysis behind the Overview and the tabs has not caught up yet: they keep
   // the previous figures, marked the same way as a tab switch (aria-busy and the dim), so no figure
@@ -235,7 +235,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
             </div>
             {sheet ? (
               <Sheet onClose={closeSheet}>
-                <SettingsSheetBody settings={wb.settings} setSettings={wb.setSettings} level={wb.level} setLevel={wb.setLevel} rf={wb.rf} />
+                <SettingsSheetBody settings={wb.settings} setSettings={wb.setSettings} rf={wb.rf} />
               </Sheet>
             ) : null}
           </Boundary>
@@ -244,8 +244,6 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
             <BasketBar
               settings={wb.settings}
               setSettings={wb.setSettings}
-              level={wb.level}
-              setLevel={wb.setLevel}
               rf={wb.rf}
               fetching={wb.fetching}
               analysis={wb.analysis}
@@ -278,7 +276,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
                   >
                     {chapterTabs.length === 0 ? (
                       <Boundary name={CHAPTER_LABELS.overview} resetKey={ready}>
-                        <Overview analysis={ready} amount={wb.settings.amount} level={wb.level} setTickers={setTickers} settling={settling} />
+                        <Overview analysis={ready} amount={wb.settings.amount} setTickers={setTickers} settling={settling} />
                       </Boundary>
                     ) : (
                       chapterTabs.map((id) => {
@@ -289,7 +287,6 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
                               <Tab
                                 analysis={ready}
                                 settings={wb.settings}
-                                level={wb.level}
                                 weights={wb.weights}
                                 setWeights={wb.setWeights}
                                 requestSettings={wb.setSettings}
@@ -307,7 +304,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
           </main>
         </div>
         <Footer />
-        <CommandPalette level={wb.level} setLevel={wb.setLevel} chapter={wb.chapter} setChapter={switchChapter} jump={jump} />
+        <CommandPalette chapter={wb.chapter} setChapter={switchChapter} jump={jump} />
       </div>
     </TabContext.Provider>
   );

@@ -537,10 +537,10 @@ const page = () => text(r.container);
     check(false, "card reset: a card that throws stays inside its own boundary", err.message);
   }
   if (r) {
-    check(JSON.stringify(failed(r.container)) === JSON.stringify(["Weight comparison chart could not be shown."]) &&
+    check(JSON.stringify(failed(r.container)) === JSON.stringify(["The sensitivity formula could not be shown.", "Weight comparison chart could not be shown."]) &&
       text(r.container.querySelector("#sens-weights .more-finding") ?? {}) === "This finding could not be stated." &&
       captions(r.container).length === 2,
-      "card reset: the stubbed tickers fail the weights row's finding (said) and its card, and the metrics row's tables stand", failed(r.container).join(" | "));
+      "card reset: the stubbed tickers fail the weights row's finding (said), its formula and its card, and the metrics row's tables stand", failed(r.container).join(" | "));
     quietly(() => r.rerender(h(Sensitivity, tabProps({ ...a }))));
     check(failed(r.container).length === 0 && text(r.container.querySelector("#sens-weights .more-finding")) === M.headline(fits, a.tickers) &&
       !!r.container.querySelector(".sens-hero .recharts-wrapper"),

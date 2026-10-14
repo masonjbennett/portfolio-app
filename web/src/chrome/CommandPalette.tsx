@@ -1,14 +1,12 @@
-// Ctrl+K (Cmd+K on a Mac): a small palette that sets the explanation level, opens a chapter, jumps to a part of one
+// Ctrl+K (Cmd+K on a Mac): a small palette that opens a chapter, jumps to a part of one
 // (each of the old tabs, inside the chapter that holds it) or opens the guide.
 // Type to filter, arrows to move, Enter to pick, Escape to close.
 import { useEffect, useId, useState } from "react";
 import { GUIDE_HREF, GUIDE_TITLE } from "../guide/route.ts";
-import { CHAPTER_IDS, CHAPTER_LABELS, LEVELS, PART_IDS, PART_LABELS, chapterOf, type ChapterId, type Level, type PartId } from "../types.ts";
+import { CHAPTER_IDS, CHAPTER_LABELS, PART_IDS, PART_LABELS, chapterOf, type ChapterId, type PartId } from "../types.ts";
 import "./CommandPalette.css";
 
 export interface CommandPaletteProps {
-  level: Level;
-  setLevel: (level: Level) => void;
   chapter: ChapterId;
   setChapter: (chapter: ChapterId) => void;
   /** Opens the chapter holding a tab and lands the reader on that tab's part of it. */
@@ -27,7 +25,7 @@ interface Command {
 
 const goToGuide = () => window.location.assign(GUIDE_HREF);
 
-export default function CommandPalette({ level, setLevel, chapter, setChapter, jump, openGuide = goToGuide }: CommandPaletteProps) {
+export default function CommandPalette({ chapter, setChapter, jump, openGuide = goToGuide }: CommandPaletteProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -49,13 +47,6 @@ export default function CommandPalette({ level, setLevel, chapter, setChapter, j
   if (!open) return null;
 
   const commands: Command[] = [
-    ...LEVELS.map((l) => ({
-      key: `level-${l.id}`,
-      group: "Explanation level",
-      label: l.label,
-      current: l.id === level,
-      run: () => setLevel(l.id),
-    })),
     ...CHAPTER_IDS.map((c) => ({ key: `chapter-${c}`, group: "Chapter", label: CHAPTER_LABELS[c], current: c === chapter, run: () => setChapter(c) })),
     ...PART_IDS.map((t) => ({ key: `tab-${t}`, group: CHAPTER_LABELS[chapterOf(t)], label: PART_LABELS[t], current: false, run: () => jump(t) })),
     { key: "guide", group: "Guide", label: GUIDE_TITLE, current: false, run: openGuide },
@@ -80,8 +71,8 @@ export default function CommandPalette({ level, setLevel, chapter, setChapter, j
           aria-expanded="true"
           aria-controls={`${id}-list`}
           aria-activedescendant={shown[at] ? `${id}-${shown[at].key}` : undefined}
-          aria-label="Set the explanation level, go to a chapter or open the guide"
-          placeholder="Level, chapter or guide"
+          aria-label="Go to a chapter or a part of one, or open the guide"
+          placeholder="Chapter, part or guide"
           autoFocus
           value={query}
           onChange={(e) => {

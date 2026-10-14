@@ -114,7 +114,7 @@ export function belowNote(labels: string[], rf: number, allowShort: boolean): st
   );
 }
 
-export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
+export default function Sensitivity({ analysis: a, weights }: TabProps) {
   // A throw in fitWindows fails the whole part, and App's own Boundary re-arms on the next analysis. The
   // rows below re-arm on the next fit (a new analysis), the custom row on new weights as well.
   const fitted = useMemo(() => fitWindows(a), [a]);
@@ -143,7 +143,6 @@ export default function Sensitivity({ analysis: a, level, weights }: TabProps) {
       note: (
         <Boundary name="The sensitivity formula" resetKey={fitted}>
           <FormulaLine
-            level={level}
             build={() => sensitivityFormula(fits.length, swing(fits, "tan", a.tickers), swing(fits, "gmv", a.tickers), a.rf, a.allowShort)}
           />
         </Boundary>

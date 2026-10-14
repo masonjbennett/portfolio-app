@@ -1,12 +1,12 @@
-// What this browser remembers (src/state/storage.ts): the level and the amount, and the last
-// settings. Driven through stub storages: one that works, one whose every call throws, one whose
+// What this browser remembers (src/state/storage.ts): the amount, and the last settings. A store
+// written while the page had an explanation level (until Oct 2026) still holds one: it is read past and dropped. Driven through stub storages: one that works, one whose every call throws, one whose
 // accessor itself throws, none at all, and one holding garbage.
 import { check, done } from "./_assert.mjs";
 import { loadPrefs, loadSettings, PREFS_KEY, savePrefs, saveSettings, SETTINGS_KEY } from "../src/state/storage.ts";
-import { DEFAULT_AMOUNT, DEFAULT_LEVEL } from "../src/state/defaults.ts";
+import { DEFAULT_AMOUNT } from "../src/state/defaults.ts";
 
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const DEFAULTS = { level: DEFAULT_LEVEL, amount: DEFAULT_AMOUNT };
+const DEFAULTS = { amount: DEFAULT_AMOUNT };
 
 function memory() {
   const m = new Map();
@@ -31,8 +31,8 @@ const full = { tickers: ["VTI", "AGG", "GLD"], start: "2020-01-01", end: "2026-0
 const mem = memory();
 use(() => mem);
 check(eq(loadPrefs(), DEFAULTS), "empty: the defaults", JSON.stringify(loadPrefs()));
-savePrefs({ level: "formula", amount: 25000 });
-check(eq(loadPrefs(), { level: "formula", amount: 25000 }), "round trip: level and amount");
+savePrefs({ amount: 25000 });
+check(eq(loadPrefs(), { amount: 25000 }), "round trip: the amount");
 saveSettings(full);
 check(eq(loadSettings(), full), "round trip: the last settings", JSON.stringify(loadSettings()));
 saveSettings({ ...full, end: null, rf: null });
@@ -48,7 +48,13 @@ mem.m.set(SETTINGS_KEY, "?tickers=VTI,AGG,GLD&cols=tan.bs,rp");
 check(!Object.hasOwn(loadSettings(), "cols") && loadSettings().tickers?.length === 3, "settings: added columns found in storage (an edited value) are not read", JSON.stringify(loadSettings()));
 saveSettings(full);
 savePrefs({ level: "finance", amount: 30000, extra: "x" });
-check(eq(Object.keys(JSON.parse(mem.getItem(PREFS_KEY))).sort(), ["amount", "level"]), "prefs: only the level and the amount are written");
+check(eq(Object.keys(JSON.parse(mem.getItem(PREFS_KEY))), ["amount"]), "prefs: only the amount is written, never a level", mem.getItem(PREFS_KEY));
+// A browser that remembered a level before it was retired: the amount beside it still loads, the level does not,
+// and the next save writes the amount alone.
+mem.m.set(PREFS_KEY, '{"level":"formula","amount":40000}');
+check(eq(loadPrefs(), { amount: 40000 }), "an old store: its level is read past, its amount kept", JSON.stringify(loadPrefs()));
+savePrefs(loadPrefs());
+check(mem.getItem(PREFS_KEY) === '{"amount":40000}', "an old store: the next save drops the level", mem.getItem(PREFS_KEY));
 
 // ---- garbage in the store: treated as absent, field by field -----------------------------------------
 const garbage = [
@@ -56,10 +62,10 @@ const garbage = [
   ["a JSON array", "[1,2]", DEFAULTS],
   ["JSON null", "null", DEFAULTS],
   ["wrong types", '{"level":"expert","amount":"lots"}', DEFAULTS],
-  ["a bad amount beside a good level", '{"level":"finance","amount":-5}', { level: "finance", amount: DEFAULT_AMOUNT }],
+  ["a bad amount beside an old level", '{"level":"finance","amount":-5}', DEFAULTS],
   ["an amount under the $100 minimum (724)", '{"level":"plain","amount":50}', DEFAULTS],
-  ["an absurd amount", '{"level":"formula","amount":1e13}', { level: "formula", amount: DEFAULT_AMOUNT }],
-  ["an extra key", '{"level":"finance","amount":25000,"weights":{"A":1}}', { level: "finance", amount: 25000 }],
+  ["an absurd amount", '{"level":"formula","amount":1e13}', DEFAULTS],
+  ["an extra key", '{"level":"finance","amount":25000,"weights":{"A":1}}', { amount: 25000 }],
 ];
 for (const [label, raw, want] of garbage) {
   mem.m.set(PREFS_KEY, raw);
@@ -89,7 +95,7 @@ for (const [label, get] of stores) {
   let prefs = null;
   let settings = null;
   try {
-    savePrefs({ level: "formula", amount: 5000 });
+    savePrefs({ amount: 5000 });
     saveSettings(full);
     prefs = loadPrefs();
     settings = loadSettings();

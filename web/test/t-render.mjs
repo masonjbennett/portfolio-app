@@ -121,12 +121,11 @@ let drive = null;
 function Harness({ tab }) {
   const [settings, setSettingsState] = useState(() => settingsFor(examplePayload(), { rf: EX.rf }));
   const setSettings = useCallback((p) => setSettingsState((s) => ({ ...s, ...p })), []);
-  const [level, setLevel] = useState("plain");
   const [weights, setWeights] = useState({});
   const [chapter, setChapter] = useState(() => chapterOf(tab));
   drive = { setWeights };
   const wb = {
-    settings, setSettings, level, setLevel, analysis: READY, fetching: false, failure: null, rf: RF, weights, setWeights, chapter, setChapter,
+    settings, setSettings, analysis: READY, fetching: false, failure: null, rf: RF, weights, setWeights, chapter, setChapter,
     entry: null,
   };
   // The tab under test is the only one drawn: its chapter's other tab renders nothing, so every chart counted is this tab's.
@@ -140,15 +139,15 @@ function mount(tab) {
     // Every More row and card fold opened, as a reader would: a closed row draws no chart to hold.
     page = openAll(render(h(Harness, { tab })));
   }, false);
-  // The level switch sits in the Assumptions drawer, closed at first: open it, outside any recorded change.
+  // The Assumptions drawer, closed at first: opened outside any recorded change, so its amount field is on the page.
   const drawer = page.container.querySelector(".bar-assumptions");
   if (drawer) act(() => drawer.click());
   return { root: page.container, unmount: page.unmount, first };
 }
-function pickLevel(root) {
-  const pills = [...root.querySelectorAll('[aria-label="Explanation level"] [role=radio]')];
-  const off = pills.find((p) => p.getAttribute("aria-checked") === "false");
-  return { off, label: text(off) };
+// The formula fold under a finding: toggling it changes only the fold (the page's explanation level, which this
+// action replaces in these checks, was retired in Oct 2026).
+function formulaFold(root) {
+  return root.querySelector(".formula-fold > button");
 }
 
 // ---- the Your mix panel (the app's Custom tab), beside Build's frontier --------------------------------------
@@ -189,10 +188,10 @@ function pickLevel(root) {
   check(first.charts.size >= 3 && same(first.charts, all), "hook: on the first mount it sees every chart on the Optimization tab drawn", list(first.charts));
 
   let before = now;
-  const lv = record(() => pickLevel(root).off.click());
+  const lv = record(() => formulaFold(root).click());
   let o = outcome(before, (now = chartsOn(root)), lv);
-  check(lv.components.has("Tip") && !kinds(o, o.drew).has("frontier"), "Optimization, explanation level: the frontier does not render again", names(o, o.drew));
-  check(o.drew.size === 0, "Optimization, explanation level: no chart renders again", names(o, o.drew));
+  check(lv.components.has("FormulaLine") && !kinds(o, o.drew).has("frontier"), "Optimization, the formula fold: the frontier does not render again", names(o, o.drew));
+  check(o.drew.size === 0, "Optimization, the formula fold: no chart renders again", names(o, o.drew));
 
   before = now;
   const tickers = EX.tickers;
@@ -216,13 +215,13 @@ function pickLevel(root) {
   });
   now = chartsOn(root);
   before = now;
-  const lv2 = record(() => pickLevel(root).off.click());
+  const lv2 = record(() => formulaFold(root).click());
   o = outcome(before, (now = chartsOn(root)), lv2);
-  check(lv2.components.has("Tip") && o.drew.size === 0, "Optimization, explanation level with a column added: no chart renders again, the frontier included", names(o, o.drew));
+  check(lv2.components.has("FormulaLine") && o.drew.size === 0, "Optimization, the formula fold with a column added: no chart renders again, the frontier included", names(o, o.drew));
   unmount();
 }
 
-// ---- every tab: an explanation level redraws no chart; an amount redraws only what it changes -------------
+// ---- every tab: the formula fold redraws no chart; an amount redraws only what it changes -----------------
 for (const tab of TAB_IDS) {
   const { root, first, unmount } = mount(tab);
   let now = chartsOn(root);
@@ -231,12 +230,12 @@ for (const tab of TAB_IDS) {
   check((now.length > 0 || tab === "walkforward") && first.charts.size === new Set(now.map((c) => c.title)).size,
     `${tab}: the hook sees each of the tab's charts drawn on the first mount`, list(first.charts));
   let before = now;
-  const lv = record(() => pickLevel(root).off.click());
+  const fold = formulaFold(root);
+  const lv = record(() => fold?.click());
   let o = outcome(before, (now = chartsOn(root)), lv);
-  // Performance's cards carry no info marks (their texts are under How it is calculated); there the level reaches
-  // only the formula line.
-  check((lv.components.has("Tip") || lv.components.has("FormulaLine")) && o.drew.size === 0,
-    `${tab}, explanation level: the tooltips or the formula line render again and no chart does`, names(o, o.drew));
+  // The walk-forward tab's first segment may say it cannot run, and then carries no formula line.
+  check(((!!fold && lv.components.has("FormulaLine")) || (!fold && tab === "walkforward")) && o.drew.size === 0,
+    `${tab}, the formula fold: the line's fold renders again and no chart does`, names(o, o.drew));
   const amount = root.querySelector(".app-tab input[name=amount]");
   if (amount) {
     before = now;
@@ -259,11 +258,11 @@ for (const tab of TAB_IDS) {
   await settle();
   const landed = !!root.querySelector('[data-segment="basket"] .tbl');
   let n = SOLVES.count;
-  const lv = record(() => pickLevel(root).off.click());
+  const lv = record(() => formulaFold(root.querySelector('[data-segment="basket"]') ?? root).click());
   await settle();
-  check(landed && lv.components.has("Tip") && SOLVES.count === n,
-    "walkforward, explanation level: the tooltips render again and the walk-forward test is not solved again", `landed ${landed}, solves ${SOLVES.count - n}`);
-  check(!lv.components.has("Holds") && !lv.components.has("Table"), "walkforward, explanation level: no table renders again", list(lv.components));
+  check(landed && lv.components.has("FormulaLine") && SOLVES.count === n,
+    "walkforward, the formula fold: the fold renders again and the walk-forward test is not solved again", `landed ${landed}, solves ${SOLVES.count - n}`);
+  check(!lv.components.has("Holds") && !lv.components.has("Table"), "walkforward, the formula fold: no table renders again", list(lv.components));
   n = SOLVES.count;
   const hold = [...root.querySelectorAll('[role=radiogroup][aria-label="Hold for"] [role=radio]')].find((b) => b.getAttribute("aria-checked") === "false");
   record(() => hold.click());

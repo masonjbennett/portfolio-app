@@ -432,14 +432,12 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(/Max drawdown is measured from the amount invested/.test(text(sectionOf(r, "scorecard"))), "tab: the scorecard says its maximum drawdown counts from the amount invested, as the plates' note did");
   check(!/\[\u22121, 1\]|\u2212100%/.test(all), "ledger:short-bounds-copy long-only, the tab says nothing about [-1, 1] bounds");
 
-  // The level switch changes the tooltip text.
-  const tipOf = () => r.container.querySelector("button[aria-label='About annual return']")?.parentElement.querySelector("[role=tooltip]");
-  const plain = tipOf() ? text(tipOf()) : "";
-  quiet(() => r.rerender(h(Optimization, { ...props, level: "formula" })));
-  const formula = tipOf() ? text(tipOf()) : "";
-  check(plain === tipText("return", "plain") && formula === tipText("return", "formula") && plain !== formula, "tab: the level switch changes the tooltip text", `${plain} / ${formula}`);
-  const mddTip = r.container.querySelector("button[aria-label='About maximum drawdown']")?.parentElement.querySelector("[role=tooltip]");
-  check(mddTip && text(mddTip) === tipText("max_dd", "formula"), "tab: the Max DD tip follows the level too");
+  // No level: a mark's tooltip carries its three texts at once, in order.
+  const layersOf = (name) => [...(r.container.querySelector(`button[aria-label='About ${name}']`)?.parentElement.querySelectorAll("[role=tooltip] .tip-layer") ?? [])]
+    .map((x) => text(x).replace(/^[^:]+: /, ""));
+  const three = (k) => ["plain", "finance", "formula"].map((l) => tipText(k, l));
+  check(JSON.stringify(layersOf("annual return")) === JSON.stringify(three("return")), "tab: a mark's tooltip carries all three texts", layersOf("annual return").join(" / "));
+  check(JSON.stringify(layersOf("maximum drawdown")) === JSON.stringify(three("max_dd")), "tab: the Max DD mark too");
 
   // Custom weights from the Your mix panel reach the frontier and the summary (1581).
   const raw = o.modes.long.custom.uneven.raw;

@@ -12,7 +12,6 @@
 // app's own under "More baskets". The starting amount is here and on the growth charts, one setting.
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import AmountField from "../components/AmountField.tsx";
-import SegControl from "../components/SegControl.tsx";
 import { INPUT_HEADINGS, type InputId } from "../content/inputs.ts";
 import { SYMBOL } from "../data/prices.ts";
 import { format } from "../format.ts";
@@ -21,11 +20,10 @@ import { TN_WARN, TRADING_DAYS } from "../lib/stats.ts";
 import { MESSAGES } from "../state/analyze.ts";
 import { BENCHMARKS, MORE_PRESETS, PUBLISHED_PRESETS, RF_FALLBACK, RF_STEP, type Preset } from "../state/defaults.ts";
 import { isRfView } from "../state/rfwindow.ts";
-import { LEVELS, type Level, type LoadState, type RfRate, type Settings } from "../types.ts";
+import { type LoadState, type RfRate, type Settings } from "../types.ts";
 import { todayISO } from "./when.ts";
 import "./Settings.css";
 
-const LEVEL_OPTIONS: { value: Level; label: string }[] = LEVELS.map((l) => ({ value: l.id, label: l.label }));
 
 type SetSettings = (patch: Partial<Settings>) => void;
 
@@ -438,19 +436,3 @@ export function AmountGroup({ settings, setSettings }: { settings: Settings; set
   );
 }
 
-// ---- explanation level (657-663), until layered text replaces it -------------------------------------------------
-
-export function LevelField({ level, setLevel }: { level: Level; setLevel: (l: Level) => void }) {
-  return (
-    <Group input="level">
-      <SegControl options={LEVEL_OPTIONS} value={level} onChange={setLevel} ariaLabel="Explanation level" />
-      {/* The app's caption (657-663), with the port's names for the three levels. The port's Formula level
-          also adds a visible line under each tab's finding, so at that level the caption says so. */}
-      <p className="set-note">
-        How much the info marks beside each figure explain. Plain = plain English. Finance = finance terms. Formula =
-        formulas.
-        {level === "formula" ? " Formula also adds a line under each tab's finding: the formula behind its figure, with the numbers that finding shows." : null}
-      </p>
-    </Group>
-  );
-}

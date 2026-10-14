@@ -92,7 +92,7 @@ const ctx = (view) => ({ view, setTab() {}, rfHistory: { basis: "example", serie
 for (const phone of [false, true]) {
   setMedia(() => phone);
   const r = await quietly(() => render(h(TabContext.Provider, { value: ctx("basket") },
-    h(Overview, { analysis: EX, amount: 10000, level: "plain", setTickers() {} }))));
+    h(Overview, { analysis: EX, amount: 10000, setTickers() {} }))));
   for (const b of r.container.querySelectorAll('.card-fold-button[aria-expanded="false"]')) act(() => b.click());
   await quietly(flush);
   take("band", r.container);
@@ -121,7 +121,7 @@ const LIVE = { rate: 0.0412, date: "2026-09-25", source: "FRED DGS3MO" };
 const VIEW = { ...LIVE, window: { rate: 0.0301, from: S0.start, to: "2026-09-25", days: 1900 }, basis: "window", inUse: 0.0301, loading: false };
 let railOrder = [];
 for (const settings of [{ ...S0, end: null, rf: null }, { ...S0, end: "2025-12-31", rf: 0.04 }]) {
-  const props = { settings, setSettings() {}, level: "plain", setLevel() {}, rf: { status: "ready", value: VIEW } };
+  const props = { settings, setSettings() {}, rf: { status: "ready", value: VIEW } };
   const b = render(h(BasketBar, { ...props, fetching: false, analysis: { status: "ready", value: EX } }));
   act(() => b.container.querySelector(".bar-assumptions").click());
   take("rail", b.container);
@@ -172,7 +172,7 @@ for (const id of TAB_IDS) {
   g.unmount();
 
   let opened = 0;
-  const p = render(h(CommandPalette, { level: "plain", setLevel() {}, chapter: "overview", setChapter() {}, jump() {}, openGuide: () => (opened += 1) }));
+  const p = render(h(CommandPalette, { chapter: "overview", setChapter() {}, jump() {}, openGuide: () => (opened += 1) }));
   key(document.body, "k", { ctrlKey: true });
   take("palette", p.container);
   const input = p.container.querySelector("input");
@@ -189,7 +189,7 @@ for (const id of TAB_IDS) {
 }
 {
   const wb = {
-    settings: S0, setSettings() {}, level: "plain", setLevel() {}, analysis: { status: "ready", value: EX }, fetching: false, failure: null,
+    settings: S0, setSettings() {}, analysis: { status: "ready", value: EX }, fetching: false, failure: null,
     rf: { status: "ready", value: VIEW }, weights: {}, setWeights() {}, chapter: "overview", entry: null, setChapter() {}, view: "basket",
     rfHistory: { basis: "example", series: null, loading: false },
   };

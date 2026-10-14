@@ -3,7 +3,6 @@
 // PROPS CONTRACT (src/tabs/WalkForward.tsx builds them):
 //   analysis: Analysis   the analysis on screen: returns, dates, prices, rf, allowShort, as every tab gets it
 //   settings: Settings   the rail's settings (rf is the rate set in the rail, a decimal, or null)
-//   level:    Level      the explanation level for tooltips
 //   rates:    WalkRates  the rate input (src/types.ts):
 //               points  FRED's daily 3-month bill yields (DGS3MO), [ISO day, annual decimal], ascending, when the
 //                       series held starts on or before the analysis' first price day and has an observation
@@ -30,7 +29,7 @@ import Slug from "../../components/Slug.tsx";
 import Table from "../../components/Table.tsx";
 import Tip from "../../components/Tip.tsx";
 import { DEFAULT_WALK, type Construction, type FitMode, type HoldRows, type Walk, type WalkOptions } from "../../lib/walkforward.ts";
-import type { Analysis, Level, Settings, WalkRates } from "../../types.ts";
+import type { Analysis, Settings, WalkRates } from "../../types.ts";
 import { liveFormula } from "../formula.ts";
 import Dumbbell from "./Dumbbell.tsx";
 import {
@@ -65,7 +64,6 @@ import "./Live.css";
 export interface LiveProps {
   analysis: Analysis;
   settings: Settings;
-  level: Level;
   rates: WalkRates;
 }
 
@@ -77,14 +75,14 @@ export const ADDED_SWITCH = "Add the four other constructions";
 // The published run's terms, which the label line compares the page's own run with.
 const published = () => ({ lastBar: PUBLISHED_LAST_BAR, rf: PUBLISHED_RF });
 
-// Memo'd, with every table memo'd on the run, so an explanation level reaches the tooltips and no table.
+// Memo'd, with every table memo'd on the run, so the row rendering again redraws no table.
 const LiveTableView = memo(function LiveTableView({ t }: { t: LiveTable }) {
   return <Table title={t.title} columns={t.columns} rows={t.rows} filename={t.filename} span={t.span} subs={t.subs} />;
 });
 
 // The figures side by side: what the whole window promised and what the held-out days paid, then what a gap
 // between two of them can carry. `terms` is the line for a run on the published run's own terms, or null.
-const Figures = memo(function Figures({ a, w, level, terms }: { a: Analysis; w: Walk; level: Level; terms: string | null }) {
+const Figures = memo(function Figures({ a, w, terms }: { a: Analysis; w: Walk; terms: string | null }) {
   const rows = useMemo(() => liveRows(a, w), [a, w]);
   const table = useMemo(() => rowsTable(a, w, rows), [a, w, rows]);
   const decay = decayLine(rows);
@@ -94,15 +92,15 @@ const Figures = memo(function Figures({ a, w, level, terms }: { a: Analysis; w: 
     <section className="wfl-section" aria-labelledby="wfl-figures">
       <Slug id="wfl-figures">{PAIR_HEADING}</Slug>
       {decay ? <p className="wfl-finding">{decay}</p> : null}
-      {decay ? <FormulaLine level={level} build={() => liveFormula(rows, w.convention)} /> : null}
+      {decay ? <FormulaLine build={() => liveFormula(rows, w.convention)} /> : null}
       <Bells rows={rows} />
       <p className="wfl-key">
         <span className="wfl-key-name">About the columns below:</span>
         <span>
-          {OOS_HEAD} <Tip own={WALK_TIPS.oos} level={level} />
+          {OOS_HEAD} <Tip own={WALK_TIPS.oos} />
         </span>
         <span>
-          {SE_HEAD} <Tip own={WALK_TIPS.se} level={level} />
+          {SE_HEAD} <Tip own={WALK_TIPS.se} />
         </span>
       </p>
       <LiveTableView t={table} />
@@ -147,7 +145,7 @@ const Holds = memo(function Holds({ a, w }: { a: Analysis; w: Walk }) {
   );
 });
 
-export default function Live({ analysis: a, level, rates }: LiveProps) {
+export default function Live({ analysis: a, rates }: LiveProps) {
   const [opts, setOpts] = useState<WalkOptions>(DEFAULT_WALK);
   const [added, setAdded] = useState(false);
   const plan = useMemo(() => ratePlan(a, rates), [a, rates]);
@@ -177,13 +175,13 @@ export default function Live({ analysis: a, level, rates }: LiveProps) {
       <div className="wfl-options">
         <div className="wfl-row">
           <span className="wfl-row-label">
-            Fit on <Tip own={WALK_TIPS.fit} level={level} />
+            Fit on <Tip own={WALK_TIPS.fit} />
           </span>
           <SegControl options={FIT_OPTIONS} value={opts.fit} onChange={(fit: FitMode) => setOpts((o) => ({ ...o, fit }))} ariaLabel="Fit on" />
         </div>
         <div className="wfl-row">
           <span className="wfl-row-label">
-            Hold for <Tip own={WALK_TIPS.hold} level={level} />
+            Hold for <Tip own={WALK_TIPS.hold} />
           </span>
           <SegControl
             options={HOLD_OPTIONS}
@@ -196,14 +194,14 @@ export default function Live({ analysis: a, level, rates }: LiveProps) {
           <button type="button" className="wfl-toggle" aria-pressed={added} onClick={() => setAdded((x) => !x)}>
             {ADDED_SWITCH}
           </button>
-          <Tip own={WALK_TIPS.added} level={level} />
+          <Tip own={WALK_TIPS.added} />
         </div>
       </div>
       <div className="wfl-results" aria-busy={w ? undefined : true}>
         {w ? (
           <>
             <Boundary name={PAIR_HEADING} resetKey={w}>
-              <Figures a={a} w={w} level={level} terms={terms} />
+              <Figures a={a} w={w} terms={terms} />
             </Boundary>
             <Boundary name="Hold by hold" resetKey={w}>
               <Holds a={a} w={w} />

@@ -259,13 +259,10 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
   check($$(".recharts-line-curve").filter((p) => p.getAttribute("stroke-dasharray") === DASH.bench).length === 1 && benchCurve?.getAttribute("stroke") === ROLE.bench,
     "tab: the benchmark is the one dashed line, in its own ink");
 
-  // The two info marks' texts, every level at once, under the Summary Statistics' How it is calculated; the
-  // explanation level no longer chooses among them.
+  // The two info marks' texts, all three at once, under the Summary Statistics' How it is calculated.
   const tips = () => $$('.how-tip[data-tip="return"] dd, .how-tip[data-tip="volatility"] dd').map((d) => text(d).replace(/^[^:]+: /, ""));
   const all = ["return", "volatility"].flatMap((k) => ["plain", "finance", "formula"].map((l) => tipText(k, l)));
   check(all[0] !== all[2] && JSON.stringify(tips()) === JSON.stringify(all), "tab: the Summary Statistics' terms carry all three texts, as the marks had them", tips().join(" | "));
-  r.rerender(h(Returns, { ...props, level: "formula" }));
-  check(JSON.stringify(tips()) === JSON.stringify(all), "tab: switching the level to Formula leaves the three texts as they were", tips().join(" | "));
 
   // Toggles: hide AGG, then everything.
   const toggle = (name) => $$(".ret-toggle").find((b) => text(b) === name);
