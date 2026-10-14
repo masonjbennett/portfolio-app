@@ -2,7 +2,7 @@
 //
 // The guide is written from the page's own names (src/content/guide.ts), so it can go stale two ways: it can name a
 // tab, a section, a control or a figure the page no longer has, or the page can gain one the guide never mentions.
-// This suite renders the page's parts the way a reader meets them (the band and the what-if panel, the rail in the
+// This suite renders the page's parts the way a reader meets them (the Overview with its folds open and the what-if panel, the rail in the
 // states that show its buttons, every tab on the baked example, the scorecards with every row and column shown, the
 // footing, the palette, the phone's settings row) and holds the guide to them BOTH ways:
 //   (a) the tabs: the guide has an entry for each tab, in the page's order, and for each section heading each tab
@@ -29,7 +29,8 @@ const { INPUT_IDS, INPUT_HEADINGS } = await import("../src/content/inputs.ts");
 const P = await import("../src/content/published.ts");
 const A = await import("../src/content/about.tsx");
 const { decodeShare } = await import("../src/state/url.ts");
-const { default: Band } = await import("../src/chrome/Band.tsx");
+const { default: Overview } = await import("../src/overview/Overview.tsx");
+const { default: WhatIfFold } = await import("../src/chrome/WhatIfFold.tsx");
 const { default: WhatIf } = await import("../src/chrome/WhatIf.tsx");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: BasketBar, SettingsSheetBody } = await import("../src/chrome/BasketBar.tsx");
@@ -84,16 +85,22 @@ function take(name, root) {
 const EX = exampleAnalysis();
 const ctx = (view) => ({ view, setTab() {}, rfHistory: { basis: "example", series: null, loading: false }, landing: 0, takeLanding: () => false });
 
-// The band, at a desktop's width and a phone's (which folds the published sentence), the what-if panel it opens, the masthead.
+// The first screen: the Overview at a desktop's width and a phone's, every card fold open as a reader can open it,
+// then the what-if panel (which closes Build a portfolio) and the masthead.
 for (const phone of [false, true]) {
   setMedia(() => phone);
   const r = await quietly(() => render(h(TabContext.Provider, { value: ctx("basket") },
-    h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null, tickers: EX.tickers }))));
+    h(Overview, { analysis: EX, amount: 10000, level: "plain", setTickers() {} }))));
+  for (const b of r.container.querySelectorAll('.card-fold-button[aria-expanded="false"]')) act(() => b.click());
+  await quietly(flush);
   take("band", r.container);
   r.unmount();
 }
 setMedia(() => false);
 {
+  const fold = render(h(WhatIfFold, { a: EX }));
+  take("band", fold.container);
+  fold.unmount();
   const r = await quietly(() => render(h(WhatIf, { a: EX })));
   await quietly(flush);
   take("band", r.container);

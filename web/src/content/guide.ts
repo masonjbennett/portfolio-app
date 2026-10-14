@@ -20,6 +20,7 @@ import { BENCHMARKS } from "../state/defaults.ts";
 import { CHAPTER_IDS, CHAPTER_LABELS, LEVELS, TAB_IDS, type ChapterId, type TabId } from "../types.ts";
 import { MEGA_CAP_IN_SAMPLE, MEGA_CAP_IN_SAMPLE_END, MEGA_CAP_IN_SAMPLE_RF, PUBLISHED_SETS } from "./published.ts";
 import { ASSUMPTIONS, INPUT_HEADINGS, INPUT_IDS, type InputId } from "./inputs.ts";
+import { QUESTION } from "../overview/model.ts";
 
 /** The guide's title (src/guide/route.ts, which the page's first chunk carries for its links). */
 export { GUIDE_TITLE } from "../guide/route.ts";
@@ -108,42 +109,57 @@ export const GUIDE_FIRST_SCREEN: readonly GuidePart[] = [
   {
     heading: "The masthead",
     body: [
-      "At the top: the title, who made it and a link to this guide, with one line under them on what the page does. The " +
-        "basket the figures are about sits in the bar just below; the settings section of this guide walks through it.",
+      "At the top: the title, who made it and a link to this guide. The basket the figures are about sits in the bar just " +
+        "below; the settings section of this guide walks through it.",
       `On a first visit the page opens on a saved example, so it is never blank: the ${cross.name.toLowerCase()} set ` +
         "described above.",
     ],
   },
   {
-    heading: "The published result",
+    heading: "The question and the answer",
     body: [
-      "[[Published result]] quotes the out-of-sample test as it was published on masonjbennett.com: the sentence from the " +
-        "project, then three out-of-sample Sharpe ratios, for an even split, for the least volatile mix and for the highest-" +
-        "Sharpe mix. When your tickers are exactly one of the three published sets, the line names that set; on any other " +
-        "basket it quotes the five mega-caps. These figures are fixed: they never move with your settings.",
-      "[[Walk-forward test]] opens the same test, replayed, in its chapter, and the last link opens the published method note. On " +
-        "a phone the sentence folds behind [[The published sentence]]; tap it to read it.",
+      `The page opens on ${CHAPTER_LABELS.overview}, which asks one question in large type: [[${QUESTION}]] Under it, ` +
+        "two sentences answer it. The first is about your tickers, with hindsight: what the starting amount became in the mix with the " +
+        "best trade-off between return and risk, chosen on these very prices, against an even split. The second is Mason's " +
+        "published test, without hindsight. When your tickers are exactly one of the three published sets it quotes that " +
+        "set's figures as published; on any other basket it says what the test found in words and offers to run the same " +
+        "test on your basket.",
+      "A word with a dotted underline, such as [[With hindsight]], opens a short definition when you tap it.",
     ],
   },
   {
-    heading: "The finding and the four plates",
+    heading: "The two cards",
     body: [
-      "Under it, one sentence says what your tickers did over the window: the highest Sharpe ratio any mix of them reached, " +
-        "with hindsight, against an even split. It says in-sample, because it is.",
-      `Four plates follow, each a Sharpe ratio over the same window. [[Equal-Weight Sharpe]] is the even split, chosen ` +
-        "without looking at the prices, which makes it the yardstick. [[Tangency Sharpe (in-sample)]] is the mix with the " +
-        "highest Sharpe ratio, chosen on these prices, with plus or minus one standard error beside it: a rough sense of how " +
-        "far the figure could be off by luck alone. Because the mix was chosen on these same prices, it could be off by more. " +
-        "[[GMV Sharpe (in-sample)]] " +
-        "is the mix that swung least, also chosen on these prices. The last is the benchmark's own, named after it, such as " +
-        `[[${BENCHMARKS[0].display} Sharpe]].`,
-      "The small i beside each plate explains it; the text follows the explanation level in the settings.",
+      "The first card draws what the starting amount became in each of the three mixes and the benchmark: the " +
+        "best-tradeoff mix (the tangency, highest-Sharpe portfolio), the equal split (equal weight) and the lowest-risk mix " +
+        "(GMV, the least volatile), each line named at its end.",
+      "The second, [[Hindsight flatters the optimizer]] on the example, sets each mix's Sharpe ratio with hindsight (a " +
+        "hollow bar) beside the same mix's published figure without it (a solid bar). On a basket that was never published, " +
+        "your own bars stand alone and the five mega-caps follow as the reference, under their own name.",
+      "Every card has two folds under it. [[Show the numbers]] opens the figures behind the picture; [[How it is " +
+        "calculated]] opens the method. In the second card's numbers sit one sentence on the highest Sharpe ratio your " +
+        `tickers reached, then four Sharpe ratios: [[Equal-Weight Sharpe]], the even split, chosen without looking at the ` +
+        "prices; [[Tangency Sharpe (in-sample)]], with plus or minus one standard error beside it, a rough sense of how far " +
+        "the figure could be off by luck alone (more, since the mix was chosen on these same prices); [[GMV Sharpe " +
+        `(in-sample)]]; and the benchmark's own, such as [[${BENCHMARKS[0].display} Sharpe]]. The small i beside each explains ` +
+        "it. Under them, the published sentence is quoted as it appears on masonjbennett.com, with the published figures; " +
+        "[[Walk-forward test]] opens the same test, replayed, and the last link opens the method note.",
+    ],
+  },
+  {
+    heading: "Why, and what to try next",
+    body: [
+      "Three short facts say why the answer comes out as it does: how much of the best-tradeoff mix sits in one holding, " +
+        "how far one published weight swung with the years it looked back over, and what the published one-year tests found.",
+      "[[Try another basket:]] loads one of the three published sets with one tap; or type your own tickers in the bar. " +
+        "The last line says who built the page and links its source code, the method note and this guide.",
     ],
   },
   {
     heading: "The what-if panel",
     body: [
-      "[[What if one expected return were different?]] opens a panel, [[What-if on these prices]]. Pick an asset, then slide " +
+      `At the end of ${CHAPTER_LABELS.build}, [[What if one expected return were different?]] opens a panel, [[What-if ` +
+        "on these prices]]. Pick an asset, then slide " +
         "its expected return, the average yearly return the optimizer assumes it earns, [[up to two standard errors either side " +
         "of its average]]. At each step the highest-Sharpe mix is solved again and the sentence prints its new weight in that " +
         "asset. The least volatile mix never moves, because it does not use expected returns at all.",
@@ -221,7 +237,7 @@ export const GUIDE_INPUT_PHONE =
 // ---- the chapters, and the tabs inside them ----------------------------------------------------------------------
 
 export const GUIDE_CHAPTERS_INTRO: readonly string[] = [
-  `The row of five chapters under the plates holds the analysis, in reading order: [[${CHAPTER_LABELS.overview}]], ` +
+  `The row of five chapters above the question holds the analysis, in reading order: [[${CHAPTER_LABELS.overview}]], ` +
     `[[${CHAPTER_LABELS.performance}]], [[${CHAPTER_LABELS.diversification}]], [[${CHAPTER_LABELS.build}]] and ` +
     `[[${CHAPTER_LABELS.holdup}]]. Each chapter after the first shows its parts one under the other, and most parts open on ` +
     "one sentence, in large type, that states what their figures show, then the charts and tables behind it. Every one of " +
@@ -234,7 +250,7 @@ export const GUIDE_CHAPTERS_INTRO: readonly string[] = [
 export const GUIDE_CHAPTERS: Readonly<Record<ChapterId, GuideChapter>> = {
   overview: {
     question: "Where should I start?",
-    opens: ["The chapter the page opens on. It lists the other four, each with one line on what it answers; pick one to open it."],
+    opens: ["The chapter the page opens on: the question, the answer, two cards and the baskets to try, described above."],
   },
   performance: {
     question: "How did each investment and each mix grow, and how far did they fall?",

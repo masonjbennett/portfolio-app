@@ -115,12 +115,15 @@ const EMOJI = /\p{Extended_Pictographic}/u;
 
 // ---- (d) the dek and the origin line ---------------------------------------------------------------------
 {
+  // The dek left the page for the meta description (index.html): the Overview's question is the first sentence a
+  // reader meets, and the dek is what a search result or a shared link says.
   const r = render(h(Masthead, { analysis: { status: "loading" }, fetching: true }));
-  const dek = text(r.container.querySelector(".masthead-dek") ?? {});
+  const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const dek = /<meta\s+name="description"\s+content="([^"]*)"/.exec(index)?.[1] ?? "";
   const appDek = (APP.split(/\r?\n/).find((l) => /^\s*Mean-Variance Optimization/.test(l)) ?? "").trim().replaceAll("&amp;", "&");
-  check(dek === A.DEK && appDek.length > 0 && dek !== appDek && !/Mean-Variance|Risk Analysis/.test(dek),
-    "dek: the masthead says what the page does, not the app's assignment title", `${dek} | app: ${appDek}`);
-  check(!/\d/.test(dek) && !/\b(best|optimal)\b/i.test(dek) && ["equal-weight", "minimum-variance", "maximum-Sharpe"].every((w) => dek.includes(w)),
+  check(dek === A.DEK && appDek.length > 0 && dek !== appDek && !/Mean-Variance|Risk Analysis/.test(dek) && !text(r.container).includes(A.DEK),
+    "dek: the meta description says what the page does, not the app's assignment title, and the masthead no longer prints it", `${dek} | app: ${appDek}`);
+  check(!/\d/.test(dek) && !/(best|optimal)/i.test(dek) && ["equal-weight", "minimum-variance", "maximum-Sharpe"].every((w) => dek.includes(w)),
     "dek: no counts and no \"best\", and it names the three portfolios the page builds", dek);
   r.unmount();
 

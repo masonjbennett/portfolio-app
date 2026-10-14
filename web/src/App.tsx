@@ -1,22 +1,22 @@
-// The page: the masthead, the basket bar (a summary chip and a sheet on a phone), the front-page band,
-// the chapter row and the active chapter, each card inside its own Boundary.
+// The page: the masthead, the basket bar (a summary chip and a sheet on a phone), the status line, the
+// chapter row and the active chapter, each card inside its own Boundary.
 //
 // Five chapters hold the seven tabs (CHAPTER_TABS in src/types.ts): a chapter renders its tabs one under
-// the other, each tab in its own Boundary, and the Overview lists the other four until it gets its own
-// first screen.
+// the other, each tab in its own Boundary. The Overview is the page's first screen (src/overview): the
+// question, the answer, two cards, and who built it; it replaced the front-page band that sat above the
+// chapters, and the band's job of saying why nothing is shown went to the status line (./chrome/Status.tsx).
 //
 // The app runs its six tabs as one script: st.stop() inside one (portfolio_app.py 1483, 1727)
 // ends the run, and every tab after it renders nothing. Here each card fails alone and names
-// itself; the band and the other tabs keep working. The page adds a seventh the app does not have,
+// itself; the other cards keep working. The page adds a seventh the app does not have,
 // the walk-forward test, after the app's six.
 //
 // Each tab is its own chunk, and so is Recharts, which only the tabs draw with: the first paint
-// needs the masthead, the basket bar and the band, none of which chart anything, and a chapter fetches
+// needs the masthead, the basket bar and the Overview's words, none of which chart anything, and a chapter fetches
 // only its own tabs' chunks. Once the analysis has drawn, every tab is fetched while the page is idle, so
 // a later switch finds its chapter in memory and a deploy mid-visit cannot strand a tab whose chunk the
 // new deployment no longer serves.
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition, type ComponentType } from "react";
-import BandView from "./chrome/Band.tsx";
 import CommandPaletteView from "./chrome/CommandPalette.tsx";
 import FooterView from "./chrome/Footer.tsx";
 import MastheadView from "./chrome/Masthead.tsx";
@@ -31,14 +31,15 @@ import {
   CHAPTER_IDS, CHAPTER_LABELS, CHAPTER_TABS, TAB_IDS, TAB_LABELS, chapterOf,
   type Analysis, type ChapterId, type TabContextValue, type TabId, type TabProps, type WalkView, type Workbench,
 } from "./types.ts";
-import ChapterContents from "./chrome/ChapterContents.tsx";
+import Status from "./chrome/Status.tsx";
+import WhatIfFold from "./chrome/WhatIfFold.tsx";
+import Overview, { Question } from "./overview/Overview.tsx";
 import "./App.css";
 
 type TabModule = { default: ComponentType<TabProps> };
 
 // The chrome renders again only when its own props change: an edited amount or custom weight leaves
-// the masthead, the basket bar and the band alone, and a new explanation level reaches only what shows it.
-const Band = memo(BandView);
+// the masthead and the basket bar alone, and a new explanation level reaches only what shows it.
 const CommandPalette = memo(CommandPaletteView);
 const Footer = memo(FooterView);
 const Masthead = memo(MastheadView);
@@ -150,7 +151,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   const [switching, startSwitch] = useTransition();
   const { setChapter, view, rfHistory } = wb;
   // The walk-forward tab opens on its first segment unless the caller names the other (the published
-  // strip in the band, the in-sample note on the Optimization tab).
+  // control in the Overview's hindsight card, the in-sample note on the Optimization tab).
   //
   // A caller that sits away from the tab (those two, and the tab's own rerun buttons) also asks to land the
   // reader on it: `landing` counts those asks, and the tab takes each one once (takeLanding), scrolling
@@ -165,6 +166,8 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
       }),
     [setChapter],
   );
+  const { setSettings } = wb;
+  const setTickers = useCallback((tickers: string[]) => setSettings({ tickers }), [setSettings]);
   const switchChapter = useCallback((id: ChapterId) => startSwitch(() => setChapter(id)), [setChapter]);
   // An older link's tab is landed on once, when it is not already the top of its chapter; the palette's
   // jumps land every time.
@@ -196,7 +199,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   // inside renders again only when its own inputs change (memo on the cards and on the charts'
   // drawing components): an explanation level reaches the tooltips, an amount the growth charts.
   const ready = wb.analysis.status === "ready" ? wb.analysis.value : null;
-  // The settings have changed and the analysis behind the band and the tab has not caught up yet: both keep
+  // The settings have changed and the analysis behind the Overview and the tabs has not caught up yet: they keep
   // the previous figures, marked the same way as a tab switch (aria-busy and the dim), so no figure
   // from the old settings sits unmarked beside the new ones.
   //
@@ -252,8 +255,11 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
         )}
         <div className="app-body">
           <main className="app-main">
-            <Boundary name="Snapshot" resetKey={ready}>
-              <Band analysis={wb.analysis} level={wb.level} fetching={wb.fetching} failure={wb.failure} settling={settling} tickers={wb.settings.tickers} />
+            {/* Until an analysis is on screen the Overview asks its question over the status line, so a first
+                visit never opens on a bare loading message. */}
+            {!ready && wb.chapter === "overview" ? <Question /> : null}
+            <Boundary name="Status">
+              <Status analysis={wb.analysis} failure={wb.failure} />
             </Boundary>
             {ready ? (
               <>
@@ -272,8 +278,8 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
                     aria-busy={switching || settling || undefined}
                   >
                     {chapterTabs.length === 0 ? (
-                      <Boundary name={CHAPTER_LABELS.overview}>
-                        <ChapterContents onOpen={switchChapter} />
+                      <Boundary name={CHAPTER_LABELS.overview} resetKey={ready}>
+                        <Overview analysis={ready} amount={wb.settings.amount} level={wb.level} setTickers={setTickers} settling={settling} />
                       </Boundary>
                     ) : (
                       chapterTabs.map((id) => {
@@ -294,6 +300,11 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
                         );
                       })
                     )}
+                    {wb.chapter === "build" ? (
+                      <Boundary name="What-if" resetKey={ready}>
+                        <WhatIfFold a={ready} settling={settling} />
+                      </Boundary>
+                    ) : null}
                     <Land focus={focus} />
                   </section>
                 </Suspense>

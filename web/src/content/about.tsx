@@ -19,7 +19,8 @@ export const SOURCE_URL = "https://github.com/masonjbennett/portfolio-app";
 /** Where the page itself is served; index.html's og:url says the same, and test/t-guide.mjs holds the two together. */
 export const APP_URL = "https://portfolio.masonjbennett.com/";
 
-// The masthead's dek: what the page does, in plain words. The app's dek (1097-1153) is the title its
+// The dek: what the page does, in plain words. It is index.html's meta description (t-about holds the two
+// together); the page itself opens on the Overview's question. The app's dek (1097-1153) is the title its
 // assignment gave it, "Mean-Variance Optimization & Risk Analysis", which names a method, not a use.
 export const DEK =
   "How the tickers you pick have moved, alone and together, and what equal-weight, minimum-variance and " +

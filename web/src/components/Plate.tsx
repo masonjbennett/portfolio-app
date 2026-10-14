@@ -10,7 +10,7 @@ import "./Plate.css";
 // se: printed small beside the figure, outside the figure's own element, so the figure reads alone. When the
 // plate is too narrow for both on one line, the error goes on a line ABOVE the figure (wrap-reverse), so the
 // figure stays level with its neighbours'. Printed only beside a figure that is itself printed.
-// tip: one of the app's tooltips, or one of the port's own (the band's equal-weight, minimum-variance and
+// tip: one of the app's tooltips, or one of the port's own (the Overview's equal-weight, minimum-variance and
 // benchmark Sharpe plates carry the port's), as the Tip itself accepts.
 export default function Plate({ label, value, format: id, tip, level, allowShort = false, se = null }: Omit<PlateProps, "tip"> & { tip?: TipKey | ScoreTipKey }) {
   const ok = value !== null && Number.isFinite(value);

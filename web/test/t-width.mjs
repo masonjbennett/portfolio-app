@@ -144,13 +144,11 @@ check(base === "100%" && !!wide && Number(wide[1]) === knee && /^\d+(\.\d+)?ch$/
 const OPT_IN = [
   ["src/components/ChartFrame.css", ".chart-title"],
   ["src/components/ChartFrame.css", ".chart-sub"],
-  ["src/chrome/Masthead.css", ".masthead-dek"],
   ["src/tabs/sensitivity/Sensitivity.css", ".sens-caption"],
   ["src/tabs/walkforward/Published.css", ".wfp-lede, .wfp-text, .wfp-foot"],
   ["src/chrome/Footer.css", ".footer p"],
   ["src/chrome/Footer.css", ".footer-method dl"],
-  ["src/chrome/Band.css", ".band-finding"],
-  ["src/chrome/Band.css", ".band-published"],
+  ["src/overview/Overview.css", ".ov-lede"],
 ];
 for (const [file, sel] of OPT_IN) {
   const v = decl(block(strip(read(file)), sel), "max-width");

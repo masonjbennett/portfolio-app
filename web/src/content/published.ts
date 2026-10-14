@@ -22,6 +22,9 @@ export const CARD_SENTENCE =
   "optimized portfolios on similar assets — the max-Sharpe portfolio's 1.107 in-sample Sharpe became 0.659 " +
   "out of sample — and optimization only added value across genuinely different asset classes.";
 
+/** How many one-year holds the test ran: the "six rolling one-year holding periods" of the card's sentence. */
+export const PUBLISHED_HOLDS = 6;
+
 export interface PublishedSet {
   /** The set's name as the method note prints it. */
   name: string;

@@ -32,7 +32,7 @@ export interface MarkEntry {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-// The app's texts for three figures this page does not print (its Snapshot showed them; the band's plates are Sharpe
+// The app's texts for three figures this page does not print (its Snapshot showed them; the Overview's plates are Sharpe
 // ratios instead). They stay in tooltips.json, which is a dump of the app, and stay out of the glossary. test/t-guide.mjs
 // holds the glossary to the marks the page renders both ways, so a page that starts printing one fails until it is listed.
 const NOT_ON_THE_PAGE: readonly TipKey[] = ["tangency_return", "bench_return", "bench_vol"];

@@ -1,4 +1,4 @@
-/* The what-if panel: small print under a hairline, below the band's plates. The sentence is body text, not a
+/* The what-if panel: small print under a hairline, at the end of Build a portfolio. The sentence is body text, not a
    headline, so it never competes with the finding above the plates. */
 .whatif {
   margin: var(--space-5) 0 0;

@@ -26,7 +26,7 @@ export function windowsSpan(to: string, freq: Frequency = "daily"): string {
 }
 
 /**
- * The sub-line under the head of every column solved on this window (defined in content/words.ts, which the band
+ * The sub-line under the head of every column solved on this window (defined in content/words.ts, which the Overview
  * shares).
  */
 export { FITTED };

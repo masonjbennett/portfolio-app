@@ -8,7 +8,7 @@
 //   ftol (932, 943), so a weight no longer carries solver noise in its third significant figure.
 // - A failed solve is SAID, in the tiles, the weights and the summary. The app stops the whole script
 //   at a failed tab-4 solve (1481-1483, 1492-1494), which also blanks tabs 5 and 6, and its snapshot
-//   band shows equal-weight figures under the Tangency labels (1200-1202).
+//   shows equal-weight figures under the Tangency labels (1200-1202).
 // - Every table holds numbers, so both downloads carry numbers: the app's summary is f-strings
 //   (1686-1694), so its CSV and Excel hold text.
 // - The risk contribution has a table beside its chart, weights and PRC side by side, with both
@@ -80,7 +80,7 @@ export function portRow(a: Analysis, w: Vec, includeStart = true): Row {
 
 /**
  * One standard error of a portfolio's Sharpe ratio, on its own daily returns at the analysis' rate: the
- * figure the band's plate and the scorecard print beside it. Null when it is not a finite number.
+ * figure the Overview's plate and the scorecard print beside it. Null when it is not a finite number.
  */
 export function finiteSE(a: Analysis, w: Vec): number | null {
   const se = sharpeSE(portfolioReturns(a.returns, w), a.rf);
@@ -690,7 +690,7 @@ export function headline(a: Analysis): string {
       : `Both optimisations failed, so only equal weights are shown, at a Sharpe ratio of ${num3(ew.sharpe)}.`;
   }
   if (!t.beatsRf) {
-    // Only the mixes inside the current bounds were searched, so the sentence names them (as the Band does).
+    // Only the mixes inside the current bounds were searched, so the sentence names them (as the Overview's finding does).
     const which = a.allowShort ? `mix of these assets with weights inside [${MINUS}1, 1]` : "long-only mix of these assets";
     return `No ${which} earned more than the ${pct2(a.rf)} risk-free rate, even with hindsight: the highest in-sample Sharpe ratio is ${num3(t.sharpe)}.`;
   }

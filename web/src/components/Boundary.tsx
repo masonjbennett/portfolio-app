@@ -1,5 +1,5 @@
 // An error boundary around one card. A throw while the card renders replaces THAT card with one quiet
-// line naming it; the rail, the band and every other card keep rendering.
+// line naming it; the basket bar, the Overview and every other card keep rendering.
 //
 // The app has no equivalent. A failed optimisation calls st.stop() (portfolio_app.py 1483, 1727),
 // which ends the script run: every later element of the page, including the tabs after the one that

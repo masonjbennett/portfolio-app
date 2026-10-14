@@ -214,7 +214,7 @@ const FALLBACK_WIDTH = 720;
 
 // Drawn again only when the plot (the lines, which carry the amount), the height or its own measured
 // width changes (memo): an explanation level, or a card around it rendering again, does not redraw it.
-const WealthLines = memo(function WealthLines({ plot, height }: { plot: WealthPlot; height: number }): ReactNode {
+export const WealthLines = memo(function WealthLines({ plot, height }: { plot: WealthPlot; height: number }): ReactNode {
   const [ref, width] = useBoxWidth(FALLBACK_WIDTH);
   // The value rides beside the name when there is room for it; the tooltip always has it.
   const withValue = width >= 560;

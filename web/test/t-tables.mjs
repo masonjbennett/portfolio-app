@@ -163,8 +163,8 @@ check(rawTable("export default () => <table><tbody><tr><td>1</td></tr></tbody></
 check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <table> here\nconst s = "<table>";\nexport default () => <Table title={s} columns={[]} rows={[]} filename="f" />;'),
   "ledger:downloads-everywhere the sweep ignores the Table component, comments and strings");
 {
-  const files = [...tsxUnder("src/tabs"), ...tsxUnder("src/chrome")];
-  const need = ["src/tabs/Returns.tsx", "src/tabs/Sensitivity.tsx", "src/chrome/BasketBar.tsx", "src/chrome/Band.tsx"];
+  const files = [...tsxUnder("src/tabs"), ...tsxUnder("src/chrome"), ...tsxUnder("src/overview")];
+  const need = ["src/tabs/Returns.tsx", "src/tabs/Sensitivity.tsx", "src/chrome/BasketBar.tsx", "src/overview/Overview.tsx"];
   check(files.length >= 9 && need.every((f) => files.includes(f)), "ledger:downloads-everywhere the sweep sees every tab and chrome file", files.join(" "));
   const hits = files.filter((f) => rawTable(readFileSync(WEB + f, "utf8"), f));
   check(hits.length === 0, "ledger:downloads-everywhere no tab or chrome file renders a raw <table>", hits.join(" "));

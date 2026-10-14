@@ -1,4 +1,4 @@
-// The prices to everything the band and the tabs share, computed once per (payload, settings,
+// The prices to everything the Overview and the tabs share, computed once per (payload, settings,
 // rate). The app runs the request checks and the cleaning once, at Run (1007-1092), then derives
 // the same state on every rerun (1156-1169); here both happen in one pure call.
 //

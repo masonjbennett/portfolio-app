@@ -1,4 +1,4 @@
-// The what-if panel under the band's plates. One asset's expected return is moved by hand, inside the
+// The what-if panel at the end of Build a portfolio (./WhatIfFold.tsx). One asset's expected return is moved by hand, inside the
 // range its own noise allows, and the maximum-Sharpe weights are solved again on the moved means. The
 // sentence prints the new tangency weight; the minimum-variance weight beside it is solved the same way
 // and never changes, because that portfolio does not use the means at all. It is a what-if on the prices

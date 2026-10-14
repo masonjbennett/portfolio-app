@@ -12,7 +12,7 @@
 // plates those tips sit on say in-sample, and the tips should too: the mix scored highest on the very
 // prices its weights were picked from, which describes the past and promises nothing.
 //
-// A third: the band's tangency Sharpe plate prints a standard error beside the figure, which the app's
+// A third: the tangency Sharpe plate (in the Overview hindsight card's numbers) prints a standard error beside the figure, which the app's
 // plate never had, so that tip gains one closing line (NOTES, below) saying what the ± measures and
 // what it leaves out. The app's text before it is unchanged.
 //
@@ -149,7 +149,7 @@ export const TIP_NAMES: Readonly<Record<TipKey, string>> = {
 // The scorecard prints figures the app never had, so their texts are the port's, written here beside the
 // app's and never added to tooltips.json (that file is a dump of the app and must stay one). The keys are
 // their own type, so TipKey stays exactly the app's list. Same three levels, same voice: plain words,
-// then the finance term, then the formula. Three of the band's plates (equal weight's, the minimum-variance
+// then the finance term, then the formula. Three of the Overview's plates (equal weight's, the minimum-variance
 // mix's and the benchmark's Sharpe ratios, which the app's Snapshot never showed) read their texts here too.
 
 export type ScoreTipKey =

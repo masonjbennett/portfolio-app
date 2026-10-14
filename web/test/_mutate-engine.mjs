@@ -203,7 +203,7 @@ const M = [
   ["src/tabs/WalkForward.tsx", "    document.getElementById(tabId(PREFIX, view))?.focus({ preventScroll: true });", "", "a landing that leaves the focus where the clicked control was", "t-app"],
   ["src/App.tsx", "        if (land) setLanding((n) => n + 1);", "", "a way in that switches the tab without landing the reader on it", "t-app"],
   ["src/App.tsx", "    if (n <= landed.current) return false;", "", "a landing taken again by every later mount of the tab", "t-app"],
-  ["src/chrome/Band.tsx", "onClick={() => page.setTab(\"walkforward\", \"published\", true)}", "onClick={() => page.setTab(\"walkforward\", \"published\")}", "the band's control switching without landing", "t-app"],
+  ["src/overview/Overview.tsx", "onClick={() => page.setTab(\"walkforward\", \"published\", true)}", "onClick={() => page.setTab(\"walkforward\", \"published\")}", "the hindsight card's control switching without landing", "t-app"],
   ["src/tabs/FittedNote.tsx", "onClick={() => page.setTab(\"walkforward\", \"published\", true)}", "onClick={() => page.setTab(\"walkforward\", \"published\")}", "the in-sample note switching without landing", "t-app"],
   ["src/tabs/walkforward/live.ts", "  const short = w.folds.flatMap((f, k) => (f.bars < MIN_HOLD ? [k] : []));", "  if (w) return null;\n  const short = w.folds.flatMap((f, k) => (f.bars < MIN_HOLD ? [k] : []));", "a short hold's dash printed with no reason", "t-tab-walkforward"],
   ["src/tabs/walkforward/live.ts", "n === 1 ? \"day\" : \"days\"", "\"days\"", "one day printed as \"1 days\"", "t-tab-walkforward"],

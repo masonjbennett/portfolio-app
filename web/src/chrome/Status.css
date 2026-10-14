@@ -1,0 +1,13 @@
+.status-alert {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-3);
+  border-left: var(--line-bar) solid var(--color-claret);
+  color: var(--color-claret);
+  font-size: var(--type-3);
+}
+
+.status-wait {
+  margin: 0 0 var(--space-4);
+  color: var(--color-ink2);
+  font-size: var(--type-2);
+}

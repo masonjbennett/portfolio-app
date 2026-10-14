@@ -55,8 +55,8 @@ const heavy = firstIds.filter((id) => CHART_LIBS.test(id));
 check(heavy.length === 0, "split: no chart library is in the first chunk", heavy.slice(0, 5).join(", "));
 const tabsEarly = firstIds.filter((id) => /^web\/src\/(tabs|charts)\//.test(id));
 check(tabsEarly.length === 0, "split: no tab and no chart module is in the first chunk", tabsEarly.slice(0, 5).join(", "));
-check(firstIds.some((id) => id === "web/src/chrome/Band.tsx") && firstIds.some((id) => id === "web/src/App.tsx"),
-  "split: the first chunk does carry the page (App and the band), so the checks above read the right chunk");
+check(firstIds.some((id) => id === "web/src/overview/Overview.tsx") && firstIds.some((id) => id === "web/src/App.tsx"),
+  "split: the first chunk does carry the page (App and the Overview), so the checks above read the right chunk");
 
 // The walk-forward tab and everything only it reads (the published test's stored weights, the engine that
 // re-runs the test) stay out of the first chunk too, whichever directory they live in.

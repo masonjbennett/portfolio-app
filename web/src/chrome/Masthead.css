@@ -12,6 +12,8 @@
 }
 
 .masthead-title {
+  margin: 0;
+  color: var(--color-ink);
   font-family: var(--font-sans);
   font-weight: 700;
   font-size: var(--type-4);
@@ -39,13 +41,6 @@
 .masthead-links a {
   color: var(--color-ink);
   text-underline-offset: 3px;
-}
-
-.masthead-dek {
-  max-width: var(--prose-measure, 100%);
-  margin: var(--space-1) 0 0;
-  color: var(--color-ink2);
-  font-size: var(--type-2);
 }
 
 /* Phone (760px, tokens.breakpoint.phone): the title and the guide's link share the first line, the byline

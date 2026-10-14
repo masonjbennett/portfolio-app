@@ -1,9 +1,10 @@
-// The page's chrome: masthead, basket bar and its drawer, phone chip and sheet, band, tab switch, command palette.
+// The page's chrome: masthead, basket bar and its drawer, phone chip and sheet, status line, the Overview, chapter switch,
+// command palette.
 //
 // Drives the shipping components in jsdom (test/_dom.mjs) with a stand-in workbench, so nothing
 // here waits on the state hook, and with stand-in tabs where a check is about the page rather
 // than a tab. Three divergence-ledger entries close here: boundary (the page half), failed-tangency
-// (the band half) and start-date-floor (the page half). Each asserts the app's side, read out of
+// (the Overview half) and start-date-floor (the page half). Each asserts the app's side, read out of
 // portfolio_app.py or reproduced with the engine, and the port's side, rendered.
 import { readFileSync, readdirSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
@@ -12,7 +13,10 @@ import { act, expectUncaught, render, setMedia, text } from "./_dom.mjs";
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
-const { default: Band, snapshotPlates, finding, assetsOf, publishedSetOf, standing, nameInSentence, whoseFigures, PublishedResult, seams: bandSeams } = await import("../src/chrome/Band.tsx");
+const { snapshotPlates, finding, assetsOf, publishedSetOf, standing, nameInSentence, whoseFigures, figuresLine, lede, ledeText, hindsight, whyFacts, endsOf, mixRows, QUESTION } = await import("../src/overview/model.ts");
+const { default: Overview, OPEN_PUBLISHED_TITLE } = await import("../src/overview/Overview.tsx");
+const { default: WhatIfFold, seams: whatIfSeams } = await import("../src/chrome/WhatIfFold.tsx");
+const A = await import("../src/content/about.tsx");
 const OPT = await import("../src/tabs/optimization/model.ts");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: Footer } = await import("../src/chrome/Footer.tsx");
@@ -62,16 +66,29 @@ function setValue(el, value) {
   });
 }
 const click = (el) => act(() => el.click());
-// The band's what-if fold fetches its panel's code when the reader reaches for it (src/chrome/Band.tsx):
+// The what-if fold fetches its panel's code when the reader reaches for it (src/chrome/WhatIfFold.tsx):
 // opened here as a reader opens it, by its line, then waited on until the panel is in. Returns the fold.
 async function openWhatIf(root) {
-  const fold = root.querySelector("details.band-whatif-fold");
+  const fold = root.querySelector("details.whatif-fold");
   if (!fold) return null;
   click(fold.querySelector("summary"));
   for (let i = 0; i < 400 && !(fold.open && fold.querySelector("section.whatif")); i++) {
     await act(() => new Promise((res) => setTimeout(res, 5)));
   }
   return fold;
+}
+// The Overview's answer as a reader sees it: the glossary terms' definitions, shut, left out.
+function readLede(root) {
+  const el = root.querySelector(".ov-lede")?.cloneNode(true);
+  el?.querySelectorAll(".term-text").forEach((d) => d.remove());
+  return el ? text(el) : "";
+}
+// Opens the Overview hindsight card's "Show the numbers" fold, as a reader does; returns the card.
+function openNumbers(root) {
+  const card = root.querySelector("#overview-hindsight");
+  const b = [...(card?.querySelectorAll(".card-fold-button") ?? [])].find((x) => text(x) === "Show the numbers");
+  if (b && b.getAttribute("aria-expanded") !== "true") click(b);
+  return card;
 }
 const key = (el, k, mods = {}) => act(() => el.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, ...mods })));
 const clickables = (root) => [...root.querySelectorAll("button, [role=tab], [role=radio], [role=option]")];
@@ -184,7 +201,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     "ledger:boundary: the app's tabs 4 and 5 each hold an st.stop() that leaves every later tab unbuilt (1483, 1727)",
     stops.map((s) => s.tab).join(","));
 
-  // The port's side: a tab that throws leaves one named line, the band, and the other tabs.
+  // The port's side: a tab that throws leaves one named line, the chrome, and the other tabs.
   const Throws = () => {
     throw new Error("tab exploded");
   };
@@ -199,7 +216,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const lines = () => [...r.container.querySelectorAll("main [role=alert], main [role=status], main .boundary")].filter((e) => text(e));
   check(lines().length === 1 && text(lines()[0]).includes(TAB_LABELS.returns),
     "ledger:boundary: the port shows one line naming the failed tab", lines().map(text).join(" | "));
-  check(text(r.container).includes("Tangency Sharpe (in-sample)"), "ledger:boundary: the port's band survives a failed tab");
+  check(!!r.container.querySelector(".masthead") && !!r.container.querySelector(".app-tabs [role=tablist]"), "ledger:boundary: the masthead and the chapter row survive a failed tab");
   check(!!r.container.querySelector('[data-tab="risk"]'), "ledger:boundary: the port's next tab in the same chapter renders under the failed one");
   const next = byLabel(r.container.querySelector(".app-tabs"), CHAPTER_LABELS.diversification);
   if (next) quietly(() => click(next));
@@ -234,13 +251,10 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     click(byLabel(row, CHAPTER_LABELS[id]));
     check(panelOk(id), `chapters: switching to ${id} moves the panel's id and label to its pill, and shows exactly its tabs`);
   }
-  // The Overview, for now: no tab, and one button per other chapter that opens it.
+  // The Overview: no tab; it opens on the page's question.
   click(byLabel(row, CHAPTER_LABELS.overview));
-  const opens = [...r.container.querySelectorAll("[role=tabpanel] .chapter-contents-open")];
-  check(panelOk("overview") && opens.map(text).join("|") === CHAPTER_IDS.slice(1).map((c) => CHAPTER_LABELS[c]).join("|"),
-    "chapters: the Overview holds no tab and lists the other four chapters in order", opens.map(text).join(" | "));
-  if (opens[2]) click(opens[2]);
-  check(panelOk("build"), "chapters: an Overview row opens its chapter");
+  const ovPanel = r.container.querySelector("[role=tabpanel]");
+  check(panelOk("overview") && !!ovPanel?.querySelector("[data-overview] h1"), "chapters: the Overview holds no tab and opens on the question");
   r.unmount();
 }
 
@@ -274,7 +288,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
 // The REAL tabs here, on the baked example, not the stand-ins the rest of this suite uses, each read in its own
 // part of its chapter.
 {
-  const r = page({}, TABS);
+  const r = page({ chapter: "overview" }, TABS);
   const row = r.container.querySelector(".app-tabs [role=tablist]");
   const seen = [];
   for (const id of TAB_IDS) {
@@ -296,12 +310,12 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   r.unmount();
 }
 
-// ---- (c) nothing ready: a named message in place of the band and tabs -----------------------------
+// ---- (c) nothing ready: a named message in place of the chapters ---------------------------------------
 {
   const e = page({ analysis: { status: "error", name: "prices", message: "The price service did not answer." } });
   const t = text(e.container);
   check(t.includes("prices") && t.includes("The price service did not answer.") && !!e.container.querySelector("main [role=alert]"),
-    "failed analysis: its name and message show where the band was", t);
+    "failed analysis: its name and message show where the chapters go", t);
   check(!e.container.querySelector("[data-tab]") && !e.container.querySelector(".app-tabs"), "failed analysis: no tab switch and no tab");
   e.unmount();
 
@@ -312,16 +326,28 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
 
   const l = page({ analysis: { status: "loading" } });
   check(text(l.container.querySelector("main")).length > 0, "loading: the main column says so, never a blank");
+  check(!l.container.querySelector("main h1"), "loading: a chapter other than the Overview shows no question");
   l.unmount();
+
+  // On the Overview the question is asked while the prices load, above the loading line.
+  const q = page({ analysis: { status: "loading" }, chapter: "overview" });
+  const h1 = q.container.querySelector("main h1");
+  const wait = q.container.querySelector("main [role=status]");
+  check(text(h1 ?? {}) === QUESTION && !!wait && !!(h1.compareDocumentPosition(wait) & window.Node.DOCUMENT_POSITION_FOLLOWING),
+    "loading: the Overview asks its question above the loading line", text(q.container.querySelector("main") ?? {}));
+  q.unmount();
 
   const kept = page({ failure });
   const kt = text(kept.container.querySelector("main"));
   check(kt.includes(MESSAGES["too-few-downloaded"]) && kt.includes("previous settings") && !!kept.container.querySelector('[data-tab="returns"]'),
     "failed update: the message shows beside the analysis still on screen, tabs kept", kt);
   kept.unmount();
+  const quiet = page({});
+  check(!quiet.container.querySelector(".status-alert, .status-wait"), "ready and up to date: the status line renders nothing");
+  quiet.unmount();
 }
 
-// ---- (d) the band: one sentence, four Sharpe plates --------------------------------------------
+// ---- (d) the hindsight card's numbers: one sentence, four Sharpe plates --------------------------------
 {
   const t = EX.tangency;
   const plates = snapshotPlates(EX);
@@ -336,7 +362,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   ];
   check(want.every(([, v]) => Number.isFinite(v)) && t.sharpe === rowSharpe("Tangency") && rowSharpe(EX.benchLabel) === EX.benchStats.sharpe &&
     JSON.stringify(plates.map((p) => [p.label, p.value, p.format, p.tip])) === JSON.stringify(want),
-    "band: the four plates are the Sharpe ratios of equal weight, tangency, GMV and the benchmark, each the Optimization tab's own figure, in num3",
+    "numbers: the four plates are the Sharpe ratios of equal weight, tangency, GMV and the benchmark, each the Optimization tab's own figure, in num3",
     JSON.stringify([plates, want]));
   // The same to the last bit on two more baskets. On the example a second way of reaching equal weight's
   // Sharpe (its daily return series through annualizedStats) happens to agree with the table bit for bit;
@@ -349,29 +375,30 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     const exp = [row("Equal-Weight"), row("Tangency"), row("GMV"), row(A.benchLabel)];
     return { name, ok: exp.every(Number.isFinite) && got.every((v, i) => v === exp[i]), got, exp };
   });
-  check(strict.every((x) => x.ok), "band: on the sector and mega-cap fixtures too, every plate is the Optimization tab's figure to the last bit", JSON.stringify(strict.filter((x) => !x.ok)));
+  check(strict.every((x) => x.ok), "numbers: on the sector and mega-cap fixtures too, every plate is the Optimization tab's figure to the last bit", JSON.stringify(strict.filter((x) => !x.ok)));
   // The two fitted portfolios say in-sample; equal weight and the benchmark, which nothing was fitted to, do not.
   check(plates.map((p) => /\(in-sample\)$/.test(p.label)).join() === "false,true,true,false" && !/fit|optimi|in-sample/i.test(plates[0].label),
-    "band: in-sample on the tangency and GMV plates only; the equal-weight label says nothing of fitting", plates.map((p) => p.label).join(" | "));
-  const r = page({});
-  const band = text(r.container.querySelector("main"));
-  check(want.every(([label, v, f]) => band.includes(label) && band.includes(format(v, f))), "band: every plate renders its label and figure", band);
+    "numbers: in-sample on the tangency and GMV plates only; the equal-weight label says nothing of fitting", plates.map((p) => p.label).join(" | "));
+  const r = page({ chapter: "overview" });
+  const card = openNumbers(r.container);
+  const shown = text(card ?? {});
+  check(want.every(([label, v, f]) => shown.includes(label) && shown.includes(format(v, f))), "numbers: every plate renders its label and figure in the hindsight card's numbers", shown);
   const sentence = finding(EX);
   const ewS = format(rowSharpe("Equal-Weight"), "num3");
-  check(band.includes(sentence) && sentence.includes(format(t.sharpe, "num3")) && sentence.endsWith(`; equal weight earned ${ewS}.`) &&
+  check(shown.includes(sentence) && sentence.includes(format(t.sharpe, "num3")) && sentence.endsWith(`; equal weight earned ${ewS}.`) &&
     sentence.includes(monthYear(EX.prices.dates[0])) && sentence.includes(monthYear(EX.asOf)) && !sentence.includes(EX.benchLabel),
-    "band: the sentence states the tangency's Sharpe against equal weight's over the price span, the benchmark left to its plate", sentence);
+    "numbers: the sentence states the tangency's Sharpe against equal weight's over the price span, the benchmark left to its plate", sentence);
   // The assets by name, in the page's order, up to six; above six, by count.
   const named = `${EX.tickers.slice(0, -1).join(", ")} and ${EX.tickers.at(-1)}`;
   check(EX.tickers.length === 5 && sentence.startsWith(`On ${named}, with hindsight, `),
-    "band: the sentence names itself, the basket's tickers in order with hindsight, before any figure", sentence);
+    "numbers: the sentence names itself, the basket's tickers in order with hindsight, before any figure", sentence);
   const six = ["SPY", "AGG", "GLD", "VNQ", "EFA", "TLT"];
   const seven = [...six, "DBC"];
   const back = [...EX.tickers].reverse();
   check(assetsOf(six) === "SPY, AGG, GLD, VNQ, EFA and TLT" && assetsOf(seven) === "these 7 assets" && assetsOf(["SPY", "AGG"]) === "SPY and AGG" &&
     finding({ ...EX, tickers: seven }).startsWith("On these 7 assets, with hindsight, ") &&
     finding({ ...EX, tickers: back }).startsWith(`On ${back.slice(0, -1).join(", ")} and ${back.at(-1)}, with hindsight, `),
-    "band: up to six tickers are named in the order the page holds them, seven or more are counted", `${assetsOf(six)} | ${assetsOf(seven)}`);
+    "numbers: up to six tickers are named in the order the page holds them, seven or more are counted", `${assetsOf(six)} | ${assetsOf(seven)}`);
   // On a published basket the live tangency figure is recomputed in-sample, never the published one, and
   // the sentence says so right after it; on any other basket it says the same, so the mark never comes and goes.
   const through = `(in-sample, recomputed on prices through ${format(EX.asOf, "date")})`;
@@ -380,14 +407,14 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const marked = P.PUBLISHED_SETS.flatMap((set) => [onSet(EX, set), onSet(high, set)]);
   check(EX.tangency?.beatsRf === true && high.tangency?.beatsRf === false &&
     marked.every((s, i) => s.includes(`${format((i % 2 ? high : EX).tangency.sharpe, "num3")}${i % 2 ? " " : " of annual excess return per unit of volatility "}${through}`)),
-    "band: on a published basket the tangency Sharpe is marked in-sample and recomputed, with the last price day", marked.join(" | "));
+    "numbers: on a published basket the tangency Sharpe is marked in-sample and recomputed, with the last price day", marked.join(" | "));
   // Ten tickers that are neither the default basket nor any preset, published or not.
   const tenOther = ["AAPL", "MSFT", "JPM", "XOM", "KO", "PG", "V", "UNH", "HD", "CAT"];
   const presetKeys = [...PRESETS.map((p) => p.tickers), ...P.PUBLISHED_SETS.map((x) => x.tickers.join(", "))].map((t) => parseTickers(t).sort().join(","));
   const other = [finding({ ...EX, tickers: tenOther }), finding({ ...high, tickers: tenOther })];
   check(!presetKeys.includes([...tenOther].sort().join(",")) &&
     other.every((s, i) => s.includes(`${format((i ? high : EX).tangency.sharpe, "num3")}${i ? " " : " of annual excess return per unit of volatility "}${through}`)),
-    "band: on a ten-ticker basket that is no preset the tangency Sharpe carries the same in-sample, recomputed mark", other.join(" | "));
+    "numbers: on a ten-ticker basket that is no preset the tangency Sharpe carries the same in-sample, recomputed mark", other.join(" | "));
   // Every branch measures against equal weight: the rate nothing beats, and the failed solve.
   const highEw = OPT.portRow(high, high.ew);
   const failedA = exampleAnalysis({ allowShort: true, rf: 0.4 });
@@ -398,10 +425,8 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     hs.endsWith(`against ${format(highEw.sharpe, "num3")} for equal weight.`) && !hs.includes(high.benchLabel) &&
     fs.includes(`failed for ${named} with short positions allowed`) &&
     fs.endsWith(`equal weight returned ${format(failedEw.mu, "pct2")} a year at ${format(failedEw.sigma, "pct2")} volatility.`) && !fs.includes(failedA.benchLabel),
-    "band: with no mix above the rate, and with a failed solve, the sentence names the tickers and measures against equal weight", `${hs} | ${fs}`);
-  // The failed solve's sentence calls it the tangency, the plate's word, with no gloss: it is the longest of
-  // the three with the tickers named, and the bracket added a line to the band at 375 px.
-  check(fs.startsWith(`The tangency optimisation failed for ${named} `), "band: the failed solve's sentence says tangency alone, the word on its plate", fs);
+    "numbers: with no mix above the rate, and with a failed solve, the sentence names the tickers and measures against equal weight", `${hs} | ${fs}`);
+  check(fs.startsWith(`The tangency optimisation failed for ${named} `), "numbers: the failed solve's sentence says tangency alone, the word on its plate", fs);
   r.unmount();
 }
 
@@ -411,20 +436,22 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const calls = ORACLE.map((l) => /^snap_cols\[(\d)\]\.metric\((f?"[^"]*")/.exec(l)).filter(Boolean).map((m) => [m[1], m[2]]);
   check(JSON.stringify(calls) === JSON.stringify([["0", '"Best Sharpe (Tangency)"'], ["1", '"Tangency Return"'], ["2", 'f"{bench_label_saved} Return"'], ["3", 'f"{bench_label_saved} Volatility"']]),
     "ledger:snapshot-plates the app's Snapshot is the tangency's Sharpe and return and the benchmark's return and volatility", JSON.stringify(calls));
-  // The port's side: four Sharpe ratios; the three figures the band no longer shows are still on the
-  // Optimization tab, in its summary table, under their portfolios' names, as percentages.
+  // The port's side: four Sharpe ratios; the tangency's return and the benchmark's return and volatility are in
+  // the Overview growth chart's numbers and in the Optimization tab's summary table, as percentages.
   const labels = snapshotPlates(EX).map((p) => p.label);
   const rows = OPT.summaryTable(EX, OPT.customWeights(EX, {}));
   const row = (name) => (rows.status === "ready" ? rows.value.rows.find((x) => x.portfolio === name) : undefined);
   const pct = rows.status === "ready" ? rows.value.columns.filter((c) => c.format === "pct2").map((c) => c.key) : [];
+  const mixes = mixRows(EX, EX_SETTINGS.amount);
   check(labels.length === 4 && labels.every((l) => / Sharpe( \(in-sample\))?$/.test(l)) &&
     row("Tangency")?.mu === EX.tangency.mu && row(EX.benchLabel)?.mu === EX.benchStats.mu && row(EX.benchLabel)?.sigma === EX.benchStats.sigma &&
-    pct.includes("mu") && pct.includes("sigma"),
-    "ledger:snapshot-plates the port's plates are four Sharpe ratios; the tangency return and the benchmark's return and volatility stay in the Optimization tab's summary table",
+    pct.includes("mu") && pct.includes("sigma") &&
+    mixes[0].mu === row("Tangency")?.mu && mixes.at(-1).mu === EX.benchStats.mu && mixes.at(-1).sigma === EX.benchStats.sigma,
+    "ledger:snapshot-plates the port's plates are four Sharpe ratios; the tangency return and the benchmark's return and volatility are in the growth chart's numbers and the Optimization tab's summary table",
     `${labels.join(" | ")} / ${JSON.stringify([row("Tangency"), row(EX.benchLabel)])}`);
 }
 
-// ---- (d2) the published result: quoted, dated, linked once, there before any price ---------------
+// ---- (d2) the published result: quoted, dated, linked once, in the hindsight card ----------------------
 {
   // The published figures written out a second time, so a slip in either copy goes red. They are the
   // site's, character for character (the negative carries U+2212, as the site prints it).
@@ -432,11 +459,11 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(JSON.stringify(nine) === JSON.stringify([
     ["Five mega-caps", "AAPL MSFT GOOGL AMZN JPM", "0.864", "0.710", "0.659"],
     ["Seven sector ETFs", "XLK XLF XLV XLE XLI XLP XLY", "0.915", "0.450", "0.661"],
-    ["Cross-asset", "VTI AGG GLD VNQ EFA", "0.704", "\u22120.247", "0.883"],
+    ["Cross-asset", "VTI AGG GLD VNQ EFA", "0.704", "−0.247", "0.883"],
   ]) && P.MEGA_CAP_IN_SAMPLE === "1.107" && P.MEGA_CAP_IN_SAMPLE_END === "2026-09-04" && P.MEGA_CAP_IN_SAMPLE_RF === 0.02 && P.PUBLISHED_WHEN === "Sep 2026" &&
-    P.PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method" &&
+    P.PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method" && P.PUBLISHED_HOLDS === 6 &&
     P.CROSS_AGG_INTO_2022 === "95.1%" && JSON.stringify(P.MEGA_CAP_APPLE) === JSON.stringify(["41.7%", "3.8%", "6.4%", "21.0%", "44.8%"]),
-    "published: the constants are the nine published Sharpe ratios, 1.107 and its window end and rate, the AGG and Apple weights, the date and the method note's address",
+    "published: the constants are the nine published Sharpe ratios, 1.107 and its window end and rate, the six holds, the AGG and Apple weights, the date and the method note's address",
     JSON.stringify([nine, P.CROSS_AGG_INTO_2022, P.MEGA_CAP_APPLE]));
   check(P.CARD_SENTENCE.includes(`${P.MEGA_CAP_IN_SAMPLE} in-sample Sharpe became ${P.PUBLISHED_SETS[0].tangency} out of sample`) &&
     P.CARD_SENTENCE.includes("over six rolling one-year holding periods"),
@@ -449,41 +476,26 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const unread = Object.keys(P).filter((k) => !new RegExp(`\\b${k}\\b`).test(readers));
   check(unread.length === 0, "published: every figure quoted in published.ts is read somewhere on the page, so none is a spare copy", unread.join(" "));
 
-  // The strip in every state the band has: waiting, empty, failed, ready, and ready but not updated.
-  const failure = { message: MESSAGES["too-few-downloaded"] };
-  const states = [
-    ["loading", { analysis: { status: "loading" }, fetching: true, failure: null }],
-    ["empty", { analysis: { status: "empty", reason: "Enter at least two tickers." }, fetching: false, failure: null }],
-    ["error", { analysis: { status: "error", name: "Optimisation", message: "it threw" }, fetching: false, failure: null }],
-    ["failed build", { analysis: { status: "loading" }, fetching: false, failure }],
-    ["ready", { analysis: { status: "ready", value: EX }, fetching: false, failure: null }],
-    ["ready, not updated", { analysis: { status: "ready", value: EX }, fetching: false, failure }],
-    ["loading a published set", { analysis: { status: "loading" }, fetching: true, failure: null, tickers: P.PUBLISHED_SETS[1].tickers }],
-    ["failed build of a published set", { analysis: { status: "loading" }, fetching: false, failure, tickers: P.PUBLISHED_SETS[2].tickers }],
-    ["empty, a published set typed", { analysis: { status: "empty", reason: "Enter at least two tickers." }, fetching: false, failure: null, tickers: P.PUBLISHED_SETS[2].tickers }],
-    ["loading the mega-caps", { analysis: { status: "loading" }, fetching: true, failure: null, tickers: P.PUBLISHED_SETS[0].tickers }],
-  ];
+  // The quote in the hindsight card's numbers, on each published set and on two baskets that are none: the
+  // site's sentence word for word, only published figures beside it (the basket's set, or the mega-caps),
+  // dated, and the method note linked once.
   const mega = P.PUBLISHED_SETS[0];
-  // The published figures, the year it was published, and on the mega-caps 1.107's window end and rate.
   const allowed = new Set([...P.PUBLISHED_SETS.flatMap((x) => [x.ew, x.gmv, x.tangency]), P.MEGA_CAP_IN_SAMPLE, P.PUBLISHED_WHEN.split(" ")[1],
     P.MEGA_CAP_IN_SAMPLE_END.slice(0, 4), format(P.MEGA_CAP_IN_SAMPLE_RF, "pct1")]);
-  // The set each state's line quotes: the analysis' own basket when there is one, else the tickers being
-  // loaded, else the five mega-caps; the mega-caps' tangency always with its in-sample figure.
-  const quoted = (props) => publishedSetOf(props.analysis.status === "ready" ? props.analysis.value.tickers : props.tickers) ?? mega;
+  const baskets = [...P.PUBLISHED_SETS.map((x) => [x.name, [...x.tickers].reverse()]), ["ten others", ["SPY", "QQQ", "IWM", "EFA", "EEM", "AGG", "TLT", "GLD", "VNQ", "DBC"]], ["four", EX.tickers.slice(0, 4)]];
   const faults = [];
-  for (const [name, props] of states) {
-    const q = quoted(props);
+  for (const [name, tickers] of baskets) {
+    const q = publishedSetOf(tickers) ?? mega;
     const needed = [q.ew, q.gmv, q.tangency, ...(q === mega ? [P.MEGA_CAP_IN_SAMPLE] : [])];
-    const r = render(h(Band, { ...props, level: "plain" }));
-    const band = r.container.querySelector("section.band");
-    const strip = band?.querySelector(".band-published");
+    const r = render(h(Overview, { analysis: { ...EX, tickers }, amount: 10000, level: "plain", setTickers() {} }));
+    openNumbers(r.container);
+    const strip = r.container.querySelector("#overview-hindsight .ov-published");
     const st = text(strip ?? {});
-    const figures = st.match(/[\u2212-]?\d+(?:\.\d+)?%?/g) ?? [];
+    const figures = st.match(/[−-]?\d+(?:\.\d+)?%?/g) ?? [];
     const links = [...(strip?.querySelectorAll("a") ?? [])];
-    if (!strip) faults.push(`${name}: no strip`);
+    if (!strip) faults.push(`${name}: no quote`);
     else {
-      if (band.firstElementChild !== strip) faults.push(`${name}: the strip is not first in the band`);
-      if (!st.includes(P.CARD_SENTENCE)) faults.push(`${name}: the site's sentence is not quoted word for word`);
+      if (text(strip.querySelector("blockquote") ?? {}) !== P.CARD_SENTENCE) faults.push(`${name}: the site's sentence is not quoted word for word`);
       const stray = figures.filter((x) => !allowed.has(x));
       if (stray.length) faults.push(`${name}: figures not among the published constants: ${stray.join(" ")}`);
       const gone = needed.filter((x) => !figures.includes(x));
@@ -495,29 +507,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     r.unmount();
   }
   check(faults.length === 0,
-    "published: in every band state the strip comes first, quotes the site's sentence, prints only the published figures (the basket's set, or the mega-caps), dates itself and links the method note once",
+    "published: in the hindsight card's numbers the site's sentence is quoted word for word, only published figures beside it (the basket's set, or the mega-caps), dated, the method note linked once",
     faults.join("; "));
-
-  // On the page, before any price has arrived.
-  const r = page({ analysis: { status: "loading" }, fetching: true });
-  const main = r.container.querySelector("main");
-  const strip = main?.querySelector(".band-published");
-  const wait = main?.querySelector(".band-wait");
-  check(!!strip && !!wait && !!(strip.compareDocumentPosition(wait) & window.Node.DOCUMENT_POSITION_FOLLOWING) && text(strip).includes(P.CARD_SENTENCE),
-    "published: the page shows the published result while prices are still loading, above the loading line", text(main ?? {}));
-  r.unmount();
 }
 
 // ---- (d2a) the figures line quotes the basket's own published set, when it is one ------------------
 {
   const mega = P.PUBLISHED_SETS[0];
-  const figuresOf = (props) => {
-    const r = render(h(Band, { fetching: false, failure: null, level: "plain", ...props }));
-    const el = r.container.querySelector(".band-published-figures");
-    const out = { line: text(el ?? {}), set: el?.getAttribute("data-set") ?? null };
-    r.unmount();
-    return out;
-  };
   // Exactly one of the three sets, as a set: any order, any case; nothing more, nothing less.
   const same = P.PUBLISHED_SETS.every((x) => publishedSetOf([...x.tickers].reverse().map((t) => t.toLowerCase())) === x);
   const near = P.PUBLISHED_SETS.flatMap((x) => [publishedSetOf(x.tickers.slice(1)), publishedSetOf([...x.tickers, "SPY"])]);
@@ -527,13 +523,11 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     presets.some(([, x]) => x === null) && presets.every(([t, x]) => (x !== null) === exact(t)),
     "figures line: a basket is a published set only with exactly its tickers, in any order or case; a preset that overlaps one is not it",
     presets.map(([t, x]) => `${t} -> ${x?.name ?? "none"}`).join(" | "));
-  // The matcher's own guards, for a caller whose tickers have not been through parseTickers (the page's always
-  // have, which trims, upper-cases and drops repeats): a symbol padded with spaces still counts, and a set with
-  // one symbol repeated is not that set.
+  // The matcher's own guards, for a caller whose tickers have not been through parseTickers: a symbol padded
+  // with spaces still counts, and a set with one symbol repeated is not that set.
   const padded = P.PUBLISHED_SETS.map((x) => publishedSetOf(x.tickers.map((t, i) => (i % 2 ? ` ${t.toLowerCase()}` : `${t} `))) === x);
   const doubled = P.PUBLISHED_SETS.map((x) => publishedSetOf([...x.tickers, x.tickers[0]]) === null);
   check([...padded, ...doubled].every(Boolean), "figures line: a padded symbol still matches its set, and a repeated one matches none", JSON.stringify({ padded, doubled }));
-  // Mid-sentence the set's name starts lower-case, and nothing else in it changes case.
   check(P.PUBLISHED_SETS.map(nameInSentence).join(" | ") === "five mega-caps | seven sector ETFs | cross-asset",
     "figures line: the set's name mid-sentence starts lower-case, its other letters as published", P.PUBLISHED_SETS.map(nameInSentence).join(" | "));
 
@@ -547,25 +541,27 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     `${terms} | ${whoseFigures()}`);
 
   // On each set: the line says the basket is that set, then quotes its three figures verbatim, in order, and how
-  // they stood; then on the mega-caps nothing more, and on the other two the clause. (A desktop: the phone folds
-  // the clause away with the sentence, section (g).)
-  const lines = P.PUBLISHED_SETS.map((x) => [x, figuresOf({ analysis: { status: "loading" }, tickers: x.tickers })]);
-  const fault = lines.filter(([x, { line, set }]) => {
+  // they stood; then on the mega-caps nothing more, and on the other two the clause.
+  const lines = P.PUBLISHED_SETS.map((x) => [x, figuresLine(publishedSetOf(x.tickers))]);
+  const fault = lines.filter(([x, line]) => {
     const three = `equal weight ${x.ew} · GMV ${x.gmv} · tangency ${x.tangency}`;
     const tail = x === mega ? `${three} (${P.MEGA_CAP_IN_SAMPLE} in-sample${terms}); ` : `${three}; `;
     const end = x === mega ? "" : ` ${whose}`;
-    return set !== x.name || line !== `This basket is the published ${nameInSentence(x)} set. Sharpe out of sample: ${tail}${standing(x)}.${end}`;
+    return line !== `This basket is the published ${nameInSentence(x)} set. Sharpe out of sample: ${tail}${standing(x)}.${end}`;
   });
   check(fault.length === 0,
     "figures line: on a published set it says the basket is that set and quotes its three out-of-sample figures as published; 1.107 with its terms beside the mega-caps, and elsewhere only in the clause naming them",
-    lines.map(([, l]) => l.line).join(" | "));
-  // On any other basket, the line it always was.
+    lines.map(([, l]) => l).join(" | "));
   const today = `${mega.name} (${mega.tickers.join(", ")}), Sharpe out of sample: equal weight ${mega.ew} · GMV ${mega.gmv} · tangency ${mega.tangency} (${P.MEGA_CAP_IN_SAMPLE} in-sample).`;
-  const ten = ["SPY", "QQQ", "IWM", "EFA", "EEM", "AGG", "TLT", "GLD", "VNQ", "DBC"];
-  const others = [figuresOf({ analysis: { status: "loading" }, tickers: ten }), figuresOf({ analysis: { status: "loading" } }),
-    figuresOf({ analysis: { status: "ready", value: { ...EX, tickers: EX.tickers.slice(0, 4) } } })];
-  check(others.every((o) => o.line === today && o.set === null), "figures line: on any other basket, or with no tickers yet, it quotes the five mega-caps as before",
-    others.map((o) => o.line).join(" | "));
+  check(figuresLine(null) === today && figuresLine(publishedSetOf(EX.tickers.slice(0, 4))) === today,
+    "figures line: on any other basket it quotes the five mega-caps by name", figuresLine(null));
+  // On the page: the line under the quote is the basket's own, marked with the set it names.
+  const r = page({ chapter: "overview" });
+  openNumbers(r.container);
+  const el = r.container.querySelector(".ov-published-figures");
+  check(text(el ?? {}) === figuresLine(publishedSetOf(EX.tickers)) && el?.getAttribute("data-set") === "Cross-asset",
+    "figures line: the page prints the example basket's own line, marked with its set", text(el ?? {}));
+  r.unmount();
 
   // The words on how the two fitted portfolios stood are read off the published strings, the minus sign included.
   const fake = (ew, gmv, tangency) => standing({ name: "x", tickers: [], ew, gmv, tangency });
@@ -584,17 +580,103 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   });
   check(said.every(([, ok]) => ok), "figures line: on each published set the words agree with its own figures", said.map(([w]) => w).join(" | "));
   const banned = /\b(best|optimal\w*|winners?|race|outperform\w*|beat\w*|won)\b/i;
-  check(![...lines.map(([, l]) => l.line), ...said.map(([w]) => w)].some((l) => banned.test(l)),
-    "figures line: no word of contest in it", lines.map(([, l]) => l.line).join(" | "));
+  check(![...lines.map(([, l]) => l), ...said.map(([w]) => w)].some((l) => banned.test(l)),
+    "figures line: no word of contest in it", lines.map(([, l]) => l).join(" | "));
+}
 
-  // The set is the basket's, through a load: loading the tickers, then their analysis, prints one line.
-  const loading = figuresOf({ analysis: { status: "loading" }, tickers: EX.tickers });
-  const ready = figuresOf({ analysis: { status: "ready", value: EX }, tickers: EX.tickers });
-  // While a new basket loads behind the figures on screen, the line stays with the figures on screen.
-  const refetch = figuresOf({ analysis: { status: "ready", value: EX }, fetching: true, tickers: P.PUBLISHED_SETS[1].tickers });
-  check(loading.set === "Cross-asset" && loading.line === ready.line && ready.line === refetch.line,
-    "figures line: the same set while the basket's prices load and once they arrive, and while another basket loads behind it",
-    `${loading.line} | ${ready.line} | ${refetch.line}`);
+// ---- (d2c) the Overview: the question, the answer, the cards, the facts, the baskets, the byline --------
+{
+  const mega = P.PUBLISHED_SETS[0];
+  const cross = P.PUBLISHED_SETS[2];
+  const usd = (x) => format(x, "usd0");
+  const ends = endsOf(EX, 10000);
+  // Each mix's end is its daily returns compounded over the window from the amount.
+  const path = (w) => portfolioReturns(EX.returns, w).reduce((c, x) => c * (1 + x), 10000);
+  const near = (x, y) => Math.abs(x - y) < 1e-6;
+  check(near(ends.ew, path(EX.ew)) && near(ends.tangency, path(EX.tangency.w)) && near(ends.gmv, path(EX.gmv.w)),
+    "overview: what $10,000 became in each mix is its daily returns compounded over the window", JSON.stringify(ends));
+  // The answer on the example (the cross-asset set): the live dollars with hindsight, then the set's two
+  // published figures and the mega-caps' for contrast, each printed exactly as published.
+  const L = lede(EX, 10000);
+  check(L.set === cross && !L.run &&
+    L.hindsight === `With hindsight, yes: the best-tradeoff mix turned $10,000 into ${usd(ends.tangency)}, against ${usd(ends.ew)} for an equal split.` &&
+    L.without === `Without hindsight, in Mason's published test, it won on this basket (Sharpe ${cross.tangency} against ${cross.ew}) but lost on five mega-caps (${mega.tangency} against ${mega.ew}), because it is fitted to the past.`,
+    "overview: on the cross-asset set the answer gives the live dollars, then the set's published figures and the mega-caps' as published", ledeText(L));
+  // On the other two sets the verbs follow the published figures, and the contrast is the other similar-assets set.
+  const onSets = P.PUBLISHED_SETS.map((x) => lede({ ...EX, tickers: [...x.tickers] }, 10000));
+  const sec = P.PUBLISHED_SETS[1];
+  check(onSets[0].without === `Without hindsight, in Mason's published test, it lost on this basket (Sharpe ${mega.tangency} against ${mega.ew}) and on seven sector ETFs (${sec.tangency} against ${sec.ew}), because it is fitted to the past.` &&
+    onSets[1].without === `Without hindsight, in Mason's published test, it lost on this basket (Sharpe ${sec.tangency} against ${sec.ew}) and on five mega-caps (${mega.tangency} against ${mega.ew}), because it is fitted to the past.`,
+    "overview: on the mega-caps and the sector ETFs the answer says it lost on both similar-assets sets", onSets.map((x) => x.without).join(" | "));
+  // On any other basket no published figure at all, and the page offers the same test on it.
+  const ten = ["SPY", "QQQ", "IWM", "EFA", "EEM", "AGG", "TLT", "GLD", "VNQ", "DBC"];
+  const O = lede({ ...EX, tickers: ten }, 10000);
+  check(O.set === null && O.run && !/\d/.test(O.without) && O.hindsight === L.hindsight,
+    "overview: on a basket that is no published set the answer quotes no published figure and offers the test on this basket", ledeText(O));
+  // The rate nothing beats, and the failed solve.
+  const high = exampleAnalysis({ rf: 0.4 });
+  const failedA = exampleAnalysis({ allowShort: true, rf: 0.4 });
+  const Lh = lede(high, 10000);
+  const Lf = lede(failedA, 10000);
+  check(Lh.hindsight.startsWith(`With hindsight, no: no mix of these beat the ${format(0.4, "pct2")} risk-free rate`) &&
+    Lf.hindsight.startsWith("The best-tradeoff mix could not be solved for this basket") && / the best-tradeoff mix (won|lost|tied) on this basket/.test(Lf.without),
+    "overview: with no mix above the rate the answer says no, and with a failed solve it names the mix it could not solve", `${Lh.hindsight} | ${Lf.hindsight} | ${Lf.without}`);
+  const words = (s) => s.split(/\s+/).filter(Boolean).length;
+  const all = [L, ...onSets, O, Lh, Lf].map(ledeText);
+  check(all.every((s) => words(s) <= 70), "overview: the answer is at most 70 words on every basket and branch", all.map(words).join(" "));
+
+  // The hindsight card's bars: the live figures with hindsight, the published strings without.
+  const H = hindsight(EX);
+  const bars = H.groups.flatMap((g) => g.bars);
+  const ewS = snapshotPlates(EX)[0].value;
+  const gmvS = snapshotPlates(EX)[2].value;
+  check(H.title === "Hindsight flatters the optimizer" && H.groups.map((g) => g.label).join() === "Best-tradeoff mix,Equal split,Lowest-risk mix" &&
+    bars.filter((b) => !b.hindsight).map((b) => b.text).join() === [cross.tangency, cross.ew, cross.gmv].join() &&
+    bars.filter((b) => b.hindsight).map((b) => b.value).join() === [EX.tangency.sharpe, ewS, gmvS].join(),
+    "overview: on a published set each mix's bar with hindsight is the live Sharpe, and without it the set's published figure", JSON.stringify(H.groups));
+  const Ho = hindsight({ ...EX, tickers: ten });
+  check(Ho.set === null && Ho.groups[0].bars.every((b) => b.hindsight) && Ho.groups[1].label === `${mega.name}, published` &&
+    Ho.groups[1].bars.map((b) => b.text).join() === [P.MEGA_CAP_IN_SAMPLE, mega.tangency, mega.ew].join() && Ho.sub.includes("this basket has not been published"),
+    "overview: on any other basket its own bars are all with hindsight, and the mega-caps follow under their own name as the reference", JSON.stringify(Ho.groups));
+  // The three facts: the first live, the other two published.
+  const F = whyFacts(EX);
+  const top = EX.tangency.w.indexOf(Math.max(...EX.tangency.w));
+  check(F.length === 3 && F[0].big === `${format(EX.tangency.w[top], "pct1")} ${EX.tickers[top]}` && F[1].big === "3.8% to 44.8%" && F[2].big === "6 one-year tests" &&
+    whyFacts(failedA).length === 2,
+    "overview: the three facts are the live mix's largest holding, the published Apple range and the published holds; no live fact without a mix", JSON.stringify(F));
+
+  // On the page: one h1, the question; the answer under it; the three baskets; the byline.
+  const s = stand({ chapter: "overview" });
+  const r = render(h(Harness, { wb: s.wb, tabs: STAND_TABS }));
+  const main = r.container.querySelector("main");
+  const h1s = [...r.container.querySelectorAll("h1")];
+  check(h1s.length === 1 && text(h1s[0]) === QUESTION && readLede(main) === ledeText(lede(EX, s.wb.settings.amount)),
+    "overview page: the question is the page's one h1, and the answer under it reads as the model writes it",
+    `${h1s.map(text).join(" | ")} / ${readLede(main)}`);
+  check(main.querySelectorAll(".ov-lede .term").length === 2 && !!main.querySelector("#overview-wealth") && !!main.querySelector("#overview-hindsight"),
+    "overview page: the answer marks its two glossary terms, and the two cards follow it");
+  const tries = [...main.querySelectorAll(".ov-try-button")];
+  check(tries.map(text).join() === P.PUBLISHED_SETS.map((x) => x.name).join() && tries.filter((b) => b.getAttribute("aria-pressed") === "true").map(text).join() === "Cross-asset",
+    "overview page: the three published baskets to try, the one on screen pressed", tries.map((b) => `${text(b)}:${b.getAttribute("aria-pressed")}`).join(" "));
+  if (tries[0]) click(tries[0]);
+  check(JSON.stringify(s.calls.settings.at(-1)) === JSON.stringify({ tickers: [...mega.tickers] }), "overview page: a basket's button loads its tickers", JSON.stringify(s.calls.settings.at(-1)));
+  const built = main.querySelector(".ov-built");
+  check(text(built?.querySelector("span") ?? {}) === `Built by ${A.AUTHOR} · ${A.CREDENTIAL}` &&
+    [...(built?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href")).join() === [A.SOURCE_URL, P.PUBLISHED_URL, "?guide"].join(),
+    "overview page: the byline in the resume's words, then the source, the method note and the guide", text(built ?? {}));
+  r.unmount();
+  // On another basket "Run the same test on this basket" opens Does it hold up? on Your basket.
+  const so = stand({ chapter: "overview", analysis: { status: "ready", value: { ...EX, tickers: ten } } });
+  const ro = render(h(Harness, { wb: so.wb, tabs: STAND_TABS }));
+  const run = ro.container.querySelector(".ov-run");
+  if (run) click(run);
+  check(!!run && so.calls.chapter.at(-1) === "holdup" && so.calls.view.at(-1) === "basket",
+    "overview page: on another basket, the run button opens Does it hold up? on Your basket", `${so.calls.chapter.at(-1)} ${so.calls.view.at(-1)}`);
+  ro.unmount();
+  // A published set's answer offers no run button: it is that set's own test, already quoted.
+  const pr = page({ chapter: "overview" });
+  check(!pr.container.querySelector(".ov-run"), "overview page: on a published set there is no run button");
+  pr.unmount();
 }
 
 // ---- (d2b) the walk-forward tab: its two segments, and the two ways in that open the published one ------
@@ -606,7 +688,12 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const panel = () => r.container.querySelector("[role=tabpanel]");
   const segment = () => panel()?.querySelector("[data-segment]")?.getAttribute("data-segment") ?? null;
   const segRow = () => panel()?.querySelector('[role=tablist][aria-label="Walk-forward"]');
-  const source = () => r.container.querySelector(".band-published-source");
+  // The control sits in the Overview hindsight card's numbers: back on the Overview, the fold opened.
+  const source = () => {
+    if (!r.container.querySelector("#overview-hindsight")) click(byLabel(row, CHAPTER_LABELS.overview));
+    openNumbers(r.container);
+    return r.container.querySelector(".ov-published-source");
+  };
   // Where a switch lands the reader. jsdom lays nothing out, so scrolling is read off the call: the elements
   // scrollIntoView was called on, since the last reset, and where the focus is.
   const landed = [];
@@ -618,16 +705,14 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const landedOn = (seg) => landed.length === 1 && landed[0].classList.contains("wf") && document.activeElement?.id === `walkforward-tab-${seg}`;
   const where = () => `${landed.map((e) => e.className).join(",") || "no scroll"}; focus on ${document.activeElement?.id || document.activeElement?.tagName}`;
 
-  // The strip's source line: the words that were already on it open the tab on the published test, and the
-  // line reads exactly as before, so it is no wider and no taller. Its one link is still the method note.
-  const bare = render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
-  const before = text(bare.container.querySelector(".band-published-source") ?? {});
-  bare.unmount();
+  // The quote's source line: its first words open Does it hold up? on the published test, and its one link is
+  // still the method note.
   const open = source()?.querySelector("button.text-button");
   const links = [...(source()?.querySelectorAll("a") ?? [])];
-  check(!!open && text(open) === "Walk-forward test" && text(source()) === before && before.startsWith("Walk-forward test, published ") &&
-    source().children.length === 2 && links.length === 1 && links[0].getAttribute("href") === P.PUBLISHED_URL,
-    "walk-forward: the strip's source line turns its own first words into the control, reads as before, and keeps its one link", `${text(source() ?? {})} / ${before}`);
+  check(!!open && text(open) === "Walk-forward test" && text(source()).startsWith("Walk-forward test, published ") &&
+    open.getAttribute("title") === OPEN_PUBLISHED_TITLE && links.length === 1 && links[0].getAttribute("href") === P.PUBLISHED_URL,
+    "walk-forward: the quote's source line turns its first words into the control, and keeps its one link", text(source() ?? {}));
+  landed.length = 0;
 
   click(byLabel(row, CHAPTER_LABELS.holdup));
   check(segment() === "basket" && text(segRow()?.querySelector("[aria-selected=true]") ?? {}) === "Your basket",
@@ -639,11 +724,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   click(byLabel(row, CHAPTER_LABELS.performance));
   click(byLabel(row, CHAPTER_LABELS.holdup));
   check(segment() === "basket", "walk-forward: leaving its chapter and coming back by its pill opens Your basket again", `${segment()}`);
-  click(byLabel(row, CHAPTER_LABELS.performance));
-  click(source().querySelector("button.text-button"));
+  click(byLabel(row, CHAPTER_LABELS.overview));
+  const ctl = source().querySelector("button.text-button");
+  landed.length = 0;
+  click(ctl);
   check(segment() === "published" && row.querySelector("[aria-selected=true]")?.id === "chapter-tab-holdup",
-    "walk-forward: the strip's control switches to the tab on As published, without a reload", `${segment()}`);
-  check(landedOn("published"), "walk-forward: the strip's control lands the reader on the tab: scrolled into view, the As published segment focused", where());
+    "walk-forward: the hindsight card's control switches to the tab on As published, without a reload", `${segment()}`);
+  check(landedOn("published"), "walk-forward: the hindsight card's control lands the reader on the tab: scrolled into view, the As published segment focused", where());
   landed.length = 0;
   click(byLabel(row, CHAPTER_LABELS.performance));
   click(byLabel(row, CHAPTER_LABELS.holdup));
@@ -659,7 +746,7 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     "walk-forward: the Optimization tab's in-sample note switches to the tab on As published", `${segment()}`);
   check(landedOn("published"), "walk-forward: the in-sample note lands the reader on the tab: scrolled into view, the As published segment focused", where());
   check(!!note && !!open && !!note.getAttribute("title") && note.getAttribute("title") === open.getAttribute("title"),
-    "walk-forward: the in-sample note's control says where it goes, as the strip's does", note?.getAttribute("title") ?? "(no title)");
+    "walk-forward: the in-sample note's control says where it goes, as the hindsight card's does", note?.getAttribute("title") ?? "(no title)");
   r.unmount();
 
   // "Rerun this set on fresh prices": the set's tickers on the published run's own terms, held to the test's
@@ -675,9 +762,10 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     JSON.stringify(asked.map(([, x]) => x)));
 
   // On the page: a set's button hands those settings to the rail, then shows Your basket and lands the reader on it.
-  const s = stand();
+  const s = stand({ chapter: "overview" });
   const rr = render(h(Harness, { wb: s.wb, tabs: TABS }));
-  click(rr.container.querySelector(".band-published-source button.text-button"));
+  openNumbers(rr.container);
+  click(rr.container.querySelector(".ov-published-source button.text-button"));
   landed.length = 0;
   const buttons = [...rr.container.querySelectorAll(".wfp-rerun-button")];
   const last = buttons.at(-1);
@@ -694,41 +782,40 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   else delete proto.scrollIntoView;
 }
 
-// ---- (d3) plain words: no "best" or "optimal" as a label in the band, masthead or footer ----------
+// ---- (d3) plain words: no "best" or "optimal" as a label on the Overview, masthead, footer or what-if ----
+// "Best-tradeoff" is one name, the plain name of the tangency portfolio, and never "best" on its own.
 {
-  const bad = /\b(best|optimal)\b/i;
-  // The band's three sentences: a tangency, a tangency that does not beat the rate, a failed solve.
+  const bad = /\b(best|optimal)\b(?!-tradeoff)/i;
+  // The finding's three sentences: a tangency, a tangency that does not beat the rate, a failed solve.
   const noBeat = exampleAnalysis({ rf: 0.4 });
   const failed = exampleAnalysis({ allowShort: true, rf: 0.4 });
-  const said = [EX, noBeat, failed].map((a) => finding(a));
+  const said = [EX, noBeat, failed].flatMap((a) => [finding(a), ledeText(lede(a, 10000)), hindsight(a).title, hindsight(a).sub, ...whyFacts(a).map((f) => f.text)]);
   check(EX.tangency?.beatsRf === true && noBeat.tangency?.beatsRf === false && failed.tangency === null,
-    "plain words: the three analyses reach the band's three sentences", `${EX.tangency?.beatsRf} ${noBeat.tangency?.beatsRf} ${failed.tangency}`);
+    "plain words: the three analyses reach the three branches", `${EX.tangency?.beatsRf} ${noBeat.tangency?.beatsRf} ${failed.tangency}`);
   const labels = [EX, noBeat, failed].flatMap((a) => snapshotPlates(a).map((p) => p.label));
-  // Rendered text of the band, masthead and footer, the tooltips' own text included (the app's words that
-  // called the mix best are replaced, ledger:plain-tip-words), and every accessible name on them.
+  // Rendered text of the Overview (both folds open), the what-if panel (open), the masthead and the footer,
+  // the tooltips' own text included (ledger:plain-tip-words), and every accessible name on them.
   const names = [];
-  // The band is read with its what-if fold open, so the panel's own words are read too.
-  const bandShown = render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
-  const bandFold = await openWhatIf(bandShown.container);
-  check(!!bandFold?.open && bandShown.container.querySelectorAll("section.whatif").length === 1,
-    "plain words: the band is read with its what-if panel open in it", bandFold ? bandFold.outerHTML.slice(0, 160) : "no fold");
-  const shown = [
-    bandShown,
-    render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false })),
-    render(h(Footer)),
-  ].map((r) => {
+  const ov = render(h(Overview, { analysis: EX, amount: 10000, level: "plain", setTickers() {} }));
+  openNumbers(ov.container);
+  ov.container.querySelectorAll('.card-fold-button[aria-expanded="false"]').forEach((b) => click(b));
+  const wf = render(h(WhatIfFold, { a: EX }));
+  const fold = await openWhatIf(wf.container);
+  check(!!fold?.open && wf.container.querySelectorAll("section.whatif").length === 1,
+    "plain words: the what-if is read with its panel open", fold ? fold.outerHTML.slice(0, 160) : "no fold");
+  const shown = [ov, wf, render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false })), render(h(Footer))].map((r) => {
     r.container.querySelectorAll("[aria-label]").forEach((e) => names.push(e.getAttribute("aria-label")));
     const t = text(r.container);
     r.unmount();
     return t;
   });
   const hits = [...said, ...labels, ...shown].filter((x) => bad.test(x)).map((x) => x.match(bad)[0] + ": " + x.slice(0, 80));
-  check(hits.length === 0, "plain words: no \"best\" or \"optimal\" in a band sentence, a plate label, the masthead or the footer", hits.join(" | "));
-  const loose = /\b(best|optimal)|optimally/i;
+  check(hits.length === 0, "plain words: no \"best\" or \"optimal\" in an Overview sentence, a plate label, the what-if, the masthead or the footer", hits.join(" | "));
+  const loose = /\b(best|optimal)(?!-tradeoff)|optimally/i;
   const named = names.filter((x) => loose.test(x));
   const tipped = shown.filter((x) => /optimally/i.test(x));
   check(names.some((x) => /^About /.test(x)) && named.length === 0 && tipped.length === 0,
-    "ledger:plain-tip-words the band's tips and accessible names call nothing best or optimal", [...named, ...tipped.map((x) => x.slice(0, 80))].join(" | "));
+    "ledger:plain-tip-words the Overview's tips and accessible names call nothing best or optimal", [...named, ...tipped.map((x) => x.slice(0, 80))].join(" | "));
 }
 
 // ---- (d4) the tangency Sharpe plate carries one standard error, the engine's -----------------------
@@ -738,16 +825,19 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const tan = plates.findIndex((p) => p.tip === "best_sharpe");
   check(Number.isFinite(se) && tan === 1 && plates[tan].label === "Tangency Sharpe (in-sample)" && plates[tan].se === se &&
     plates.every((p, i) => i === tan || p.se === undefined),
-    "band: the tangency Sharpe plate's standard error is sharpeSE on the tangency portfolio's daily returns, and no other plate has one", `${plates[tan]?.se} ${se}`);
-  const r = render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
-  const shown = r.container.querySelectorAll(".band-plates .plate")[tan];
+    "numbers: the tangency Sharpe plate's standard error is sharpeSE on the tangency portfolio's daily returns, and no other plate has one", `${plates[tan]?.se} ${se}`);
+  const r = render(h(Overview, { analysis: EX, amount: 10000, level: "plain", setTickers() {} }));
+  openNumbers(r.container);
+  const shown = r.container.querySelectorAll(".ov-plates .plate")[tan];
   check(!!shown && text(shown.querySelector(".plate-se") ?? {}) === `± ${format(se, "num3")} SE` &&
-    text(shown.querySelector(".plate-value") ?? {}) === format(EX.tangency.sharpe, "num3") && r.container.querySelectorAll(".band-plates .plate-se").length === 1,
-    "band: the plate prints the figure alone and plus or minus one standard error beside it", shown ? shown.innerHTML.slice(0, 200) : "no plate");
+    text(shown.querySelector(".plate-value") ?? {}) === format(EX.tangency.sharpe, "num3") && r.container.querySelectorAll(".ov-plates .plate-se").length === 1,
+    "numbers: the plate prints the figure alone and plus or minus one standard error beside it", shown ? shown.innerHTML.slice(0, 200) : "no plate");
   r.unmount();
   const failed = exampleAnalysis({ allowShort: true, rf: 0.4 });
-  const rf = render(h(Band, { analysis: { status: "ready", value: failed }, level: "plain", fetching: false, failure: null }));
-  check(snapshotPlates(failed)[tan].se === null && !rf.container.querySelector(".plate-se"), "band: no tangency, no standard error beside the dash");
+  const rf = render(h(Overview, { analysis: failed, amount: 10000, level: "plain", setTickers() {} }));
+  openNumbers(rf.container);
+  check(snapshotPlates(failed)[tan].se === null && rf.container.querySelectorAll(".ov-plates .plate").length === 4 && !rf.container.querySelector(".plate-se"),
+    "numbers: no tangency, no standard error beside the dash");
   rf.unmount();
 }
 
@@ -769,13 +859,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const plates = snapshotPlates(a);
   const tan = plates.filter((p) => /^Tangency/.test(p.label));
   check(tan.length === 1 && tan[0].value === null, "ledger:failed-tangency: the port's Tangency plate holds no figure");
-  const r = page({ analysis: { status: "ready", value: a } });
-  const band = text(r.container.querySelector("main"));
-  check(/optimisation failed/.test(band) && band.includes(DASH), "ledger:failed-tangency: the port's band says the optimisation failed", band);
-  const cards = [...r.container.querySelectorAll(".band-plates .plate")].map((p) => [text(p.querySelector(".plate-label") ?? {}), text(p)]);
+  const r = page({ analysis: { status: "ready", value: a }, chapter: "overview" });
+  const shownFailed = text(openNumbers(r.container) ?? {});
+  check(/optimisation failed/.test(shownFailed) && shownFailed.includes(DASH), "ledger:failed-tangency: the port's numbers say the optimisation failed", shownFailed);
+  const cards = [...r.container.querySelectorAll(".ov-plates .plate")].map((p) => [text(p.querySelector(".plate-label") ?? {}), text(p)]);
   const tanCard = cards.find(([l]) => /^Tangency/i.test(l));
   const withEw = cards.filter(([, t]) => t.includes(format(ew.sharpe, "num3"))).map(([l]) => l);
-  const sentence = text(r.container.querySelector(".band-finding") ?? {});
+  const sentence = text(r.container.querySelector(".ov-finding") ?? {});
   check(!!tanCard && tanCard[1].includes(DASH) && !tanCard[1].includes(format(ew.sharpe, "num3")) && withEw.length === 1 && /^Equal-Weight Sharpe/i.test(withEw[0]) &&
     sentence.includes(`equal weight returned ${format(ew.mu, "pct2")} a year`),
     "ledger:failed-tangency: the port shows no equal-weight stand-in: equal weight's figures appear only under its own name", JSON.stringify([cards, sentence]));
@@ -984,69 +1074,45 @@ function bar(over = {}) {
   check(!!sheet && !!sheet.querySelector('[aria-label="Explanation level"]') && !!sheet.querySelector('[name="tickers"]'), "phone: the chip opens a sheet holding every setting");
   key(document.body, "Escape");
   check(!document.querySelector("[role=dialog]"), "phone: Escape closes the sheet");
-  // The published strip: the sentence folds away, the figures and the one link do not.
-  const pStrip = r.container.querySelector(".band-published");
-  const fold = pStrip?.querySelector("details.band-published-more");
-  const pFigures = pStrip?.querySelector(".band-published-figures");
-  const pLink = pStrip?.querySelector("a");
-  check(!!fold && !fold.open && text(fold.querySelector("summary")) === "The published sentence" &&
-    text(fold.querySelector("blockquote") ?? {}) === P.CARD_SENTENCE && !!pFigures && !fold.contains(pFigures) && !!pLink && !fold.contains(pLink),
-    "phone: the published sentence folds behind a closed disclosure; the figures and the link stay on the first screen",
-    pStrip ? pStrip.innerHTML.slice(0, 200) : "no strip");
-  // The example is the cross-asset set: the clause saying whose the sentence's figures are sits in the fold, after
-  // the sentence, and not in the figures line, so the strip at rest is as tall as it was.
-  const pWhose = fold?.querySelectorAll(".band-published-whose") ?? [];
-  const pQuote = fold?.querySelector("blockquote");
-  check(pFigures?.getAttribute("data-set") === "Cross-asset" && pWhose.length === 1 && text(pWhose[0]) === whoseFigures() && !!pQuote &&
-    !!(pQuote.compareDocumentPosition(pWhose[0]) & window.Node.DOCUMENT_POSITION_FOLLOWING) && !text(pFigures).includes(whoseFigures()) &&
-    r.container.querySelectorAll(".band-published-whose").length === 1,
-    "phone: on the cross-asset example the clause naming the mega-caps sits in the fold after the sentence, not in the figures line",
-    fold ? fold.innerHTML.slice(-220) : "no fold");
-  // On the mega-caps, or a basket that is no published set, there is nothing to say: the line names the mega-caps.
-  const phoneOn = (tickers) => {
-    const b = render(h(Band, { analysis: { status: "loading" }, fetching: false, failure: null, level: "plain", tickers }));
-    const out = { fold: !!b.container.querySelector("details.band-published-more"), whose: b.container.querySelectorAll(".band-published-whose").length,
-      line: text(b.container.querySelector(".band-published-figures") ?? {}) };
-    b.unmount();
-    return out;
-  };
-  const pOthers = [phoneOn(P.PUBLISHED_SETS[0].tickers), phoneOn(["SPY", "QQQ", "IWM"]), phoneOn(P.PUBLISHED_SETS[1].tickers)];
-  check(pOthers.every((o) => o.fold) && pOthers[0].whose === 0 && pOthers[1].whose === 0 && pOthers[2].whose === 1 &&
-    pOthers.every((o) => !o.line.includes(whoseFigures())) && pOthers[0].line.includes(`(${P.MEGA_CAP_IN_SAMPLE} in-sample, to Sep 2026 at 2.0%)`),
-    "phone: no clause on the mega-caps or on another basket, the clause folded on the sector set too, and 1.107's terms on the mega-caps",
-    pOthers.map((o) => `${o.whose} ${o.line}`).join(" | "));
-  // The what-if panel: below the plates and folded shut, so the first row of plates stays on the first screen,
-  // and not fetched until the reader reaches for it (section (g2)). Opened by its line, it holds the one panel.
-  const wPlates = r.container.querySelector(".band-plates");
-  const wFold = r.container.querySelector(".band details.band-whatif-fold");
-  check(!!wPlates && !!wFold && !wFold.open && !wFold.querySelector("section.whatif") && !wFold.contains(wPlates) &&
-    !!(wPlates.compareDocumentPosition(wFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
-    text(wFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
-    "phone: the what-if panel folds behind a closed disclosure below the plates", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
-  await openWhatIf(r.container);
-  check(!!wFold?.open && !!wFold.querySelector("section.whatif input[type=range]") && r.container.querySelectorAll("section.whatif").length === 1,
-    "phone: opened by its line, the fold holds the what-if panel, once", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
   r.unmount();
+  // The Overview on a phone: the question and the answer, the hindsight card's numbers shut at rest.
+  const po = page({ chapter: "overview" });
+  check(text(po.container.querySelector("main h1") ?? {}) === QUESTION && !!po.container.querySelector(".ov-lede") &&
+    po.container.querySelector("#overview-hindsight .card-fold-button")?.getAttribute("aria-expanded") === "false",
+    "phone: the Overview leads with the question and the answer, the numbers folded shut");
+  po.unmount();
+  // The what-if panel: it closes Build a portfolio, folded shut, below the chapter's tabs, and is not fetched
+  // until the reader reaches for it (section (g2)). Opened by its line, it holds the one panel.
+  const pb = page({ chapter: "build" });
+  const wFold = pb.container.querySelector("[role=tabpanel] details.whatif-fold");
+  const lastTab = [...pb.container.querySelectorAll("[role=tabpanel] [data-section]")].at(-1);
+  check(!!wFold && !wFold.open && !wFold.querySelector("section.whatif") && !!lastTab && !!(lastTab.compareDocumentPosition(wFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
+    text(wFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
+    "phone: the what-if panel folds behind a closed disclosure at the end of Build a portfolio", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
+  await openWhatIf(pb.container);
+  check(!!wFold?.open && !!wFold.querySelector("section.whatif input[type=range]") && pb.container.querySelectorAll("section.whatif").length === 1,
+    "phone: opened by its line, the fold holds the what-if panel, once", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
+  const elsewhere = ["overview", "performance", "diversification", "holdup"].filter((c) => {
+    const x = page({ chapter: c });
+    const has = !!x.container.querySelector("details.whatif-fold");
+    x.unmount();
+    return has;
+  });
+  check(elsewhere.length === 0, "the what-if fold is in Build a portfolio only", elsewhere.join(" "));
+  pb.unmount();
   setMedia(() => false);
   const desk = page({});
   check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector(".bar [name=tickers]") && !desk.container.querySelector("aside"),
     "desktop: the basket bar holds the settings, no chip and no side column");
-  check(!desk.container.querySelector(".band-published details") && text(desk.container.querySelector(".band-published blockquote") ?? {}) === P.CARD_SENTENCE,
-    "desktop: the published sentence is printed open");
-  check(!desk.container.querySelector(".band-published-whose") && text(desk.container.querySelector(".band-published-figures") ?? {}).endsWith(` ${whoseFigures()}`),
-    "desktop: on the cross-asset example the clause naming the mega-caps ends the figures line, and is nowhere else",
-    text(desk.container.querySelector(".band-published-figures") ?? {}));
-  // Folded on a desktop too: printed open it pushed the tab bar below a 900 px first screen.
-  const dPlates = desk.container.querySelector(".band-plates");
-  const dFold = desk.container.querySelector(".band details.band-whatif-fold");
-  check(!!dPlates && !!dFold && !dFold.open && !dFold.querySelector("section.whatif") && !dFold.contains(dPlates) &&
-    !!(dPlates.compareDocumentPosition(dFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
-    text(dFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
-    "desktop: the what-if panel folds behind the same closed disclosure below the plates", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
-  await openWhatIf(desk.container);
-  check(!!dFold?.open && !!dFold.querySelector("section.whatif input[type=range]") && desk.container.querySelectorAll("section.whatif").length === 1,
-    "desktop: opened by its line, the fold holds the what-if panel, once", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
   desk.unmount();
+  const db = page({ chapter: "build" });
+  const dFold = db.container.querySelector("[role=tabpanel] details.whatif-fold");
+  check(!!dFold && !dFold.open && !dFold.querySelector("section.whatif") && text(dFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
+    "desktop: the what-if panel folds behind the same closed disclosure in Build a portfolio", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
+  await openWhatIf(db.container);
+  check(!!dFold?.open && !!dFold.querySelector("section.whatif input[type=range]") && db.container.querySelectorAll("section.whatif").length === 1,
+    "desktop: opened by its line, the fold holds the what-if panel, once", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
+  db.unmount();
 }
 
 // ---- (g2) the what-if fold fetches its panel when the reader reaches for it ------------------------
@@ -1056,24 +1122,24 @@ function bar(over = {}) {
 // opens on the finished panel in one commit, never open on an empty box; pressing the line fetches ahead
 // of the click, which then opens the fold at once; a chunk that never arrives says so inside the fold.
 {
-  const real = bandSeams.whatIf;
+  const real = whatIfSeams.whatIf;
   const wait = () => act(() => new Promise((res) => setTimeout(res, 5)));
   const until = async (cond, tries = 400) => {
     for (let i = 0; i < tries && !cond(); i++) await wait();
     return cond();
   };
-  const band = () => render(h(Band, { analysis: { status: "ready", value: EX }, level: "plain", fetching: false, failure: null }));
-  const foldOf = (r) => r.container.querySelector("details.band-whatif-fold");
+  const panel = () => render(h(WhatIfFold, { a: EX }));
+  const foldOf = (r) => r.container.querySelector("details.whatif-fold");
   let asked = 0;
   try {
     // Held in flight. Every state the fold is seen in, after each change to it, is kept.
     let release;
     const gate = new Promise((res) => (release = res));
-    bandSeams.whatIf = () => {
+    whatIfSeams.whatIf = () => {
       asked++;
       return gate.then(real);
     };
-    const r = band();
+    const r = panel();
     const fold = foldOf(r);
     const seen = [];
     const watch = new window.MutationObserver(() => seen.push({ open: fold.open, panel: !!fold.querySelector("section.whatif") }));
@@ -1100,11 +1166,11 @@ function bar(over = {}) {
 
     // Pressed: the code is asked for on the press, ahead of the click, which then opens the fold at once.
     asked = 0;
-    bandSeams.whatIf = () => {
+    whatIfSeams.whatIf = () => {
       asked++;
       return real();
     };
-    const p = band();
+    const p = panel();
     const pf = foldOf(p);
     act(() => pf.querySelector("summary").dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })));
     await until(() => !!pf.querySelector("section.whatif"));
@@ -1116,8 +1182,8 @@ function bar(over = {}) {
     p.unmount();
 
     // A chunk that never arrives (a deploy that no longer serves it, a dropped connection).
-    bandSeams.whatIf = () => Promise.reject(new Error("chunk 404"));
-    const f = band();
+    whatIfSeams.whatIf = () => Promise.reject(new Error("chunk 404"));
+    const f = panel();
     const ff = foldOf(f);
     click(ff.querySelector("summary"));
     await until(() => ff.open);
@@ -1126,7 +1192,7 @@ function bar(over = {}) {
       "what-if fold: a chunk that never arrives says so inside the fold, never an empty box", ff.outerHTML.slice(0, 200));
     f.unmount();
   } finally {
-    bandSeams.whatIf = real;
+    whatIfSeams.whatIf = real;
   }
 }
 
@@ -1189,7 +1255,7 @@ function bar(over = {}) {
 // chunk is in flight, each checked with a chunk this suite holds open: the first chapter shows a named
 // loading line in its place, never a blank panel or a thrown page; a switch keeps the chapter on screen,
 // marked busy, until the next one's code is in; a chunk that never arrives names its tab and leaves
-// the chapter's other tab, the band and the chapter row standing.
+// the chapter's other tab, the masthead and the chapter row standing.
 {
   const wait = () => act(() => new Promise((res) => setTimeout(res, 5)));
   const until = async (cond, tries = 400) => {
@@ -1216,8 +1282,8 @@ function bar(over = {}) {
   const r = quietly(() => render(h(Harness, { wb: stand().wb, tabs: lazies })));
   check(text(fallback(r) ?? {}) === `Loading ${CHAPTER_LABELS.performance}` && !panel(r)?.querySelector("[data-tab]"),
     "lazy: while a chapter's chunks load, its place holds one line naming it", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
-  check(!!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector(".band, [class*=band]"),
-    "lazy: the band and the chapter row are up before any tab's chunk");
+  check(!!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector(".masthead"),
+    "lazy: the masthead and the chapter row are up before any tab's chunk");
   await act(async () => {
     first.res({ default: STAND_TABS.returns });
     await first.p;

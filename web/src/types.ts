@@ -424,18 +424,6 @@ export interface SummaryChipProps {
   fetching?: boolean;
 }
 
-/** The front-page band: one sentence stating the finding and four stat plates (1192-1208). */
-export interface BandProps {
-  /** The analysis on screen. */
-  analysis: LoadState<Analysis>;
-  /** The explanation level for the plates' tooltips. */
-  level: Level;
-  /** A fetch is in flight. */
-  fetching: boolean;
-  /** The last failed attempt, if any. */
-  failure: AnalysisError | null;
-}
-
 // ---- shared components -------------------------------------------------------------------------------
 
 /** An error boundary around one card: fails closed, naming the card. */

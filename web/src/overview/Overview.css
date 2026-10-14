@@ -1,0 +1,236 @@
+/* The Overview: the question, the answer, two cards side by side (stacked on a phone), three facts, the
+   baskets to try, and the byline. The serif is the question's alone. */
+.ov {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.ov--settling .ov-lede,
+.ov--settling .ov-grid,
+.ov--settling .ov-why {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
+.ov-eyebrow {
+  margin: 0;
+  color: var(--color-teal);
+  font-size: var(--type-1);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ov-question {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: var(--type-6);
+  line-height: 1.05;
+  color: var(--color-ink);
+}
+
+.ov-lede {
+  margin: var(--space-3) 0 0;
+  max-width: min(46em, var(--prose-measure, 100%));
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+
+.ov-nowrap {
+  white-space: nowrap;
+}
+
+.ov-run {
+  font-weight: 500;
+}
+
+.ov-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+/* The hindsight bars: labels in each mix's colour, values in mono. */
+.ov-bars {
+  display: block;
+  max-width: 480px;
+  height: auto;
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.ov-bars-group {
+  fill: var(--color-ink);
+  font-weight: 600;
+}
+
+.ov-bars-value {
+  fill: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.ov-bars-zero {
+  stroke: var(--color-ink2);
+  stroke-width: 1;
+}
+
+.ov-numbers {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ov-finding {
+  margin: 0;
+  color: var(--color-ink);
+}
+
+.ov-plates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.ov-published {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: var(--line-bar) solid var(--color-teal);
+}
+
+.ov-published-quote {
+  margin: 0;
+}
+
+.ov-published-quote p {
+  margin: 0;
+  color: var(--color-ink);
+}
+
+.ov-published-figures,
+.ov-published-source {
+  margin: var(--space-1) 0 0;
+  font-size: var(--type-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-published-source a,
+.ov-published-source .ov-open-published {
+  color: var(--color-ink);
+}
+
+/* Three facts: the figure in mono, a line under it. */
+.ov-why {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov-why li {
+  padding-top: var(--space-2);
+  border-top: var(--line-bar) solid var(--color-hairline);
+}
+
+.ov-why b {
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--type-4);
+  color: var(--color-ink);
+}
+
+.ov-why span {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-ink2);
+  font-size: var(--type-2);
+}
+
+.ov-try {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-2);
+}
+
+.ov-try-label {
+  font-weight: 600;
+}
+
+.ov-try-button {
+  appearance: none;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: var(--line-hair) solid var(--color-cardline);
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ov-try-button[aria-pressed="true"] {
+  border-color: var(--color-teal);
+  color: var(--color-teal);
+  font-weight: 600;
+}
+
+.ov-try-or {
+  color: var(--color-ink2);
+}
+
+.ov-built {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding-top: var(--space-4);
+  border-top: var(--line-hair) solid var(--color-hairline);
+  color: var(--color-ink2);
+  font-size: var(--type-2);
+}
+
+.ov-built a {
+  color: var(--color-teal);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone. */
+@media (max-width: 760px) {
+  .ov {
+    gap: var(--space-5);
+  }
+
+  /* The eyebrow gives way on a phone, so the question starts within the first 250 px. */
+  .ov-eyebrow {
+    display: none;
+  }
+
+  .ov-question {
+    margin-top: 0;
+    font-size: var(--type-5);
+  }
+
+  .ov-lede {
+    font-size: var(--type-3);
+    line-height: 1.42;
+  }
+
+  .ov-grid,
+  .ov-why {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ov-why {
+    gap: var(--space-4);
+  }
+
+  .ov-try-button {
+    min-height: 44px;
+  }
+}
