@@ -11,7 +11,7 @@
 .chart-title {
   max-width: var(--prose-measure, 100%);
   font-family: var(--font-serif);
-  font-size: 22px;
+  font-size: var(--type-4);
   line-height: 1.2;
 }
 
@@ -59,17 +59,34 @@
   text-align: center;
 }
 
+/* Loading holds the chart's footprint as a pale band, so nothing below it jumps when the chart arrives. */
+.chart-note--loading {
+  background: color-mix(in srgb, var(--color-hairline2) 45%, var(--color-card));
+  color: color-mix(in srgb, var(--color-ink2) 80%, var(--color-card));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chart-note--loading {
+    animation: chart-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes chart-pulse {
+    50% {
+      background-color: color-mix(in srgb, var(--color-hairline2) 20%, var(--color-card));
+    }
+  }
+}
+
+.chart-note--empty {
+  color: color-mix(in srgb, var(--color-ink2) 85%, var(--color-card));
+}
+
 .chart-note--error {
   color: var(--color-claret);
+  border-color: color-mix(in srgb, var(--color-claret) 35%, var(--color-hairline2));
+  background: color-mix(in srgb, var(--color-claret) 4%, var(--color-card));
 }
 
 .chart-note-name {
   font-family: var(--font-mono);
-}
-
-/* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
-@media (max-width: 760px) {
-  .chart-title {
-    font-size: 19px;
-  }
 }

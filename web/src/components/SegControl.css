@@ -35,7 +35,12 @@
   font-weight: 400;
   line-height: 1.2;
   color: color-mix(in srgb, var(--color-ink2) 72%, var(--color-paper));
-  transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .seg-pill {
+    transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
+  }
 }
 
 .seg-pill:hover {

@@ -1,14 +1,14 @@
 /* The footing: small print under a hairline. */
 .footer {
   margin-top: var(--space-7);
-  padding-top: var(--space-3);
+  padding-top: var(--space-5);
   border-top: var(--line-hair) solid var(--color-hairline);
 }
 
 .footer p {
   margin: var(--space-2) 0 0;
   max-width: min(60em, var(--prose-measure, 100%));
-  font-size: 0.78rem;
+  font-size: var(--type-1);
   line-height: 1.5;
   color: var(--color-ink2);
 }
@@ -20,7 +20,9 @@
 /* The methodology: closed until asked for, as the app's expander is; a term column and its definition. */
 .footer-method summary {
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--type-2);
+  display: flex;
+  align-items: center;
   font-weight: 700;
   color: var(--color-ink);
 }
@@ -36,7 +38,7 @@
   display: grid;
   grid-template-columns: 12em 1fr;
   gap: var(--space-3);
-  font-size: 0.8rem;
+  font-size: var(--type-1);
   line-height: 1.5;
 }
 
@@ -52,6 +54,14 @@
 
 .footer-links a {
   color: var(--color-ink);
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  .footer-links a {
+    display: inline-block;
+    padding: var(--space-3) 0;
+  }
 }
 
 @media (max-width: 760px) {

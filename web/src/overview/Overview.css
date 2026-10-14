@@ -9,7 +9,14 @@
 .ov--settling .ov-grid,
 .ov--settling .ov-why {
   opacity: 0.55;
-  transition: opacity 150ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ov-lede,
+  .ov-grid,
+  .ov-why {
+    transition: opacity 150ms ease;
+  }
 }
 
 .ov-eyebrow {

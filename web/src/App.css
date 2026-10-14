@@ -145,7 +145,12 @@
    settings while the analysis catches up: readable, plainly waiting. */
 .app-chapter[aria-busy="true"] {
   opacity: 0.55;
-  transition: opacity 150ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-chapter {
+    transition: opacity 150ms ease;
+  }
 }
 
 .app-tab:focus {

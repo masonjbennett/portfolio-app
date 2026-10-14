@@ -424,4 +424,38 @@ check(excelSerial("2024-01-01") === 45292 && excelSerial("1900-03-01") === 61, "
   `${excelSerial("2024-01-01")} ${excelSerial("1900-03-01")}`);
 check(excelSerial("2026-02-31") === null && excelSerial("AAPL") === null, "format: excelSerial refuses what is not a day");
 
+// Feel (batch 9): every transition and animation in a stylesheet sits inside a no-preference block (base.css's own
+// reduce rule is the one place that names them to switch them off), and a phone's controls are held to 44px.
+{
+  const { readdirSync } = await import("node:fs");
+  const root = new URL("../src/", import.meta.url);
+  const sheets = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(new URL(dir, root), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${dir}${e.name}/`);
+      else if (e.name.endsWith(".css")) sheets.push(`${dir}${e.name}`);
+    }
+  };
+  walk("");
+  const loose = []; 
+  for (const f of sheets) {
+    if (f === "styles/base.css") continue;
+    const src = readFileSync(new URL(f, root), "utf8");
+    // Blank out each no-preference block (its braces balance), then look for what is left.
+    let rest = src;
+    for (let at = rest.indexOf("(prefers-reduced-motion: no-preference)"); at >= 0; at = rest.indexOf("(prefers-reduced-motion: no-preference)")) {
+      let depth = 0, i = rest.indexOf("{", at);
+      do { depth += rest[i] === "{" ? 1 : rest[i] === "}" ? -1 : 0; i++; } while (depth > 0 && i < rest.length);
+      rest = rest.slice(0, at) + rest.slice(i);
+    }
+    if (/(transition|animation)(-[a-z]+)?\s*:/.test(rest.replace(/\/\*[\s\S]*?\*\//g, ""))) loose.push(f);
+  }
+    check(loose.length === 0, "feel: no transition or animation outside a prefers-reduced-motion: no-preference block", `${loose.join(", ")} of ${sheets.length} sheets`);
+  const base = readFileSync(new URL("styles/base.css", root), "utf8");
+  check(/max-width: 760px\) \{[^@]*min-height: 44px/.test(base) && /input:not\(\[type="checkbox"\]\)/.test(base),
+    "feel: a phone's buttons, selects, summaries and text inputs are 44px tall");
+  check(/chart-note--loading[^}]*background/.test(readFileSync(new URL("components/ChartFrame.css", root), "utf8")),
+    "feel: a loading chart is a skeleton band at the chart's own height");
+}
+
 done("t-components");

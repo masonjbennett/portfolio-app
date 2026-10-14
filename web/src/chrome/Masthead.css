@@ -50,6 +50,12 @@
     order: 1;
   }
 
+  .masthead-links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
   .masthead-byline {
     order: 2;
     flex-basis: 100%;
