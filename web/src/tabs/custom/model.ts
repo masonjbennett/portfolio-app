@@ -1,9 +1,10 @@
-// The Custom Portfolio tab's arithmetic and sentences (portfolio_app.py 1708-1837), pure so the suite
-// reaches every figure without a DOM. ../Custom.tsx lays it out.
+// The arithmetic and sentences of the Your mix panel (the app's Custom Portfolio tab, portfolio_app.py
+// 1708-1837), pure so the suite reaches every figure without a DOM. ./YourMix.tsx lays it out, beside Build's
+// frontier.
 //
-// What the tab does, in the app's order: a weight per ticker (1715-1720), divided by the weights'
-// total (1722-1732), shown normalised (1734-1737), scored (1739-1749), placed on a 60-point frontier
-// (1753-1819) and grown from the starting amount beside the other portfolios (1823-1837).
+// What the app's tab does, in its order: a weight per ticker (1715-1720), divided by the weights' total
+// (1722-1732), shown normalised (1734-1737), scored (1739-1749), placed on a 60-point frontier (1753-1819)
+// and grown from the starting amount beside the other portfolios (1823-1837).
 //
 // Where it departs from the app, on purpose:
 // - The division is the engine's normalizeCustom. The app divides by any nonzero total (1732): with
@@ -18,16 +19,18 @@
 //   the app's path starts a day in (904-908).
 // - The normalised weights table carries CSV and Excel downloads of the raw numbers; the app's has
 //   none and holds "{:.2%}" strings (1736).
+// - One frontier, not two: the mix is a point on Build's frontier, the app's tab-4 frontier of 80 targets
+//   (1593), which samples the same curve as tab 5's 60 (1756) more finely. How far the mix sits from it is
+//   an exact solve at the mix's own return (frontierTitle), which neither sampling enters.
+// - One growth chart, not two: the mix's line is on Performance's growth card, beside the other mixes, with
+//   every ending value in its table.
 import { format, MINUS } from "../../format.ts";
 import type { Vec } from "../../lib/num.ts";
-import { frontier, frontierAt, type FrontierPoint } from "../../lib/optimize.ts";
+import { frontierAt } from "../../lib/optimize.ts";
+import { MIX } from "../../overview/model.ts";
 import { normalizeCustom, summaryRow, type Custom, type Row } from "../../lib/portfolio.ts";
-import { wealth } from "../../lib/stats.ts";
 import type { Analysis, Column, CustomWeights, FormatId, LoadState, TableRow, TipKey } from "../../types.ts";
-import type { WealthData } from "../../charts/Wealth.tsx";
 
-/** efficient_frontier(..., n_points=60) on this tab (1756); the Optimization tab's call uses 80. */
-export const CUSTOM_FRONTIER_POINTS = 60;
 
 /** The slider's step (1720). The typed field takes any decimal inside the bounds. */
 export const WEIGHT_STEP = 0.01;
@@ -233,23 +236,24 @@ export function isEqualWeight(w: Vec): boolean {
   return n > 0 && w.every((x) => Math.abs(x - 1 / n) <= 1e-12);
 }
 
-/** The tab's headline: the custom mix's figures against the tangency portfolio, or why there is no mix. */
-export function headline(a: Analysis, v: CustomView): string {
+/** The tangency portfolio by its plain name, the scorecard's beside it. */
+const TANGENCY = `${MIX.tangency.short} (Tangency)`;
+
+/**
+ * The Your mix panel's sub-line: how the mix's Sharpe ratio stands against the best-tradeoff (tangency) portfolio's,
+ * or why there is no mix. The mix's own return, volatility and Sharpe ratio are its plates, beside it, so the
+ * sentence does not print them again; the tangency's ratio is the one figure it adds.
+ */
+export function verdict(a: Analysis, v: CustomView): string {
   if (!v.custom.ok) return `No custom portfolio: ${v.refusal?.short ?? "the weights were refused"}.`;
   const p = customMetrics(a, v.custom.w);
-  const lead = isEqualWeight(v.custom.w) ? "At equal weights, the custom mix" : "The custom mix";
-  const base = `${lead} returns ${pct(p.mu)} a year at ${pct(p.sigma)} volatility`;
-  if (!Number.isFinite(p.sharpe)) return `${base}; its Sharpe ratio is undefined because its volatility is zero.`;
+  const its = isEqualWeight(v.custom.w) ? "Left at equal weights, its" : "Its";
+  if (!Number.isFinite(p.sharpe)) return `${its} Sharpe ratio is undefined because its volatility is zero.`;
+  if (!a.tangency) return `The tangency solve failed, so there is no ${TANGENCY} Sharpe ratio to set the mix's against.`;
   const sh = n3(p.sharpe);
-  if (!a.tangency) return `${base}, a Sharpe ratio of ${sh}; the tangency solve failed, so there is no tangency Sharpe ratio to set it against.`;
   const t = n3(a.tangency.sharpe);
   const cmp = sh === t ? "level with" : p.sharpe < a.tangency.sharpe ? "below" : "above";
-  return `${base}, a Sharpe ratio of ${sh}, ${cmp} the tangency portfolio's ${t}.`;
-}
-
-/** This tab's frontier: the app's 60 targets (1756), from the GMV return to the highest the bounds allow. */
-export function customFrontier(a: Analysis): FrontierPoint[] {
-  return frontier(a.m, a.S, a.allowShort, CUSTOM_FRONTIER_POINTS);
+  return `${its} Sharpe ratio is ${cmp} the ${t} of ${TANGENCY}.`;
 }
 
 // Two volatilities this close print the same at two decimals of a percent.
@@ -279,34 +283,6 @@ export function frontierTitle(a: Analysis, v: CustomView): string {
     return `The custom mix sits on the frontier: no ${which} returns ${pct(p.mu)} a year with less than its ${pct(p.sigma)} volatility`;
   }
   return `The frontier reaches the custom mix's ${pct(p.mu)} return at ${pct(f.sigma)} volatility, against the mix's ${pct(p.sigma)}`;
-}
-
-/** Each line's value on the last day, from the amount invested. */
-export function wealthEnds(d: WealthData, amount: number): { label: string; role: string; end: number }[] {
-  return d.series.map((s) => {
-    const path = wealth(s.returns as number[], amount);
-    return { label: s.label, role: s.role, end: path[path.length - 1] };
-  });
-}
-
-/** The wealth chart's title: where the custom mix ended, against the line that ended highest. */
-export function wealthTitle(d: WealthData, amount: number, hasCustom: boolean): string {
-  const start = format(amount, "usd0");
-  if (!hasCustom) return `Growth of ${start} with no custom portfolio: the weights above were refused`;
-  const ends = wealthEnds(d, amount);
-  const c = ends.find((e) => e.role === "custom");
-  const last = d.dates[d.dates.length - 1];
-  if (!c || !last || !(amount > 0) || !ends.every((e) => Number.isFinite(e.end))) return `Growth of ${start}`;
-  const lead = `${start} in the custom mix ended at ${format(c.end, "usd0")} on ${format(last, "date")}`;
-  const others = ends.filter((e) => e !== c);
-  const best = others.reduce<(typeof ends)[number] | null>((b, e) => (b === null || e.end > b.end ? e : b), null);
-  if (!best) return lead;
-  if (format(c.end, "usd0") === format(best.end, "usd0")) return `${lead}, the same as ${best.label}`;
-  if (c.end > best.end) return `${lead}, more than any other line here`;
-  // GMV and tangency weights were chosen with the whole window's prices, as the Optimization tab's
-  // title says too; a benchmark or equal weights chose nothing.
-  const hindsight = best.role === "gmv" || best.role === "tangency" ? " with hindsight weights" : "";
-  return `${lead}; ${best.label} ended highest, at ${format(best.end, "usd0")}${hindsight}`;
 }
 
 /** The Normalized Weights table (1734-1737), one row per ticker in the entered order. */

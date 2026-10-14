@@ -10,7 +10,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
 import { act, expectUncaught, openAll, render, setMedia, text } from "./_dom.mjs";
 
-const { createElement: h, useState, lazy } = await import("react");
+const { createElement: h, Fragment, useState, lazy } = await import("react");
+const { MIX_ANCHOR } = await import("../src/tabs/custom/YourMix.tsx");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
 const { snapshotPlates, finding, assetsOf, publishedSetOf, standing, nameInSentence, whoseFigures, figuresLine, lede, ledeText, hindsight, whyFacts, endsOf, mixRows, QUESTION } = await import("../src/overview/model.ts");
@@ -149,7 +150,12 @@ function Harness({ wb, tabs }) {
   };
   return h(AppView, { wb: live, tabs });
 }
-const STAND_TABS = Object.fromEntries(TAB_IDS.map((id) => [id, () => h("p", { "data-tab": id }, `tab body ${id}`)]));
+// The Optimization tab also draws the Your mix panel, the part an older ?tab=custom link lands on (MIX_ANCHOR,
+// held to App's sectionId("custom") by t-build-mix), so its stand-in carries that anchor as the real tab does.
+const STAND_TABS = Object.fromEntries(TAB_IDS.map((id) => [id, () => {
+  const body = h("p", { "data-tab": id }, `tab body ${id}`);
+  return id === "optimization" ? h(Fragment, null, body, h("div", { id: MIX_ANCHOR, tabIndex: -1, "data-part": "custom" })) : body;
+}]));
 const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb, tabs }));
 
 // ---- (a) the masthead and the basket bar's summary --------------------------------------------------
@@ -1246,8 +1252,9 @@ function bar(over = {}) {
 }
 
 // ---- (h2) an older link's tab: landed on once, inside its chapter ----------------------------------------
-// ?tab=custom opens Build a portfolio (url.ts) and names Custom as the arrival's tab (Workbench.entry); the page brings
-// that part into view and focuses it. A tab already at the top of its chapter needs no landing.
+// ?tab=custom opens Build a portfolio (url.ts) and names Custom as the arrival's part (Workbench.entry): the Your mix
+// panel, which the Optimization tab draws. The page brings that part into view and focuses it. A tab already at the
+// top of its chapter needs no landing.
 {
   const r = page({ chapter: "build", entry: "custom" });
   check(document.activeElement?.id === "section-custom", "legacy: an older link's tab is landed on inside its chapter, the part focused", document.activeElement?.id);
@@ -1327,12 +1334,13 @@ function bar(over = {}) {
     Object.assign(console, { error, warn });
   }
   check(text(r.container.querySelector(".boundary") ?? {}) === `${TAB_LABELS.optimization} could not be shown.` &&
-    !!panel(r)?.querySelector('[data-tab="custom"]') && !!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector("header"),
-    "lazy: a chunk that fails to load names its tab, and the chapter's other tab, the chapter row and masthead stay", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
+    /What if one/.test(text(panel(r) ?? {})) && !!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector("header"),
+    "lazy: a chunk that fails to load names its tab, and the chapter's what-if, the chapter row and masthead stay", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
   r.unmount();
 
   // The shipped map: every tab is a lazy component, and App's own default reaches the real finding.
-  check(TAB_IDS.every((id) => AppTabs[id]?.$$typeof === Symbol.for("react.lazy")), "lazy: App ships each of the seven tabs as React.lazy");
+  check(TAB_IDS.length === 6 && TAB_IDS.every((id) => AppTabs[id]?.$$typeof === Symbol.for("react.lazy")) && !("custom" in AppTabs) && !("custom" in TAB_LOADERS),
+    "lazy: App ships each of the six tabs as React.lazy, and no Custom tab");
   const shipped = quietly(() => render(h(Harness, { wb: stand().wb })));
   const found = await until(() => !!panel(shipped)?.querySelector("h2.tab-finding"));
   check(found, "lazy: App's default tabs load and draw the Returns finding", text(shipped.container.querySelector(".app-main") ?? {}).slice(0, 120));

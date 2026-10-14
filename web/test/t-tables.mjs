@@ -291,8 +291,8 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   console.error = console.warn = () => {};
   const found = [];
   try {
-    // Every tab, and the walk-forward tab on each of its two segments.
-    const screens = [["Returns"], ["Risk"], ["Correlation"], ["Optimization"], ["Custom"], ["Sensitivity"], ["WalkForward", "Your basket"], ["WalkForward", "As published"]];
+    // Every tab (Optimization's with the Your mix panel's table in it), and the walk-forward tab on each of its two segments.
+    const screens = [["Returns"], ["Risk"], ["Correlation"], ["Optimization"], ["Sensitivity"], ["WalkForward", "Your basket"], ["WalkForward", "As published"]];
     for (const [file, seg] of screens) {
       const name = seg ? `${file} (${seg})` : file;
       const Tab = (await import(`../src/tabs/${file}.tsx`)).default;
@@ -338,14 +338,16 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   check(basket.length >= 3, "spans: the sweep reads Your basket's tables after its solve lands, not the empty segment before it",
     `${basket.length} tables read on Your basket`);
   check(found.length >= 24 && TYPED.every((t) => found.some((f) => f.title === t)) && bad.length === 0,
-    "spans: every table on the seven tabs (both walk-forward segments) states its window and return frequency; only the typed weights claim none",
+    "spans: every table on the six tabs (both walk-forward segments) states its window and return frequency; only the typed weights claim none",
     `${found.length} tables; ${bad.map((f) => `${f.tab}/${f.title}=${f.span}`).join(" | ")}`);
 
   // A title that repeats the heading right above it, with no chart between, is clipped from the screen, and
   // no other title is: one with a chart between still separates the table from that chart.
   const same = (f) => f.head !== null && f.head.toLowerCase() === f.title.toLowerCase();
   const wrong = found.filter((f) => f.clipped !== (same(f) && !f.chartBetween));
-  check(wrong.length === 0 && found.filter((f) => f.clipped).length >= 7,
+  // Six clip: the Custom tab's Normalized Weights, the seventh, sat under a heading of its own name; in the Your mix
+  // panel no heading repeats it, so its title shows (and the rule above holds it to that).
+  check(wrong.length === 0 && found.filter((f) => f.clipped).length >= 6 && found.some((f) => f.title === "Normalized Weights" && !f.clipped),
     "headed: a table title that repeats the section heading right above it is clipped from the screen, and no other title is",
     `${found.filter((f) => f.clipped).length} clipped; wrong: ${wrong.map((f) => `${f.tab}/${f.title} (heading ${f.head ?? "none"}${f.chartBetween ? ", chart between" : ""}, ${f.clipped ? "clipped" : "shown"})`).join(" | ")}`);
   const sheet = readFileSync(new URL("../src/components/Table.css", import.meta.url), "utf8");

@@ -136,32 +136,32 @@ const LEDGER = {
 // never only in a comment. That each side is really asserted is a reviewer's job, not a regex's.
 const CLOSED = {
   "st.stop() in one tab blanks the later tabs -> per-card boundary": {
-    boundary: ["t-app", "t-components", "t-tab-correlation", "t-tab-custom", "t-tab-optimization", "t-tab-risk", "t-tab-sensitivity"],
+    boundary: ["t-app", "t-build-mix", "t-components", "t-tab-correlation", "t-tab-optimization", "t-tab-risk", "t-tab-sensitivity"],
   },
   "failed tangency shows EW figures labelled Tangency -> say it failed": {
-    "failed-tangency": ["t-app", "t-tab-custom", "t-tab-optimization", "t-tab-sensitivity"],
+    "failed-tangency": ["t-app", "t-build-mix", "t-tab-optimization", "t-tab-sensitivity"],
   },
   "rf edit ignored until Run -> live": {
-    "rf-live": ["t-tab-custom", "t-tab-optimization", "t-tab-risk", "t-workbench"],
+    "rf-live": ["t-build-mix", "t-tab-optimization", "t-tab-risk", "t-workbench"],
   },
   "'Kurtosis' is excess kurtosis -> label it": {
     "excess-kurtosis": ["t-tab-returns"],
   },
   "downloads carry formatted text -> numbers with number formats": {
-    "numeric-downloads": ["t-tab-custom", "t-tab-optimization", "t-tab-returns", "t-tab-risk", "t-tab-sensitivity", "t-tables"],
+    "numeric-downloads": ["t-build-mix", "t-tab-optimization", "t-tab-returns", "t-tab-risk", "t-tab-sensitivity", "t-tables"],
   },
   "tables without downloads -> CSV + Excel for every table": {
-    "downloads-everywhere": ["t-tab-correlation", "t-tab-custom", "t-tab-optimization", "t-tab-returns", "t-tab-risk", "t-tab-sensitivity", "t-tables"],
+    "downloads-everywhere": ["t-build-mix", "t-tab-correlation", "t-tab-optimization", "t-tab-returns", "t-tab-risk", "t-tab-sensitivity", "t-tables"],
   },
   "tab-6 metrics in-sample, wealth daily-rebalanced, unlabelled -> say so": {
     "in-sample-label": ["t-tab-sensitivity"],
-    "daily-rebalanced-label": ["t-charts-portfolio", "t-tab-custom", "t-tab-optimization"],
+    "daily-rebalanced-label": ["t-build-mix", "t-charts-portfolio", "t-tab-optimization"],
   },
   "short frontier called unconstrained; tooltips say long-only with shorting on -> [-1, 1], follow the toggle": {
-    "short-bounds-copy": ["t-app", "t-charts-portfolio", "t-tab-custom", "t-tab-optimization", "t-tooltips"],
+    "short-bounds-copy": ["t-app", "t-build-mix", "t-charts-portfolio", "t-tab-optimization", "t-tooltips"],
   },
   "frontier hover x-unified by accident -> closest point": {
-    "frontier-hover": ["t-charts", "t-charts-portfolio", "t-tab-custom"],
+    "frontier-hover": ["t-build-mix", "t-charts", "t-charts-portfolio"],
   },
   "start date floor 2009-01-01 -> what Yahoo returns": {
     "start-date-floor": ["t-api", "t-app"],

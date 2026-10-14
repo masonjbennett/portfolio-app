@@ -267,7 +267,7 @@ export const GUIDE_CHAPTERS: Readonly<Record<ChapterId, GuideChapter>> = {
   },
   build: {
     question: "Which mix would have been best, and how does your own compare?",
-    opens: ["Two parts: the mixes the page fits to the prices, then your own mix."],
+    opens: ["It leads with the frontier and your own mix beside it; the tables of the fitted mixes follow."],
   },
   holdup: {
     question: "Would the best mix have done as well without hindsight?",
@@ -404,21 +404,23 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
     ],
   },
   optimization: {
-    question: "Which mixes of these assets did best, with hindsight?",
+    question: "Which mixes of these assets did best, with hindsight, and where does your own sit?",
     opens: [
       "It opens on the highest-Sharpe mix's weights and its in-sample Sharpe ratio, against the even split's. Everything " +
         "fitted here is chosen on the same prices it is scored on.",
+      "Then the efficient frontier. The chart puts volatility across and return up, so a point further left swung less and a " +
+        "point higher earned more. Each point on the curve is the least volatile mix that reaches a given return. GMV sits at its " +
+        "far left, the least volatile of all. A straight line from the risk-free rate just touches the curve at tangency, the " +
+        "highest-Sharpe mix, which is where the name comes from. The single assets, the even split and your own mix, [[Custom]], " +
+        "are marked too, and the line under the chart's title says how far your mix sits from the curve.",
+      "Beside it is [[Your mix (Custom)]]: a slider and a box for each asset, each starting at an equal setting. The page divides " +
+        "every setting by their total, so the shares always add up to the whole. That means raising one asset lowers the share of " +
+        "every other, even the ones you leave alone. The point on the frontier and the five figures under the sliders follow as " +
+        "you move one, and [[Reset to equal weights]] appears once you have. Under [[Show the numbers]] are your settings after " +
+        "the division, the shares every figure of your mix uses. Your weights travel in the page's link; your mix is a column of " +
+        "the scorecard below and a line on Performance's growth chart.",
     ],
     sections: [
-      {
-        heading: "Efficient Frontier",
-        body: [
-          "The chart puts volatility across and return up, so a point further left swung less and a point higher earned more. " +
-            "Each point on the curve is the least volatile mix that reaches a given return. GMV sits at its far left, the least " +
-            "volatile of all. A straight line from the risk-free rate just touches the curve at tangency, the highest-Sharpe " +
-            "mix, which is where the name comes from. The single assets and the even split are marked too.",
-        ],
-      },
       {
         heading: "Three portfolios",
         body: [
@@ -457,49 +459,8 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
         ],
       },
       {
-        heading: "Portfolio Comparison: Cumulative Wealth",
-        body: ["The starting amount grown in each portfolio and in the benchmark over the window."],
-      },
-      {
         heading: "Summary Comparison",
         body: ["The portfolios' main figures together in one table."],
-      },
-    ],
-  },
-  custom: {
-    question: "What about a mix you choose yourself?",
-    opens: [
-      "It opens on your mix's yearly return, volatility and Sharpe ratio, against the highest-Sharpe mix's. Your weights " +
-        "travel in the page's link, and appear as [[Custom]] everywhere else on the page.",
-    ],
-    sections: [
-      {
-        heading: "Custom Portfolio Builder",
-        body: ["The weights, your mix's figures, and where the mix sits beside the efficient frontier, together."],
-      },
-      {
-        heading: "Weights",
-        body: [
-          "A slider and a box for each asset, each starting at an equal setting. The page divides every setting by their " +
-            "total, so the shares always add up to the whole. That means raising one asset lowers the share of every other, " +
-            "even the ones you leave alone. [[Reset to equal weights]] appears once you change one.",
-        ],
-      },
-      {
-        heading: "Custom Portfolio on Efficient Frontier",
-        body: ["Your mix on the frontier chart, and how much less volatility the frontier reaches at the same return."],
-      },
-      {
-        heading: "Cumulative Wealth: All Portfolios",
-        body: ["The starting amount grown in your mix, beside the other portfolios and the benchmark."],
-      },
-      {
-        heading: "Scorecard",
-        body: ["The same scorecard as the one above it, with your mix in it."],
-      },
-      {
-        heading: "Normalized Weights",
-        body: ["Your settings after they are divided by their total: the shares every figure of your mix uses."],
       },
     ],
   },

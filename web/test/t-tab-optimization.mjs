@@ -1,5 +1,5 @@
 // The Portfolio Optimization tab (src/tabs/Optimization.tsx, src/tabs/optimization/), portfolio_app.py
-// 1467-1703.
+// 1467-1703: Build a portfolio's tab, which also holds the Your mix panel (its own suite: t-build-mix.mjs).
 //
 // (a) The view-model's numbers against the oracle dump, cross and megacap, long-only and with
 //     shorting: fed the ORACLE's weights (T0, 1e-12) the tiles, summary, risk contribution and wealth
@@ -10,9 +10,10 @@
 // (c) Ledger entries, both sides each: failed-tangency (the tab half), boundary (the tab half),
 //     rf-live, numeric-downloads and downloads-everywhere (the tab halves), and that the tab hands the
 //     shared charts the props their own suites hold (short-bounds-copy, daily-rebalanced-label). The
-//     frontier's closest-point hover is the shared chart's, held by t-charts-portfolio and t-tab-custom.
-// (d) The whole tab rendered in jsdom: the headline, four charts drawn, three tables with both
-//     downloads, no NaN, series named in the charts, and the level switch changing the tooltip text.
+//     frontier's closest-point hover is the shared chart's, held by t-charts-portfolio and t-build-mix.
+// (d) The whole tab rendered in jsdom: the headline, the lead (the frontier card and the Your mix panel), three
+//     charts drawn, four tables with both downloads, no NaN, series named in the charts, and the level switch
+//     changing the tooltip text. The chapter draws no growth chart: Performance's carries its lines.
 import { act, expectUncaught, render, text } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, maxAbsDiff, json, done } from "./_assert.mjs";
@@ -22,7 +23,7 @@ const { createElement: h } = await import("react");
 const M = await import("../src/tabs/optimization/model.ts");
 const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
 const { frontierCaption, frontierData } = await import("../src/charts/Frontier.tsx");
-const { CUSTOM_COVERS, wealthCaption, wealthData, wealthPlot } = await import("../src/charts/Wealth.tsx");
+const { wealthCaption, wealthData, wealthPlot } = await import("../src/charts/Wealth.tsx");
 const { format, DASH, MINUS } = await import("../src/format.ts");
 const { tokens } = await import("../src/styles/tokens.ts");
 const { ROLE } = await import("../src/charts/theme.ts");
@@ -102,7 +103,7 @@ for (const set of ["cross", "megacap"]) {
     near(tag("the benchmark ends where the app's does"), ends[3].end, o.bench.wealth.v.at(-1), 1e-10);
     const plot = wealthPlot({ status: "ready", value: wealthData(ao, null) }, o.w0);
     check(plot.status === "ready" && JSON.stringify(plot.value.lines.map((l) => [l.label, l.end])) === JSON.stringify(ends.map((e) => [e.label, e.end])),
-      tag("the wealth title reads the same ends the shared chart draws"));
+      tag("the ends are the ones the shared growth chart draws"));
 
     // T1 / T2: the port's own exact solves, at t-parity.mjs's tiers.
     const t = M.tiles(a);
@@ -186,14 +187,6 @@ for (const set of ["cross", "megacap"]) {
   const moved = M.customWeights(a, { VTI: 0.5 });
   check(moved.ok && !M.customIsEqual(a, moved) && !/still equal/.test(M.customNote(a, moved)), "custom note: moved weights are not called equal");
 
-  // Wealth title: the highest line, then the benchmark; a bad amount falls back, never "NaN".
-  const ends = M.wealthEnds(a, null, 10000);
-  const best = ends.reduce((x, y) => (y.end > x.end ? y : x));
-  const hind = ["GMV", "Tangency"].includes(best.label) ? " with hindsight weights" : "";
-  check(M.wealthTitle(a, null, 10000) === `${best.label} ended highest, at ${format(best.end, "usd0")} from $10,000${hind}; the S&P 500 ended at ${format(ends.at(-1).end, "usd0")}`,
-    "wealth title: the highest line and the benchmark", M.wealthTitle(a, null, 10000));
-  check(M.wealthTitle(a, null, NaN) === "Portfolio Comparison: Cumulative Wealth", "wealth title: an unusable amount prints no figure");
-
   // Max DD from the amount invested, as the tiles' note says: a 30% fall on the first day counts. The
   // app's path starts at 1 + r1 (904-908) and does not see it.
   const dayOne = { ...a, returns: a.returns.map((r) => [-0.6, ...r.slice(1)]), bench: [-0.6, ...a.bench.slice(1)] };
@@ -222,6 +215,13 @@ HTMLElement.prototype.getBoundingClientRect = function () {
   return { x: 0, y: 0, top: 0, left: 0, right: 720, bottom: 360, width: 720, height: 360, toJSON() {} };
 };
 const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby="${id}"]`);
+// The lead's frontier card, its "How it is calculated" fold opened (where the chart's caption now sits).
+const frontierOf = (r) => {
+  const card = r.container.querySelector("#build-frontier");
+  const how = card && [...card.querySelectorAll(".card-fold-button")].find((b) => text(b) === "How it is calculated");
+  if (how && how.getAttribute("aria-expanded") === "false") act(() => how.click());
+  return card;
+};
 const tablesOf = (r) => [...r.container.querySelectorAll(".tbl")];
 const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.children ?? [])].map(text);
 
@@ -252,8 +252,8 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(summary && text(summary).includes("Tangency failed") && tanRow[0] === "Tangency (failed)" && tanRow.slice(1).every((c) => c === DASH),
     "ledger:failed-tangency the summary says Tangency failed, its row all dashes", tanRow.join(" "));
   check(!/NaN|undefined|Infinity/.test(text(r.container)), "failed tangency: no NaN, undefined or Infinity on the tab");
-  check(r.container.querySelectorAll(".recharts-surface").length === 4, "failed tangency: the four charts still draw, without a tangency", `${r.container.querySelectorAll(".recharts-surface").length}`);
-  check(text(sectionOf(r, "opt-frontier")).includes("Tangency failed"), "failed tangency: the frontier's caption says so too");
+  check(r.container.querySelectorAll(".recharts-surface").length === 3, "failed tangency: the three charts still draw, without a tangency", `${r.container.querySelectorAll(".recharts-surface").length}`);
+  check(text(frontierOf(r)).includes("Tangency failed"), "failed tangency: the frontier's caption says so too");
   r.unmount();
 }
 
@@ -273,8 +273,9 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   if (r) {
     const fallback = [...r.container.querySelectorAll(".boundary")].map(text);
     check(JSON.stringify(fallback) === JSON.stringify(["Efficient frontier could not be shown."]), "ledger:boundary the failed section is one line naming it", fallback.join(" | "));
-    check(!!r.container.querySelector(".opt-headline") && r.container.querySelectorAll(".recharts-surface").length === 3 && tablesOf(r).length === 4,
-      "ledger:boundary the headline, the other three charts and all four tables still render");
+    check(!!r.container.querySelector(".opt-headline") && r.container.querySelectorAll(".recharts-surface").length === 2 && tablesOf(r).length === 4 &&
+      r.container.querySelectorAll(".build-mix .cust-row").length === a.tickers.length,
+      "ledger:boundary the headline, the Your mix panel, the other two charts and all four tables still render");
     r.unmount();
   }
   // A failed GMV: said in every place its figures would be, and the tab still renders.
@@ -319,7 +320,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const ewSharpe = M.portRow(b, b.ew).sharpe;
   check(rowCells(sum, 0)[3] === format(ewSharpe, "num3") && format(ewSharpe, "num3") !== format(M.portRow(a, a.ew).sharpe, "num3"),
     "ledger:rf-live the summary's Sharpe follows a new rate at once", rowCells(sum, 0).join(" "));
-  check(text(sectionOf(r, "opt-frontier")).includes("from the 5.00% risk-free rate") && text(sectionOf(r, "opt-tiles")).includes("5.00% risk-free rate"),
+  check(text(frontierOf(r)).includes("from the 5.00% risk-free rate") && text(sectionOf(r, "opt-tiles")).includes("5.00% risk-free rate"),
     "ledger:rf-live the frontier's line and the tiles use the new rate");
   check(text(r.container.querySelector(".opt-headline")) === M.headline(b) && M.headline(b) !== M.headline(a), "ledger:rf-live the headline is recomputed at the new rate");
   r.unmount();
@@ -335,11 +336,15 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(!/NaN|undefined|Infinity|\bnan\b/.test(all), "tab: no NaN, undefined or Infinity anywhere on it");
   const head = r.container.querySelector(".opt-headline");
   check(head && text(head) === M.headline(a) && text(head).startsWith("With hindsight, the maximum-Sharpe portfolio holds 54.2% GLD"), "tab: the headline is on it, literal", head ? text(head) : "none");
-  // The hero chart comes right after the headline.
-  const order = [...r.container.querySelectorAll(".opt-headline, section[aria-labelledby]")].map((e) => e.getAttribute("aria-labelledby") ?? "headline");
-  check(JSON.stringify(order) === JSON.stringify(["headline", "opt-frontier", "opt-tiles", "opt-weights", "opt-scorecard", "opt-prc", "opt-wealth", "opt-summary"]),
-    "tab: headline, the frontier, then the figures, weights, scorecard, risk contribution, wealth and summary", order.join(" "));
-  check(r.container.querySelectorAll(".recharts-surface").length === 4, "tab: all four charts are drawn", `${r.container.querySelectorAll(".recharts-surface").length}`);
+  // The lead comes right after the headline: the frontier, then the Your mix panel beside it.
+  const order = [...r.container.querySelectorAll(".opt-headline, #build-frontier, .build-mix, section[aria-labelledby^='opt-']")]
+    .map((e) => (e.classList.contains("opt-headline") ? "headline" : (e.getAttribute("aria-labelledby") ?? "").startsWith("opt-") ? e.getAttribute("aria-labelledby") : e.id));
+  check(JSON.stringify(order) === JSON.stringify(["headline", "build-frontier", "section-custom", "opt-tiles", "opt-weights", "opt-scorecard", "opt-prc", "opt-summary"]),
+    "tab: headline, the frontier and Your mix, then the figures, weights, scorecard, risk contribution and summary", order.join(" "));
+  check(!!r.container.querySelector(".build-lead > #build-frontier:first-child") && !!r.container.querySelector(".build-lead > .build-mix:last-child"),
+    "tab: the frontier card and the Your mix panel are the lead's two parts, the frontier first");
+  check(r.container.querySelectorAll(".recharts-surface").length === 3, "tab: all three charts are drawn", `${r.container.querySelectorAll(".recharts-surface").length}`);
+  check(!r.container.querySelector(".amount-field") && !/Cumulative Wealth/.test(all), "tab: no growth chart and no amount field: Performance's growth card carries those lines");
   check(r.container.querySelectorAll(".recharts-legend-wrapper").length === 0, "tab: no legend, the series are named in the charts");
 
   // Every table, and each carries both downloads (downloads-everywhere, the tab half).
@@ -391,17 +396,19 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const retRow = rowColour("opt-prc", ROLE.frontier);
   check(tanRow === `Tangency=${rgb(tokens.color.ink2)}` && gmvRow === `GMV=${rgb(ROLE.gmv)}` && retRow === `Return share=${rgb(ROLE.frontier)}`,
     "tab: hovering a bar names it alone, Tangency in ink2, GMV in its teal and a return share in navy", `${tanRow} | ${gmvRow} | ${retRow}`);
-  check([...a.tickers, "GMV", "Tangency", "Equal-Weight", "Custom", "S&P 500"].every((s) => svgText("opt-frontier").includes(s)), "tab: the frontier names every asset and portfolio in the chart");
+  const frSvg = text(r.container.querySelector("#build-frontier .recharts-surface"));
+  check([...a.tickers, "GMV", "Tangency", "Equal-Weight", "Custom", "S&P 500"].every((s) => frSvg.includes(s)), "tab: the frontier names every asset and all four mixes in the chart", frSvg);
+  check(text(r.container.querySelector("#build-frontier .card-title")) === M.frontierTitle(a), "tab: the frontier card's title is where Tangency and GMV sit");
   check(/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: untouched custom weights are said to repeat Equal-Weight");
-  const wsub = () => text(sectionOf(r, "opt-wealth").querySelector(".chart-sub"));
-  check(wsub().endsWith(` ${CUSTOM_COVERS}`), "tab: untouched custom weights, and the wealth caption says Custom's line covers Equal-Weight's", wsub());
 
-  // The tab hands the shared charts what their suites hold them to.
-  const fcap = text(sectionOf(r, "opt-frontier").querySelector(".chart-sub"));
-  check(fcap.includes(frontierCaption(a.allowShort, a.rf, frontierData(a).cal)), "tab: the shared Frontier's caption states the analysis's own bounds and rate", fcap);
-  const wcap = text(sectionOf(r, "opt-wealth"));
-  check(wcap.includes(wealthCaption(props.settings.amount, a.prices.dates[0], a.asOf)) && /rebalanced daily/.test(wcap),
-    "ledger:daily-rebalanced-label the tab's wealth chart says each portfolio is rebalanced daily", wcap);
+  // The tab hands the shared charts what their suites hold them to. The frontier's caption is its card's
+  // "How it is calculated"; the chart keeps its title for a screen reader and prints no caption of its own.
+  const fr = frontierOf(r);
+  check(!fr.querySelector(".chart-sub") && text(fr.querySelector("[data-fold=how]")).includes(frontierCaption(a.allowShort, a.rf, frontierData(a).cal)),
+    "tab: the shared Frontier's caption, the analysis's own bounds and rate, is under the card's How it is calculated", text(fr));
+  // The growth lines this chapter used to draw are Performance's now, and so is the sentence.
+  check(/rebalanced daily/.test(wealthCaption(props.settings.amount, a.prices.dates[0], a.asOf)),
+    "ledger:daily-rebalanced-label the growth chart that carries these portfolios says each is rebalanced daily");
   check(!/rebalanc/i.test(lines(1660, 1674)), "ledger:daily-rebalanced-label the app's wealth chart does not say so (1660-1674)");
   check(/rebalanced daily/.test(text(sectionOf(r, "opt-tiles"))), "ledger:daily-rebalanced-label the tiles say the weights are held fixed, rebalanced daily");
   check(!/\[\u22121, 1\]|\u2212100%/.test(all), "ledger:short-bounds-copy long-only, the tab says nothing about [-1, 1] bounds");
@@ -415,27 +422,15 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const mddTip = r.container.querySelector("button[aria-label='About maximum drawdown']")?.parentElement.querySelector("[role=tooltip]");
   check(mddTip && text(mddTip) === tipText("max_dd", "formula"), "tab: the Max DD tip follows the level too");
 
-  // Custom weights from the Custom tab reach the frontier, the wealth chart and the summary (1581).
+  // Custom weights from the Your mix panel reach the frontier and the summary (1581).
   const raw = o.modes.long.custom.uneven.raw;
   quiet(() => r.rerender(h(Optimization, { ...props, weights: Object.fromEntries(a.tickers.map((t, i) => [t, raw[i]])) })));
   const cust = rowCells(tablesOf(r)[3], 3);
   const cp = o.modes.long.custom.uneven.perf;
   check(cust[0] === "Custom" && cust[1] === format(cp.mu, "pct2") && cust[3] === format(cp.sharpe, "num3"), "tab: the custom weights score in the summary", cust.join(" "));
   check(!/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: moved custom weights are not called equal");
-  check(!wsub().includes(CUSTOM_COVERS) && wsub().endsWith(" whole period's prices."), "tab: moved custom weights, and the wealth caption no longer says Custom covers Equal-Weight", wsub());
-  r.unmount();
-}
-
-// A custom mix that ends highest leads the wealth chart's title (the custom line is passed through).
-{
-  const a = fixtureAnalysis("megacap");
-  const props = tabProps(a, { weights: Object.fromEntries(a.tickers.map((t) => [t, t === "NVDA" ? 1 : 0])) });
-  const r = quiet(() => render(h(Optimization, props)));
-  const w = M.customWeights(a, props.weights);
-  const title = text(sectionOf(r, "opt-wealth").querySelector(".chart-title"));
-  check(w.ok && title === M.wealthTitle(a, w.w, props.settings.amount) && title.startsWith("Custom ended highest"), "tab: a custom mix that ends highest leads the wealth title", title);
-  check(!/hindsight/.test(title), "in-sample: a custom mix that ends highest was typed, not chosen with hindsight, and the title does not say it was", title);
-  check(text(sectionOf(r, "opt-wealth").querySelector(".recharts-surface")).includes("Custom"), "tab: the wealth chart draws the custom line");
+  const cm = M.portRow(a, M.customWeights(a, Object.fromEntries(a.tickers.map((t, i) => [t, raw[i]]))).w);
+  check(text(r.container.querySelector("#build-frontier .card-sub")).includes(format(cm.mu, "pct2")), "tab: moved custom weights, and the frontier's sub-line reads the new mix");
   r.unmount();
 }
 
@@ -444,12 +439,12 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(/unconstrained frontier/i.test(lines(747, 752)), "ledger:short-bounds-copy the app's shorting help calls the frontier unconstrained (750)");
   const a = fixtureAnalysis("cross", { allowShort: true });
   const r = quiet(() => render(h(Optimization, tabProps(a))));
-  const fr = text(sectionOf(r, "opt-frontier"));
+  const fr = text(frontierOf(r));
   check(fr.includes(frontierCaption(true, a.rf, frontierData(a).cal)) && fr.includes("[\u22121, 1]"), "ledger:short-bounds-copy with shorting on, the tab's frontier caption bounds each weight to [-1, 1]", fr);
   check(text(sectionOf(r, "opt-weights")).includes("bounded to [\u2212100%, 100%]") && !/unconstrained/i.test(text(r.container)),
     "ledger:short-bounds-copy the weights state the bounds and nothing says unconstrained");
   check(text(r.container.querySelector(".opt-headline")).includes("with 3 short positions"), "short: the headline counts the tangency's shorts");
-  check(!/NaN|undefined|Infinity/.test(text(r.container)) && r.container.querySelectorAll(".recharts-surface").length === 4, "short: the tab renders whole");
+  check(!/NaN|undefined|Infinity/.test(text(r.container)) && r.container.querySelectorAll(".recharts-surface").length === 3, "short: the tab renders whole");
   r.unmount();
 }
 
@@ -465,16 +460,6 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(head.startsWith("With hindsight, ") && head.includes(", for an in-sample Sharpe of ") && head.endsWith(`; ${M.SENSITIVITY_POINTER}.`) &&
     text(r.container.querySelector(".opt-headline")) === head,
     "in-sample: the headline says with hindsight and in-sample, and points at the Sensitivity tab", head);
-  const title = text(sectionOf(r, "opt-wealth").querySelector(".chart-title"));
-  check(title.startsWith("Tangency ended highest") && title.includes(" with hindsight weights;"),
-    "in-sample: a Tangency line that ends highest does so with hindsight weights, and the title says so", title);
-
-  // The wealth caption: GMV and Tangency are hypothetical (then, at the default equal custom weights, Custom covers Equal-Weight).
-  const wcap = text(sectionOf(r, "opt-wealth").querySelector(".chart-sub"));
-  check(wcap === wealthCaption(props.settings.amount, a.prices.dates[0], a.asOf, ["GMV", "Tangency"], true) &&
-    wcap.endsWith(` GMV and Tangency are hypothetical: weights chosen with the whole period's prices. ${CUSTOM_COVERS}`),
-    "hypothetical: the wealth caption names GMV and Tangency as hypothetical, weights chosen with the whole period's prices", wcap);
-
   // Every GMV and Tangency head in a table carries the sub-line; Equal-Weight, Custom and the benchmark do not
   // (the scorecard's Custom head may say instead that its weights are equal, which is not the fitted line).
   const own = (th) => (th.firstChild?.nodeType === 3 ? th.firstChild.textContent : text(th)).trim();
@@ -518,19 +503,9 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(spans.length === 4 && spans.every((s) => s === `Daily returns, ${a.dates[0]} to ${a.asOf}`),
     "spans: every table's caption states its window and that the returns are daily", spans.join(" | "));
 
-  // The starting amount is edited on the wealth chart itself.
-  const input = sectionOf(r, "opt-wealth").querySelector(".amount-field input");
-  const type = (v) => act(() => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, v);
-    input.dispatchEvent(new window.Event("input", { bubbles: true }));
-  });
-  check(!!input && input.value === "10000" && text(sectionOf(r, "opt-wealth").querySelector(".amount-field label")) === "Growth of $",
-    "amount: the wealth chart carries its own Growth of $ field, at the $10,000 default");
-  type("25000");
-  type("50");
-  const alert = sectionOf(r, "opt-wealth").querySelector(".amount-field [role=alert]");
-  check(JSON.stringify(calls) === JSON.stringify([{ amount: 25000 }]) && alert && /at least \$100/.test(text(alert)),
-    "amount: a valid amount on the chart becomes the setting, one under $100 is refused and says why", JSON.stringify(calls));
+  // The starting amount is not edited here any more (Performance's growth card has the field); it still reaches
+  // the scorecard's workbook, and nothing on the chapter asks for it.
+  check(!r.container.querySelector(".amount-field input") && calls.length === 0, "amount: Build has no amount field and asks for no setting at rest");
   r.unmount();
 }
 

@@ -22,7 +22,6 @@ const { stripRows } = await import("../src/tabs/optimization/DotStrips.tsx");
 const Scorecard = (await import("../src/components/Scorecard.tsx")).default;
 const { BOOK_LINK } = await import("../src/components/Scorecard.tsx");
 const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
-const Custom = (await import("../src/tabs/Custom.tsx")).default;
 const { scorecardRow, returnShare, sharpeSE } = await import("../src/lib/stats.ts");
 const DotStrips = (await import("../src/tabs/optimization/DotStrips.tsx")).default;
 const { fragility, REDRAWS } = await import("../src/lib/robust.ts");
@@ -300,29 +299,29 @@ for (const { label, a } of baskets) {
   r.unmount();
 }
 
-// ---- (e) the Custom tab reuses the component, its mix in bold ---------------------------------------------
+// ---- (e) one scorecard: the Custom tab's own was folded into it ------------------------------------------------
+// The app's Custom tab printed its mix's scorecard apart; here the mix is the one scorecard's Custom column, beside
+// the panel whose weights make it, and the panel's Sharpe plate prints the ± that column gives.
 {
   const a = fixtureAnalysis("megacap");
   // Tenths, as in (a): whole numbers clamp to 1 each and type equal weight.
   const props = tabProps(a, { weights: Object.fromEntries(a.tickers.map((t, i) => [t, (i + 1) / 10])) });
-  const r = quiet(() => render(h(Custom, props)));
+  const r = quiet(() => render(h(Optimization, props)));
   await settle();
-  const sc = r.container.querySelector('section[aria-labelledby="cust-scorecard"] .tbl.sc');
-  const focus = sc?.querySelector("thead .sc-focus");
-  check(sc && focus && focus.dataset.col === "custom" && [...sc.querySelectorAll("thead th")].length === 6, "custom: the Custom tab shows the same scorecard, the Custom column set in bold");
-  check(sc && ![...sc.querySelectorAll(".tbl-dl button")].some((b) => text(b) === BOOK_LINK), "downloads: the Custom tab's scorecard offers no workbook of formulas; that file lives on Optimization");
-  check(text(r.container.querySelector("#cust-scorecard")) === text(sc.querySelector("caption .tbl-title")),
-    "caption: on Custom the clipped title is what the section heading prints");
+  const scs = [...r.container.querySelectorAll(".tbl.sc")];
+  const sc = r.container.querySelector('section[aria-labelledby="opt-scorecard"] .tbl.sc');
+  check(scs.length === 1 && !!sc && [...sc.querySelectorAll("thead th")].map((th) => th.dataset.col ?? "label").join() === "label,ew,gmv,tangency,custom,bench",
+    "custom: the chapter has one scorecard, the mix a column of it", `${scs.length} scorecards`);
   const v = M.customWeights(a, props.weights);
   const want = scorecardRow(portfolioReturns(a.returns, v.w), a.bench, a.dates, a.prices.dates[0], a.rf);
   const annual = [...sc.querySelector('tr[data-metric="annual"]').children].map(text);
   check(v.ok && !v.clamped && !M.customIsEqual(a, v) && annual[4] !== annual[1],
     "custom: the typed mix is not equal weight, no value was clamped, and its column differs from Equal-Weight's", annual.join(" "));
   check(annual[4] === format(want.annualReturn, "pct2"), "custom: its column is the engine's figure for the typed mix", annual.join(" "));
-  const sharpePlate = [...r.container.querySelectorAll(".cust-plates .plate")].find((p) => text(p.querySelector(".plate-label span")) === "Sharpe");
+  const sharpePlate = [...r.container.querySelectorAll(".build-mix .cust-plates .plate")].find((p) => text(p.querySelector(".plate-label span")) === "Sharpe");
   const plateSE = sharpePlate?.querySelector(".plate-se") ? text(sharpePlate.querySelector(".plate-se")) : null;
-  check(plateSE === `± ${format(want.sharpeSE, "num3")} SE` && r.container.querySelectorAll(".cust-plates .plate-se").length === 1,
-    "sharpe-se: the Custom tab's Sharpe plate prints the ± the scorecard gives its column", plateSE ?? "(none)");
+  check(plateSE === `± ${format(want.sharpeSE, "num3")} SE` && r.container.querySelectorAll(".build-mix .cust-plates .plate-se").length === 1,
+    "sharpe-se: the Your mix panel's Sharpe plate prints the ± the scorecard gives its column", plateSE ?? "(none)");
   r.unmount();
 }
 

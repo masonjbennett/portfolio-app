@@ -49,7 +49,7 @@ export interface ScorecardProps {
   allowShort: boolean;
   /** Download file name without extension. */
   filename: string;
-  /** A column to set in bold (the Custom tab marks its own mix). */
+  /** A column to set in bold. */
   focus?: ScoreColId;
   /** What the workbook of formulas is built from; without it the row offers only the CSV and the values Excel. */
   book?: ScoreBookSource;

@@ -326,11 +326,11 @@ export function customWeights(a: Analysis, weights: CustomWeights): Custom {
 
 /** Why the custom weights are not plotted or scored, in words. */
 export const CUSTOM_REFUSAL: Readonly<Record<"zero" | "net-short" | "leverage", string>> = {
-  zero: "Custom is not shown: every custom weight is zero. Set at least one on the Custom Portfolio tab.",
+  zero: "Custom is not shown: every custom weight is zero. Set at least one in Build a portfolio's Your mix panel.",
   "net-short":
-    "Custom is not shown: its weights add up to less than 5% net long, and dividing by a total that small would multiply every weight many times over. Adjust them on the Custom Portfolio tab.",
+    "Custom is not shown: its weights add up to less than 5% net long, and dividing by a total that small would multiply every weight many times over. Adjust them in Build a portfolio's Your mix panel.",
   leverage:
-    "Custom is not shown: normalised to sum to 100%, its weights would put an asset outside the -100% to 100% range the optimiser uses. Adjust them on the Custom Portfolio tab.",
+    "Custom is not shown: normalised to sum to 100%, its weights would put an asset outside the -100% to 100% range the optimiser uses. Adjust them in Build a portfolio's Your mix panel.",
 };
 
 /** True when the custom weights are still equal weights, the app's default before tab 5 is touched (1581). */
@@ -343,9 +343,9 @@ export function customNote(a: Analysis, c: Custom): string | null {
   if (!c.ok) return CUSTOM_REFUSAL[c.reason];
   const parts: string[] = [];
   if (customIsEqual(a, c)) {
-    parts.push("Custom holds the weights set on the Custom Portfolio tab. They are still equal weights, so its row repeats Equal-Weight's and its point sits on Equal-Weight's.");
+    parts.push("Custom holds the weights set in Build a portfolio's Your mix panel. They are still equal weights, so its row repeats Equal-Weight's and its point sits on Equal-Weight's.");
   } else {
-    parts.push("Custom holds the weights set on the Custom Portfolio tab, scaled to sum to 100%.");
+    parts.push("Custom holds the weights set in the Your mix panel, scaled to sum to 100%.");
   }
   if (c.clamped) parts.push("Some were outside the current bounds and were clamped to them first.");
   return parts.join(" ");
@@ -744,7 +744,11 @@ export function prcTitle(a: Analysis): string {
   return parts.length ? parts.join("; ") : "Risk Contribution (PRC)";
 }
 
-/** Where each line of the wealth chart ends, in wealthData's order: Equal-Weight, GMV, Tangency, Custom, the benchmark. */
+/**
+ * Where each portfolio's growth ends, in wealthData's order: Equal-Weight, GMV, Tangency, Custom, the benchmark. The
+ * chapter drew these as its own wealth chart until Performance's growth card took every line (test/t-build-mix.mjs
+ * holds each ending value to that card's table).
+ */
 export function wealthEnds(a: Analysis, custom: Vec | null, amount: number): { label: string; end: number; bench: boolean }[] {
   const out: { label: string; end: number; bench: boolean }[] = [];
   const add = (label: string, r: Vec, bench = false) => out.push({ label, end: wealth(r, amount).at(-1) as number, bench });
@@ -759,22 +763,3 @@ export function wealthEnds(a: Analysis, custom: Vec | null, amount: number): { l
 /** Where the headline sends the reader to see how much the in-sample answer depends on the window. */
 export const SENSITIVITY_POINTER = "the Sensitivity tab shows how much that depends on the window";
 
-/** The lines whose weights an optimiser chose with this chart's own prices. */
-const HINDSIGHT: ReadonlySet<string> = new Set([PORT_LABEL.gmv, PORT_LABEL.tangency]);
-
-/**
- * The wealth chart's title: which line ended highest, and where the benchmark ended. A GMV or Tangency
- * line that ends highest does so with weights chosen from the same prices, and the title says so.
- */
-export function wealthTitle(a: Analysis, custom: Vec | null, amount: number): string {
-  const fallback = "Portfolio Comparison: Cumulative Wealth";
-  if (!(Number.isFinite(amount) && amount > 0)) return fallback;
-  const ends = wealthEnds(a, custom, amount);
-  if (!ends.every((e) => Number.isFinite(e.end))) return fallback;
-  let best = ends[0];
-  for (const e of ends) if (e.end > best.end) best = e;
-  const bench = ends[ends.length - 1];
-  const hindsight = !best.bench && HINDSIGHT.has(best.label) ? " with hindsight weights" : "";
-  const lead = `${best.bench ? `The ${best.label}` : best.label} ended highest, at ${format(best.end, "usd0")} from ${format(amount, "usd0")}${hindsight}`;
-  return best.bench ? lead : `${lead}; the ${bench.label} ended at ${format(bench.end, "usd0")}`;
-}

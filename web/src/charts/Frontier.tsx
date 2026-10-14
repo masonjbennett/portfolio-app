@@ -1,7 +1,7 @@
 // The efficient frontier: the lowest volatility reachable at each return, with the assets, the
 // benchmark and the marked portfolios (Equal-Weight, GMV, Tangency, Custom) placed on it and NAMED ON
-// THE CHART. Shared by the Optimization tab (portfolio_app.py 1592-1656) and the Custom tab
-// (1753-1819), which differ only in what they pass.
+// THE CHART. Build's lead card (portfolio_app.py 1592-1656), which also carries the app's tab-5 frontier
+// (1753-1819): the reader's mix is its Custom point.
 //
 // Where it departs from the app, on purpose:
 // - Hover names the ONE point under the pointer. Both frontiers ask for hovermode "closest" (1653,
@@ -140,6 +140,8 @@ export interface FrontierProps {
   rf: number;
   /** Height in px; 480 on a desktop and 380 on a phone when left out. */
   height?: number;
+  /** Inside a Card, which states the finding: the title is kept for a screen reader and the caption left to the card. */
+  bare?: boolean;
 }
 
 // ---- pure helpers --------------------------------------------------------------------------------
@@ -179,7 +181,7 @@ export function frontierCaption(allowShort: boolean, rf: number, cal: FrontierCa
 }
 
 /**
- * The frontier data for one analysis: its frontier (or `points`, the Custom tab's own), each asset at
+ * The frontier data for one analysis: its frontier (or `points`, another sampling of it), each asset at
  * mean x 252 and sample std x sqrt(252) (1636-1637), the marks through portfolio_performance
  * (1760-1762) in the app's drawing order GMV, Tangency, Equal-Weight, Custom (1614-1634), the line
  * when there is a tangency, and the benchmark. `custom` is the normalised custom weights, or null.
@@ -1120,13 +1122,13 @@ const KEY_STYLE = { margin: `${tokens.space[2]} 0 0`, color: c.ink2, fontFamily:
 const KEY_ITEM = { display: "inline-block", whiteSpace: "nowrap", marginRight: tokens.space[4] } as const;
 const KEY_GLYPH = { verticalAlign: "middle", marginRight: tokens.space[1] } as const;
 
-export default function Frontier({ title, state, allowShort, rf, height }: FrontierProps) {
+export default function Frontier({ title, state, allowShort, rf, height, bare = false }: FrontierProps) {
   const phone = usePhone();
   const h = height ?? (phone ? 380 : 480);
   const plot = useMemo(() => checked(state), [state]);
   const cal = state.status === "ready" ? state.value.cal : undefined;
   return (
-    <ChartFrame title={title} subtitle={frontierCaption(allowShort, rf, cal)} state={plot} height={h}>
+    <ChartFrame title={title} subtitle={frontierCaption(allowShort, rf, cal)} state={plot} height={h} bare={bare}>
       {(value) => <FrontierPlot plot={value} height={h} />}
     </ChartFrame>
   );

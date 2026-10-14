@@ -142,10 +142,18 @@ const pulledBy = (id) => (infoOf(id)?.importers ?? []).map(rel).filter((i) => fi
 }
 
 // Each tab is reached, and reached only, through the entry's dynamic imports.
-for (const tab of ["Returns", "Risk", "Correlation", "Optimization", "Custom", "Sensitivity", "WalkForward"]) {
+for (const tab of ["Returns", "Risk", "Correlation", "Optimization", "Sensitivity", "WalkForward"]) {
   const home = chunks.filter((c) => c.moduleIds.map(rel).includes(`web/src/tabs/${tab}.tsx`));
   const lazy = home.length === 1 && !first.has(home[0]) && [...first].some((c) => c.dynamicImports.includes(home[0].fileName));
   check(lazy, `split: the ${tab} tab is its own chunk, loaded on demand`, home.map((c) => c.fileName).join());
+}
+// The app's Custom tab is the Your mix panel, drawn by the Optimization tab: it rides in that chunk, never the first.
+{
+  const homeOf = (path) => chunks.filter((c) => c.moduleIds.map(rel).includes(path));
+  const mix = homeOf("web/src/tabs/custom/YourMix.tsx");
+  const opt = homeOf("web/src/tabs/Optimization.tsx");
+  check(mix.length === 1 && opt.length === 1 && mix[0] === opt[0] && !first.has(mix[0]) && homeOf("web/src/tabs/Custom.tsx").length === 0,
+    "split: the Your mix panel loads with the Optimization tab, and there is no Custom tab chunk", mix.map((c) => c.fileName).join());
 }
 
 // Vite's own warning line (build.chunkSizeWarningLimit, 500 kB), so the warning cannot come back unseen.

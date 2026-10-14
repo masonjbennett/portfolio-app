@@ -1,8 +1,13 @@
-// The Portfolio Optimization tab (portfolio_app.py 1467-1703), in the approved order: a headline that
-// states what the maximum-Sharpe solve found, the efficient frontier that shows it, the three
-// portfolios' figures, their weights (with the redraw dot strips under them), the scorecard, the money,
-// return and risk shares, the growth of the starting amount, and the summary comparison. The arithmetic
-// lives in ./optimization/model.ts and ./optimization/scorecard.ts; this file lays it out.
+// Build a portfolio: the Portfolio Optimization tab (portfolio_app.py 1467-1703) with the app's Custom Portfolio
+// tab (1708-1837) folded into it. A headline that states what the maximum-Sharpe solve found; then the lead, the
+// efficient frontier with all four mixes on it and, beside it, the Your mix panel (./custom/YourMix.tsx), whose
+// sliders move the mix's point on the frontier; then the three portfolios' figures, their weights (with the
+// redraw dot strips under them), the scorecard, the money, return and risk shares, and the summary comparison.
+// The arithmetic lives in ./optimization/model.ts, ./optimization/scorecard.ts and ./custom/model.ts; this file
+// lays it out.
+//
+// The growth of the starting amount is not drawn here: Performance's growth card carries every line it drew (its
+// mixes view, with the mix's own line), and every ending value in its table.
 //
 // The redraws (200 re-solves of both optimised portfolios) are solved after the tab has painted, never
 // during a render: the strips and the scorecard's draw row say so until they land.
@@ -16,11 +21,11 @@
 // rest of the tab keeps rendering. In the app a failed solve calls st.stop() (1481-1483, 1492-1494),
 // which ends the script run: this tab, and tabs 5 and 6 after it, stop there.
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
-import Frontier, { frontierData } from "../charts/Frontier.tsx";
-import Wealth, { wealthData } from "../charts/Wealth.tsx";
+import Frontier, { frontierCaption, frontierData } from "../charts/Frontier.tsx";
 import { usePhone } from "../chrome/usePhone.ts";
 import AddColumns from "../components/AddColumns.tsx";
 import Boundary from "../components/Boundary.tsx";
+import Card from "../components/Card.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
 import FormulaLine from "../components/FormulaLine.tsx";
 import Plate from "../components/Plate.tsx";
@@ -34,6 +39,8 @@ import type { Vec } from "../lib/num.ts";
 import type { Custom } from "../lib/portfolio.ts";
 import type { Analysis, Level, LoadState, TabProps } from "../types.ts";
 import { FITTED, fittedSubs, tableSpan } from "./caption.ts";
+import { customView, frontierTitle as mixFrontierLine, type CustomView } from "./custom/model.ts";
+import YourMix from "./custom/YourMix.tsx";
 import FittedNote from "./FittedNote.tsx";
 import { optimizationFormula } from "./formula.ts";
 import Bars from "./optimization/Bars.tsx";
@@ -67,7 +74,6 @@ import {
   weightBars,
   weightsTitle,
   weightTable,
-  wealthTitle,
   type TableData,
 } from "./optimization/model.ts";
 import "./optimization/Optimization.css";
@@ -148,19 +154,26 @@ interface AddedMark {
   w: Vec;
 }
 
-// The efficient frontier (1592-1656), the tab's hero chart. `added` holds the solved added constructions,
-// the same array while nothing changes, for the frontier to mark.
-const FrontierSection = memo(function FrontierSection({ a, custom, added }: { a: Analysis; custom: Vec | null; added: readonly AddedMark[] }) {
+// The efficient frontier (1592-1656), Build's lead card: GMV, Tangency, Equal-Weight and the reader's mix
+// (Custom) on it, with the added constructions. `added` holds the solved added constructions, the same array
+// while nothing changes, for the frontier to mark. Its sub-line is how far the reader's mix sits from the
+// frontier (the app's tab-5 title, 1753-1819), so a slider beside it moves the point and the sentence together.
+const FrontierCard = memo(function FrontierCard({ a, v, custom, added }: { a: Analysis; v: CustomView; custom: Vec | null; added: readonly AddedMark[] }) {
   const state = useMemo(() => ({ status: "ready" as const, value: frontierData(a, custom, a.frontier, added) }), [a, custom, added]);
-  return (
-    <section className="opt-section" aria-labelledby="opt-frontier">
-      <Slug id="opt-frontier">Efficient Frontier</Slug>
-      <Frontier title={frontierTitle(a)} state={state} allowShort={a.allowShort} rf={a.rf} />
+  const title = frontierTitle(a);
+  const how = (
+    <>
+      <p className="opt-note">{frontierCaption(a.allowShort, a.rf, state.value.cal)}</p>
       <p className="opt-note">
         The frontier is the set of portfolios with the highest return for each level of volatility, over the prices on this page.
         {a.tangency ? " Any point on the dashed line can be reached by mixing the tangency portfolio with the risk-free asset." : ""}
       </p>
-    </section>
+    </>
+  );
+  return (
+    <Card id="build-frontier" title={title} sub={mixFrontierLine(a, v)} how={how}>
+      <Frontier title={title} state={state} allowShort={a.allowShort} rf={a.rf} bare />
+    </Card>
   );
 });
 
@@ -327,17 +340,6 @@ const RiskContribution = memo(function RiskContribution({ a, c, height }: { a: A
   );
 });
 
-// The growth of the starting amount (1660-1674): the shared Wealth chart.
-const Growth = memo(function Growth({ a, custom, amount, onAmount }: { a: Analysis; custom: Vec | null; amount: number; onAmount: (n: number) => void }) {
-  const state = useMemo(() => ({ status: "ready" as const, value: wealthData(a, custom) }), [a, custom]);
-  return (
-    <section className="opt-section" aria-labelledby="opt-wealth">
-      <Slug id="opt-wealth">Portfolio Comparison: Cumulative Wealth</Slug>
-      <Wealth title={wealthTitle(a, custom, amount)} state={state} amount={amount} onAmount={onAmount} />
-    </section>
-  );
-});
-
 // The summary comparison (1678-1703).
 const Summary = memo(function Summary({ a, c }: { a: Analysis; c: Custom }) {
   const table = useMemo(() => summaryTable(a, c), [a, c]);
@@ -359,11 +361,12 @@ const Summary = memo(function Summary({ a, c }: { a: Analysis; c: Custom }) {
 const NO_COLS: readonly AddedId[] = [];
 const NO_MARKS: readonly AddedMark[] = [];
 
-export default function Optimization({ analysis: a, settings, level, weights, requestSettings }: TabProps) {
+export default function Optimization({ analysis: a, settings, level, weights, setWeights, requestSettings }: TabProps) {
   const phone = usePhone();
   const barHeight = phone ? 320 : 400;
   // c changes with the analysis or the custom weights, so the cards that draw the custom book re-arm on either.
   const c = useMemo(() => customWeights(a, weights), [a, weights]);
+  const v = useMemo(() => customView(a, weights), [a, weights]);
   const custom = c.ok ? c.w : null;
   // The draw set on screen, per analysis: a new analysis starts again at the first set, the downloads' seed.
   const [draws, setDraws] = useState<{ a: Analysis; k: number }>({ a, k: 0 });
@@ -392,9 +395,8 @@ export default function Optimization({ analysis: a, settings, level, weights, re
   }, [a, shown]);
   const weightsKey = useMemo(() => [a, shown], [a, shown]);
   const scoreKey = useMemo(() => [c, redraws, shown, addedDraws], [c, redraws, shown, addedDraws]);
-  // Held steady, so a card whose own inputs did not change is skipped when the tab renders again (each
-  // card is memo'd): an explanation level reaches the tooltips, an amount the growth chart.
-  const onAmount = useCallback((n: number) => requestSettings({ amount: n }), [requestSettings]);
+  // Each card is memo'd, so one whose own inputs did not change is skipped when the tab renders again: an
+  // explanation level reaches the tooltips, an amount the scorecard's workbook.
   const strips = useMemo(
     () => (
       <Boundary name="Redraw dot strips" resetKey={redraws}>
@@ -408,9 +410,16 @@ export default function Optimization({ analysis: a, settings, level, weights, re
       <Boundary name="The headline" resetKey={a}>
         <Headline a={a} level={level} />
       </Boundary>
-      <Boundary name="Efficient frontier" resetKey={c}>
-        <FrontierSection a={a} custom={custom} added={marks} />
-      </Boundary>
+      {/* The lead: the frontier, then the panel that moves the mix on it. On a desktop wide enough for both they sit
+          side by side (./optimization/Optimization.css); narrower, the panel follows the chart. */}
+      <div className="build-lead">
+        <Boundary name="Efficient frontier" resetKey={v}>
+          <FrontierCard a={a} v={v} custom={custom} added={marks} />
+        </Boundary>
+        <Boundary name="Your mix" resetKey={v}>
+          <YourMix a={a} v={v} weights={weights} setWeights={setWeights} level={level} />
+        </Boundary>
+      </div>
       <Boundary name="The three portfolios" resetKey={a}>
         <Tiles a={a} level={level} />
       </Boundary>
@@ -432,9 +441,6 @@ export default function Optimization({ analysis: a, settings, level, weights, re
       </Boundary>
       <Boundary name="Risk contribution" resetKey={c}>
         <RiskContribution a={a} c={c} height={barHeight} />
-      </Boundary>
-      <Boundary name="Cumulative wealth" resetKey={c}>
-        <Growth a={a} custom={custom} amount={settings.amount} onAmount={onAmount} />
       </Boundary>
       <Boundary name="Summary comparison" resetKey={c}>
         <Summary a={a} c={c} />

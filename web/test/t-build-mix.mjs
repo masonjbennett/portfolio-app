@@ -1,31 +1,37 @@
-// The Custom Portfolio tab (src/tabs/Custom.tsx, its arithmetic in src/tabs/custom/model.ts),
-// portfolio_app.py 1708-1837.
+// The Your mix panel (src/tabs/custom/YourMix.tsx, its arithmetic in src/tabs/custom/model.ts): the app's Custom
+// Portfolio tab (portfolio_app.py 1708-1837), now the panel beside Build's frontier, drawn by the Optimization tab.
 //
 // (a) The weights and the five figures against the oracle's dump for cross and megacap, long-only and
 //     short: the default is exactly 1/n, the app's division reproduced, the port's weights and figures
 //     equal to it wherever the port builds a book, and refused, in numbers, where the app flips or
-//     blows one up (ledger:custom-normalisation, the tab's half).
-// (b) The frontier: the app's 60 targets, and a title whose every figure is held to the app's frontier.
-// (c) The sentences: the headline and the two chart titles, literal, from the oracle's numbers.
-// (d) The tab rendered in jsdom: headline, weights, plates, both charts labelled in the chart, the one
-//     table with both downloads, no NaN, the level switch, typing and dragging a weight, the reset.
-// Ledger entries closed here (the tab's half of each): custom-normalisation, boundary, failed-tangency,
+//     blows one up (ledger:custom-normalisation, the panel's half).
+// (b) The frontier: the mix is a point on Build's one frontier, and the line saying how far it sits is held to
+//     the app's own 60-point frontier.
+// (c) The verdict, literal; the mix's growth, now Performance's line; and the merge itself, figure by figure:
+//     every ending value the two deleted growth charts printed is in Performance's mixes table.
+// (d) The panel rendered in its chapter in jsdom: anchor, title, verdict, a slider and a typed field per asset,
+//     the plates with no info mark and their texts under How it is calculated, the frontier beside it moving with
+//     a typed weight, the one table under Show the numbers with both downloads, no NaN, the reset.
+// Ledger entries closed here (the panel's half of each): custom-normalisation, boundary, failed-tangency,
 // rf-live, numeric-downloads, downloads-everywhere, daily-rebalanced-label, short-bounds-copy,
 // frontier-hover. Each asserts the app's side, read out of portfolio_app.py or its dump, and the port's.
-// Not applicable to this tab: excess-kurtosis, in-sample-label (these figures are the full sample's, and
+// Not applicable to this panel: excess-kurtosis, in-sample-label (these figures are the full sample's, and
 // the weights are the reader's, not fitted), start-date-floor.
 import { readFileSync } from "node:fs";
 import { check, done, json, near, nearAll } from "./_assert.mjs";
-import { act, expectUncaught, render, text } from "./_dom.mjs";
+import { act, expectUncaught, openAll, render, text } from "./_dom.mjs";
 
 const { createElement: h, useState } = await import("react");
-const Custom = (await import("../src/tabs/Custom.tsx")).default;
+const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
+const { MIX_ANCHOR, MIX_TITLE } = await import("../src/tabs/custom/YourMix.tsx");
+const { sectionId } = await import("../src/App.tsx");
 const M = await import("../src/tabs/custom/model.ts");
+const OPT = await import("../src/tabs/optimization/model.ts");
+const { overviewWealth } = await import("../src/overview/OverviewWealth.tsx");
 const { summaryRow, portfolioPerformance, portfolioReturns } = await import("../src/lib/portfolio.ts");
 const { maxDrawdown } = await import("../src/lib/stats.ts");
-const { maxReturn } = await import("../src/lib/optimize.ts");
 const { frontierData, FRONTIER_HOVER } = await import("../src/charts/Frontier.tsx");
-const { CUSTOM_COVERS, wealthData } = await import("../src/charts/Wealth.tsx");
+const { wealthCaption, wealthPlot } = await import("../src/charts/Wealth.tsx");
 const { tipText } = await import("../src/content/tooltips.ts");
 const { csvText } = await import("../src/download.ts");
 const { format, MINUS } = await import("../src/format.ts");
@@ -103,8 +109,8 @@ for (const set of ["cross", "megacap"]) {
           ? `The weights add up to ${total}. Dividing by a negative total would turn every long into a short and every short into a long, so no custom portfolio is built. Make the weights add up to more than 0.05.`
           : `The weights add up to ${total}. Dividing by a total of 0.05 or less would multiply every weight by 20 or more, so no custom portfolio is built. Make the weights add up to more than 0.05.`;
         check(v.refusal?.detail === want, ck("ledger:custom-normalisation: the port says why, in numbers"), v.refusal?.detail);
-        check(M.headline(a, v) === `No custom portfolio: the weights add up to ${c.total < 0 ? `${total}, a net short` : `only ${total}`}.`,
-          ck("the headline names the refusal"), M.headline(a, v));
+        check(M.verdict(a, v) === `No custom portfolio: the weights add up to ${c.total < 0 ? `${total}, a net short` : `only ${total}`}.`,
+          ck("the verdict names the refusal"), M.verdict(a, v));
       }
     }
   }
@@ -115,7 +121,7 @@ for (const set of ["cross", "megacap"]) {
   const short = fixtureAnalysis("cross", { allowShort: true });
   const long = fixtureAnalysis("cross");
   const zero = M.customView(long, byTicker(long, []));
-  check(!zero.custom.ok && zero.custom.reason === "zero" && M.headline(long, zero) === "No custom portfolio: every weight is zero." &&
+  check(!zero.custom.ok && zero.custom.reason === "zero" && M.verdict(long, zero) === "No custom portfolio: every weight is zero." &&
     zero.refusal.detail === "Every weight is zero, so there is no portfolio to build. Set at least one weight above zero.",
     "zero: all-zero weights are refused and named (the app's warning at 1726, without its st.stop)");
   const flat = M.customView(short, byTicker(short, [0.3, -0.3]));
@@ -145,34 +151,36 @@ for (const set of ["cross", "megacap"]) {
     "reset: this analysis's entries go back to 1/n, another ticker's entry is kept (the app keys sliders by ticker, 1720)");
 }
 
+
 // ---- (b) the frontier ------------------------------------------------------------------------------------
+// One frontier: the mix is a point on Build's, the app's tab-4 frontier (80 targets, 1593). The app's tab 5 drew
+// its own on 60 targets (1756); the port does not draw it twice. How far the mix sits from it is an exact solve,
+// held below to the app's own 60-point frontier, so neither sampling enters the figure.
 for (const set of ["cross", "megacap"]) {
   const o = oracle(set);
   for (const mode of ["long", "short"]) {
     const tag = (s) => `${set} ${mode}: ${s}`;
     const a = fixtureAnalysis(set, { allowShort: mode === "short" });
-    const pts = M.customFrontier(a);
-    check(pts.length === 60 && pts[0].target === a.gmv.mu && pts[59].target === maxReturn(a.m, a.allowShort).mu && pts.every((p) => p.feasible),
-      tag("the tab's frontier: the app's 60 targets (1756), GMV return to the highest the bounds allow, every one solved"));
     const v = M.customView(a, {});
-    const d = frontierData(a, M.customWeights(v), pts);
+    const d = frontierData(a, M.customWeights(v));
     const cm = d.marks.find((m) => m.role === "custom");
     const c = o.modes[mode].custom.default;
-    check(d.points === pts && !!cm && close2(cm.mu, c.perf.mu) && close2(cm.sigma, c.perf.sigma), tag("the Custom mark is the app's custom point (1795-1798)"));
+    check(d.points === a.frontier && a.frontier.length === 80 && !!cm && close2(cm.mu, c.perf.mu) && close2(cm.sigma, c.perf.sigma),
+      tag("the Custom mark on Build's one frontier is the app's custom point (1795-1798)"));
 
-    // The title quotes the frontier's volatility at the custom mix's return. Held to the app's own
+    // The sub-line quotes the frontier's volatility at the custom mix's return. Held to the app's own
     // 60-point frontier: between the two targets that bracket that return, the curve rises, so the
     // quoted figure lies between their volatilities (to the rounding of a printed percent).
     const title = M.frontierTitle(a, v);
     const m = /^The frontier reaches the custom mix's (.+) return at (.+) volatility, against the mix's (.+)$/.exec(title);
-    check(!!m && m[1] === pct(c.perf.mu) && m[3] === pct(c.perf.sigma), tag("frontier title: the custom mix's return and volatility, the app's"), title);
+    check(!!m && m[1] === pct(c.perf.mu) && m[3] === pct(c.perf.sigma), tag("frontier line: the custom mix's return and volatility, the app's"), title);
     if (m) {
       const F = o.modes[mode].frontier60;
       const kept = F.kept.map((i) => ({ t: F.targets[i], s: F.sigma[i] }));
       const k = kept.findIndex((p) => p.t > c.perf.mu);
       const quoted = Number(m[2].replace(MINUS, "-").replace("%", "")) / 100;
       check(k > 0 && quoted >= kept[k - 1].s - 5e-5 && quoted <= kept[k].s + 5e-5 && quoted < c.perf.sigma,
-        tag("frontier title: the quoted frontier volatility sits on the app's frontier at that return, left of the mix"),
+        tag("frontier line: the quoted frontier volatility sits on the app's frontier at that return, left of the mix"),
         `${quoted} in [${kept[k - 1]?.s}, ${kept[k]?.s}]`);
     }
   }
@@ -187,19 +195,19 @@ function close2(x, y) {
   const T = o.modes.long;
   check(M.frontierTitle(long, agg) ===
     `The GMV portfolio returns more than the custom mix, ${pct(T.frontier80tight.muMin)} a year against ${pct(o.perColumn.AGG.mu)}, with less volatility, ${pct(T.tight.gmv.fun)} against ${pct(o.perColumn.AGG.sigma)}`,
-    "frontier title: all in AGG sits below the GMV return, and the GMV portfolio beats it on both counts", M.frontierTitle(long, agg));
+    "frontier line: all in AGG sits below the GMV return, and the GMV portfolio beats it on both counts", M.frontierTitle(long, agg));
   const onIt = M.customView(long, byTicker(long, long.tangency.w));
   check(M.frontierTitle(long, onIt) === `The custom mix sits on the frontier: no long-only mix returns ${pct(T.perf.tan.mu)} a year with less than its ${pct(T.perf.tan.sigma)} volatility`,
-    "frontier title: the tangency weights sit on the frontier", M.frontierTitle(long, onIt));
+    "frontier line: the tangency weights sit on the frontier", M.frontierTitle(long, onIt));
   const short = fixtureAnalysis("cross", { allowShort: true });
   check(M.frontierTitle(short, M.customView(short, byTicker(short, short.tangency.w))).includes(`no mix with weights inside [${MINUS}1, 1] returns`),
-    "frontier title: with shorting on, it names the bounds");
+    "frontier line: with shorting on, it names the bounds");
   check(M.frontierTitle(short, M.customView(short, byTicker(short, [-0.2, -0.2]))) === "The frontier with no custom portfolio on it: the weights entered were refused",
-    "frontier title: refused weights say so");
+    "frontier line: refused weights say so");
 }
 
-// ---- (c) the headline and the wealth title -------------------------------------------------------------
-const hindsightSeen = [];
+// ---- (c) the verdict, and the growth the chapter no longer draws -----------------------------------------
+const tanName = "Best-tradeoff (Tangency)";
 for (const set of ["cross", "megacap"]) {
   const o = oracle(set);
   for (const mode of ["long", "short"]) {
@@ -209,194 +217,201 @@ for (const set of ["cross", "megacap"]) {
     const tan = n3(-T.tight.tan.fun); // the app's tangency Sharpe, from its ftol-1e-15 re-run
     check(n3(a.tangency.sharpe) === tan, tag("the port's tangency Sharpe prints as the app's"), `${a.tangency.sharpe} vs ${-T.tight.tan.fun}`);
     const d = T.custom.default.perf;
-    check(M.headline(a, M.customView(a, {})) ===
-      `At equal weights, the custom mix returns ${pct(d.mu)} a year at ${pct(d.sigma)} volatility, a Sharpe ratio of ${n3(d.sharpe)}, below the tangency portfolio's ${tan}.`,
-      tag("headline: left alone, the custom mix is the equal-weight mix, and it says so"), M.headline(a, M.customView(a, {})));
+    const cmp = (s) => (n3(s) === tan ? "level with" : s < -T.tight.tan.fun ? "below" : "above");
+    check(M.verdict(a, M.customView(a, {})) === `Left at equal weights, its Sharpe ratio is ${cmp(d.sharpe)} the ${tan} of ${tanName}.`,
+      tag("verdict: left alone, the mix is the equal-weight mix, and it says so"), M.verdict(a, M.customView(a, {})));
     const u = T.custom.uneven;
-    check(M.headline(a, M.customView(a, byTicker(a, u.raw))) ===
-      `The custom mix returns ${pct(u.perf.mu)} a year at ${pct(u.perf.sigma)} volatility, a Sharpe ratio of ${n3(u.perf.sharpe)}, below the tangency portfolio's ${tan}.`,
-      tag("headline: uneven weights"), M.headline(a, M.customView(a, byTicker(a, u.raw))));
-    // The wealth title: the custom mix's end against the highest line. Default custom = equal weights.
-    const wd = wealthData(a, M.customWeights(M.customView(a, {})));
-    const ends = M.wealthEnds(wd, o.w0);
-    near(tag("wealth: the custom end is the app's equal-weight end (1832)"), ends.find((e) => e.role === "custom").end, T.wealth.ew.v.at(-1), 1e-10);
-    near(tag("wealth: the tangency end, within the app's SLSQP noise"), ends.find((e) => e.role === "tangency").end, T.wealth.tan.v.at(-1), 5e-3);
-    check(T.wealth.ew.i.at(-1) === o.returns.rows - 1, tag("wealth: the dump's last sample is the last day"));
-    const top = ends.filter((e) => e.role !== "custom").reduce((b, e) => (e.end > b.end ? e : b));
-    const hind = top.role === "gmv" || top.role === "tangency" ? " with hindsight weights" : "";
-    check(M.wealthTitle(wd, o.w0, true) === `${usd(o.w0)} in the custom mix ended at ${usd(T.wealth.ew.v.at(-1))} on ${o.clean.last}; ${top.label} ended highest, at ${usd(top.end)}${hind}`,
-      tag("wealth title: where the custom mix ended, against the highest line"), M.wealthTitle(wd, o.w0, true));
-    // D1's words on this tab as on Optimization: a GMV or tangency line that ends highest had its weights
-    // picked from the same prices, and the title says so.
-    hindsightSeen.push(top.role);
-    check(M.wealthTitle(wd, o.w0, true).endsWith(" with hindsight weights") === (top.role === "gmv" || top.role === "tangency"),
-      tag("wealth title: 'with hindsight weights' exactly when GMV or tangency ended highest"), `${top.role}: ${M.wealthTitle(wd, o.w0, true)}`);
+    check(M.verdict(a, M.customView(a, byTicker(a, u.raw))) === `Its Sharpe ratio is ${cmp(u.perf.sharpe)} the ${tan} of ${tanName}.`,
+      tag("verdict: uneven weights"), M.verdict(a, M.customView(a, byTicker(a, u.raw))));
+    // The custom line's growth, now on Performance's growth card (its mixes view): its end is the app's (1832).
+    const wd = overviewWealth(a, M.customWeights(M.customView(a, byTicker(a, u.raw))));
+    const plot = wealthPlot({ status: "ready", value: wd }, o.w0);
+    const mine = plot.value.lines.find((l) => l.role === "custom");
+    const wantEnd = o.w0 * portfolioReturns(a.returns, M.customView(a, byTicker(a, u.raw)).custom.w).reduce((g, r) => g * (1 + r), 1);
+    near(tag("growth: the mix's line on Performance ends where its own returns compound to"), mine?.end ?? NaN, wantEnd, 1e-10);
+    near(tag("growth: at 1/n the mix's end is the app's equal-weight end (1832), the line Performance draws for it"),
+      wealthPlot({ status: "ready", value: overviewWealth(a, a.ew) }, o.w0).value.lines.find((l) => l.role === "ew").end, T.wealth.ew.v.at(-1), 1e-10);
   }
 }
-check(hindsightSeen.some((r) => r === "gmv" || r === "tangency"),
-  "wealth title: the fixtures reach a hindsight line ending highest, so the check above is not vacuous", hindsightSeen.join(","));
 {
   const failed = fixtureAnalysis("cross", { allowShort: true, rf: 5 });
   check(failed.tangency === null, "setup: at a 500% rate the shorting tangency solve has no answer");
-  check(/, a Sharpe ratio of −?\d+\.\d{3}; the tangency solve failed, so there is no tangency Sharpe ratio to set it against\.$/.test(M.headline(failed, M.customView(failed, {}))),
-    "headline: a failed tangency is named, not compared", M.headline(failed, M.customView(failed, {})));
+  check(M.verdict(failed, M.customView(failed, {})) === `The tangency solve failed, so there is no ${tanName} Sharpe ratio to set the mix's against.`,
+    "verdict: a failed tangency is named, not compared", M.verdict(failed, M.customView(failed, {})));
   const long = fixtureAnalysis("cross");
   const tan = M.customView(long, byTicker(long, long.tangency.w));
-  check(M.headline(long, tan).endsWith(`, level with the tangency portfolio's ${n3(long.tangency.sharpe)}.`), "headline: the tangency weights tie the tangency", M.headline(long, tan));
-  const d = wealthData(long, tan.custom.w);
-  check(M.wealthTitle(d, 10000, true).endsWith(", the same as Tangency"), "wealth title: a tie at the printed dollar is called the same", M.wealthTitle(d, 10000, true));
-  check(M.wealthTitle(wealthData(long, null), 10000, false) === "Growth of $10,000 with no custom portfolio: the weights above were refused", "wealth title: refused weights say so");
-  const best = byTicker(long, [0, 0, 1]); // all gold, which beat everything in this sample
-  const bd = wealthData(long, M.customWeights(M.customView(long, best)));
-  const e = M.wealthEnds(bd, 10000);
-  if (e.find((x) => x.role === "custom").end > Math.max(...e.filter((x) => x.role !== "custom").map((x) => x.end))) {
-    check(M.wealthTitle(bd, 10000, true).endsWith(", more than any other line here"), "wealth title: a custom mix that ends highest says so");
-  } else {
-    check(!M.wealthTitle(bd, 10000, true).includes("more than any other"), "wealth title: a custom mix that does not end highest never claims to");
-  }
+  check(M.verdict(long, tan) === `Its Sharpe ratio is level with the ${n3(long.tangency.sharpe)} of ${tanName}.`, "verdict: the tangency weights tie the tangency", M.verdict(long, tan));
+  check(!/\d+\.\d+%/.test(M.verdict(long, M.customView(long, byTicker(long, [0.4, 0.1])))),
+    "verdict: no return or volatility, which the plates beside it print");
   check(M.platesNote(long).includes("rebalanced daily") && M.platesNote(long).includes(`at the ${pct(long.rf)} risk-free rate`) &&
     M.platesNote(long).includes(`from ${long.dates[0]} to ${long.asOf}`), "plates note: the span, the rate, and daily rebalancing", M.platesNote(long));
 }
 
-// ---- (d) the tab rendered ----------------------------------------------------------------------------
-const figures = (root) => [...root.querySelectorAll("figure.chart-frame")];
-const titleOf = (fig) => fig?.querySelector(".chart-title")?.textContent ?? "";
-const chartLabels = (fig) => [...(fig?.querySelectorAll(".direct-label text") ?? [])].map((t) => t.textContent);
-// The normalized weights table; the scorecard shares its ledger class and is held apart (.sc).
-const tables = (root) => [...root.querySelectorAll(".tbl:not(.sc)")];
+// The merge, figure by figure: the two growth charts this chapter drew (Optimization's of the three portfolios and
+// the benchmark, the Custom tab's with the mix) printed each line's ending value, and Performance's growth card
+// (its mixes view) carries every one in its table, at the same dollar, for an equal split, an uneven mix and a
+// refused one, long-only and shorting.
+for (const set of ["cross", "megacap"]) {
+  for (const mode of ["long", "short"]) {
+    const a = fixtureAnalysis(set, { allowShort: mode === "short" });
+    for (const [name, w] of [["1/n", {}], ["uneven", byTicker(a, [0.5, 0.1, 0.4])], ["refused", byTicker(a, Array(a.tickers.length).fill(0))]]) {
+      const c = OPT.customWeights(a, w);
+      const custom = c.ok ? c.w : null;
+      const perf = wealthPlot({ status: "ready", value: overviewWealth(a, custom) }, 10000).value.lines.map((l) => usd(l.end));
+      const old = OPT.wealthEnds(a, custom, 10000).map((e) => usd(e.end));
+      const missing = old.filter((x) => !perf.includes(x));
+      check(old.length >= 4 && missing.length === 0, `merge ${set} ${mode} ${name}: every ending value the deleted growth charts printed is in Performance's mixes table`,
+        `missing ${missing.join(", ")} of ${old.join(", ")}`);
+    }
+  }
+}
+
+// ---- (d) the panel rendered, in its chapter ------------------------------------------------------------------
+// jsdom lays nothing out; give boxes a size, as a browser would, so the frontier draws.
+const rect = HTMLElement.prototype.getBoundingClientRect;
+HTMLElement.prototype.getBoundingClientRect = function () {
+  return { x: 0, y: 0, top: 0, left: 0, right: 720, bottom: 360, width: 720, height: 360, toJSON() {} };
+};
+const mixOf = (root) => root.querySelector(".build-mix");
+const frontierCard = (root) => root.querySelector("#build-frontier");
+const chartLabels = (el) => [...(el?.querySelectorAll(".direct-label text") ?? [])].map((t) => t.textContent);
+// The normalized weights table, inside the panel's Show the numbers.
+const tables = (root) => [...(mixOf(root)?.querySelectorAll(".tbl") ?? [])];
 const buttons = (tb) => [...tb.querySelectorAll(".tbl-dl button")].map((b) => b.textContent);
-const plates = (root) => [...root.querySelectorAll(".cust-plates .plate")].map((p) => ({
+const plates = (root) => [...(mixOf(root)?.querySelectorAll(".cust-plates .plate") ?? [])].map((p) => ({
   label: p.querySelector(".plate-label span")?.textContent,
   value: p.querySelector(".plate-value")?.textContent,
-  tip: p.querySelector(".tip-text")?.textContent,
+  mark: !!p.querySelector(".tip-mark, .tip-text"),
 }));
 const rows = (root) => [...root.querySelectorAll(".cust-row")];
 const field = (row) => row.querySelector('input[type="number"]');
 const slider = (row) => row.querySelector('input[type="range"]');
+const fold = (card, label) => {
+  const b = [...(card?.querySelectorAll(".card-fold-button") ?? [])].find((x) => x.textContent === label);
+  if (b && b.getAttribute("aria-expanded") === "false") act(() => b.click());
+  return card?.querySelector(`[data-fold=${label === "Show the numbers" ? "numbers" : "how"}]`);
+};
 const setValue = (el, value) =>
   act(() => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(el, value);
     el.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
 const clean = (s) => !/NaN|undefined|Infinity|null|\[object/.test(s);
+const verdictOf = (root) => mixOf(root)?.querySelector(".card-sub")?.textContent;
+const quietRender = (el) => quietly(() => render(el));
 
-// A tab that holds its own weights, as useWorkbench does, so typing reaches the page.
+// A chapter that holds its own weights, as useWorkbench does, so typing reaches the page.
 let latest = null;
 function Harness({ a, init = {}, level = "plain" }) {
   const [w, setW] = useState(init);
   latest = w;
-  return h(Custom, tabProps(a, { weights: w, setWeights: setW, level }));
+  return h(Optimization, tabProps(a, { weights: w, setWeights: setW, level }));
 }
 
 {
   const o = oracle("cross");
   const a = fixtureAnalysis("cross");
-  const r = render(h(Harness, { a }));
+  const r = quietRender(h(Harness, { a }));
   const root = r.container;
-  const t = () => text(root);
+  const mix = () => mixOf(root);
+  const t = () => text(mix());
   const v0 = M.customView(a, {});
-  check(root.querySelector(".cust-headline")?.textContent === M.headline(a, v0), "page: the headline is the model's sentence", root.querySelector(".cust-headline")?.textContent);
-  check(t().includes("Custom Portfolio Builder") && t().includes("Weight total: 1.00."), "page: the app's heading (1709) and the total line (1729)");
-  check(clean(t()), "page: no NaN, undefined, Infinity or null in the text", t().match(/.{30}(NaN|undefined|Infinity|null).{30}/)?.[0]);
+  check(mix()?.id === MIX_ANCHOR && MIX_ANCHOR === sectionId("custom") && mix().getAttribute("tabindex") === "-1",
+    "anchor: the panel is the part an older ?tab=custom link lands on (App's sectionId), and takes focus there");
+  check(mix().querySelector(".card-title")?.textContent === MIX_TITLE && MIX_TITLE === "Your mix (Custom)", "panel: titled by its plain name, the scorecard's beside it");
+  check(verdictOf(root) === M.verdict(a, v0), "panel: the sub-line is the verdict", verdictOf(root));
+  check(t().includes("Weight total: 1.00.") && t().includes("Drag or type a weight for each asset, from 0 to 1; every figure follows."),
+    "panel: what to do, in one line, and the total line (1729)", t().slice(0, 200));
+  check(clean(text(root)), "page: no NaN, undefined, Infinity or null in the text", text(root).match(/.{30}(NaN|undefined|Infinity|null).{30}/)?.[0]);
 
   // The editor: one row per ticker, in the entered order, at 1/n, bounded [0, 1] long-only.
   const rs = rows(root);
   check(rs.length === 5 && rs.map((x) => x.querySelector(".cust-ticker").textContent).join() === a.tickers.join(), "editor: one row per ticker, in the entered order");
   check(rs.every((x) => field(x).value === "0.2" && field(x).min === "0" && field(x).max === "1" && slider(x).min === "0" && slider(x).step === "0.01"),
-    "editor: every field at 1/n, from 0 to 1 on the app's 0.01 grid (1719-1720)");
+    "editor: a slider AND a typed field per asset, every one at 1/n, from 0 to 1 on the app's 0.01 grid (1719-1720)");
   check(!root.querySelector(".cust-reset"), "editor: nothing to reset while every weight is at 1/n");
 
-  // The plates, the app's labels and numbers (1745-1749), at the current level.
+  // The plates, the app's labels and numbers (1745-1749), no info mark on any.
   const d = o.modes.long.custom.default.perf;
   const ps = plates(root);
   const mdd = maxDrawdown(portfolioReturns(a.returns, a.ew), true);
   check(ps.map((p) => p.label).join() === "Return,Volatility,Sharpe,Sortino,Max DD" &&
     ps.map((p) => p.value).join() === [pct(d.mu), pct(d.sigma), n3(d.sharpe), n3(d.sortino), pct(mdd)].join(),
     "plates: the app's five figures, the port's Max DD from the amount invested", ps.map((p) => `${p.label} ${p.value}`).join(" | "));
-  check(ps.map((p) => p.tip).join("|") === ["return", "volatility", "sharpe", "sortino", "max_dd"].map((k) => tipText(k, "plain")).join("|"),
-    "plates: each carries the app's tooltip at the current level");
+  check(ps.every((p) => !p.mark) && !mix().querySelector("button.tip-mark"), "plates: no info mark on the panel");
+  // Their texts, all three levels at once, under How it is calculated (HowTips), word for word.
+  const how = fold(mix(), "How it is calculated");
+  const tips = [...(how?.querySelectorAll(".how-tip") ?? [])];
+  check(tips.map((x) => x.getAttribute("data-tip")).join() === "return,volatility,sharpe,sortino,max_dd" &&
+    tips.every((x) => ["plain", "finance", "formula"].every((l) => text(x.querySelector(`[data-level=${l}]`)).endsWith(tipText(x.getAttribute("data-tip"), l)))),
+    "plates: each figure's former info mark prints its three texts under How it is calculated, the app's words");
 
-  // The two charts, labelled in the chart.
-  const [fr, we] = figures(root);
-  check(figures(root).length === 2 && titleOf(fr) === M.frontierTitle(a, v0) && titleOf(we) === M.wealthTitle(wealthData(a, a.ew), 10000, true),
-    "charts: the frontier and the wealth chart, each titled by its finding", figures(root).map(titleOf).join(" | "));
+  // The frontier beside it, labelled in the chart, the mix's distance as its sub-line.
+  const fr = frontierCard(root);
+  check(fr && fr.querySelector(".card-title")?.textContent === OPT.frontierTitle(a) && fr.querySelector(".card-sub")?.textContent === M.frontierTitle(a, v0),
+    "frontier: titled where Tangency and GMV sit, and its sub-line is how far the mix sits from it", fr?.querySelector(".card-sub")?.textContent);
   const fl = chartLabels(fr);
   check([...a.tickers, a.benchLabel, "GMV", "Tangency", "Equal-Weight", "Custom"].every((n) => fl.includes(n)) && !fr.querySelector(".recharts-legend-wrapper"),
     "frontier: every asset, the benchmark and the four portfolios named on the chart, no legend", fl.join());
-  check(fr.querySelectorAll(".frontier-line .recharts-scatter-symbol").length === 60 && a.frontier.length === 80,
-    "frontier: the tab draws its own 60-point frontier (1756), not the Optimization tab's 80");
-  const wl = chartLabels(we);
-  check(["Equal-Weight", "GMV", "Tangency", "Custom", a.benchLabel].every((n) => wl.some((l) => l.startsWith(`${n} $`))), "wealth: each line named at its end", wl.join());
-  const wsub = () => text(figures(root)[1].querySelector(".chart-sub"));
-  check(wsub().endsWith(` ${CUSTOM_COVERS}`), "wealth: at 1/n the caption says Custom's line covers Equal-Weight's", wsub());
+  check(fr.querySelectorAll(".frontier-line .recharts-scatter-symbol").length === a.frontier.length && a.frontier.length === 80,
+    "frontier: one curve, Build's 80 targets; the app's second 60-point curve is not drawn again");
+  check(!root.querySelector(".amount-field") && !root.querySelector(".cust-section"), "chapter: no growth chart of the mix here; Performance draws it");
 
-  // The one table, with both downloads.
+  // The one table, with both downloads, under Show the numbers.
+  check(tables(root).length === 0, "table: nothing drawn until Show the numbers is opened");
+  fold(mix(), "Show the numbers");
   const tb = tables(root);
-  check(tb.length === 1 && tb[0].querySelector("caption")?.textContent === "Normalized Weights" && buttons(tb[0]).join() === "Download CSV,Download Excel",
+  check(tb.length === 1 && tb[0].querySelector("caption .tbl-title")?.textContent === "Normalized Weights" && buttons(tb[0]).join() === "Download CSV,Download Excel",
     "table: Normalized Weights, with CSV and Excel downloads", tb.map((x) => x.querySelector("caption")?.textContent).join());
   const cells = [...tb[0].querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((c) => c.textContent));
   check(cells.length === 5 && cells.every((c, i) => c[0] === a.tickers[i] && c[1] === "0.20" && c[2] === "20.00%"),
     "table: a row per ticker, entered 0.20, normalised 20.00% (1734-1737)", JSON.stringify(cells[0]));
 
-  // The level switch changes the tooltip text.
-  r.rerender(h(Harness, { a, level: "formula" }));
-  const tipsF = plates(root).map((p) => p.tip);
-  check(tipsF[2] === tipText("sharpe", "formula") && tipsF[2] !== tipText("sharpe", "plain"), "level: the Advanced switch changes the Sharpe tooltip", tipsF[2]);
-
-  // Typing a weight: stored held to the bounds, and the page follows.
+  // Typing a weight: stored held to the bounds, and the panel and the frontier follow, live.
+  const markAt = () => {
+    const g = fr.querySelector(".frontier-mark--custom .recharts-scatter-symbol, .frontier-mark--custom path");
+    return g ? g.outerHTML : "";
+  };
+  const before = markAt();
   setValue(field(rows(root)[0]), "0.5");
   check(latest.VTI === 0.5 && Object.keys(latest).join() === "VTI", "typing: 0.5 for VTI is stored for VTI alone", JSON.stringify(latest));
   const v1 = M.customView(a, { VTI: 0.5 });
-  check(root.querySelector(".cust-headline").textContent === M.headline(a, v1) && M.headline(a, v1).startsWith("The custom mix returns"),
-    "typing: the headline follows the new weights", root.querySelector(".cust-headline").textContent);
+  check(verdictOf(root) === M.verdict(a, v1) && verdictOf(root).startsWith("Its Sharpe ratio is "), "typing: the verdict follows the new weights", verdictOf(root));
   check(t().includes("Weight total: 1.30.") && [...tables(root)[0].querySelectorAll("tbody tr")][0].children[2].textContent === pct(0.5 / 1.3),
     "typing: the total and the normalised weight follow", t().match(/Weight total: [^.]+\.\d+/)?.[0]);
   check(plates(root)[2].value === n3(portfolioPerformance(v1.custom.w, a.m, a.S, a.rf).sharpe), "typing: the plates follow");
-  check(!wsub().includes(CUSTOM_COVERS) && wsub().endsWith(" whole period's prices."), "typing: a typed mix, and the wealth caption no longer says Custom covers Equal-Weight", wsub());
+  check(frontierCard(root).querySelector(".card-sub")?.textContent === M.frontierTitle(a, v1) && markAt() !== before && markAt() !== "",
+    "typing: the frontier's sub-line and the mix's point move with it, in the same render", frontierCard(root).querySelector(".card-sub")?.textContent);
   setValue(field(rows(root)[1]), "1.5");
   check(latest.AGG === 1 && latest.VTI === 0.5, "typing: 1.5 is held to the top of the range, 1, and VTI's entry stays", JSON.stringify(latest));
   setValue(field(rows(root)[2]), "-0.3");
   check(latest.GLD === 0, "typing: long-only, a negative weight is held to 0", JSON.stringify(latest));
-  const before = JSON.stringify(latest);
+  const was = JSON.stringify(latest);
   setValue(field(rows(root)[3]), "");
-  check(JSON.stringify(latest) === before, "typing: an empty field stores nothing");
+  check(JSON.stringify(latest) === was, "typing: an empty field stores nothing");
   setValue(slider(rows(root)[4]), "0.35");
   check(latest.EFA === 0.35, "dragging: the slider stores its value", JSON.stringify(latest));
   const reset = root.querySelector(".cust-reset");
-  check(!!reset, "reset: offered once a weight is set");
+  check(!!reset && text(reset) === "Reset to equal weights", "reset: offered once a weight is set");
   if (reset) act(() => reset.click());
-  check(Object.keys(latest).length === 0 && root.querySelector(".cust-headline").textContent === M.headline(a, v0), "reset: every weight back to 1/n, and the headline with them");
-  check(wsub().endsWith(` ${CUSTOM_COVERS}`), "reset: back at 1/n, the wealth caption says Custom covers Equal-Weight again", wsub());
+  check(Object.keys(latest).length === 0 && verdictOf(root) === M.verdict(a, v0), "reset: every weight back to 1/n, and the verdict with them");
+
+  // The level reaches the formula line under the panel's figures; nothing on the panel hides a level.
+  r.rerender(h(Harness, { a, level: "formula" }));
+  const line = mix().querySelector(".formula-line");
+  check(!!line && /at the tangency weights, in-sample: \d\.\d{3}$/.test(text(line.querySelector(".formula-line-symbols") ?? line)),
+    "level: at Formula the panel's line sets the mix's Sharpe ratio beside the tangency's", line ? text(line) : "none");
   r.unmount();
 }
 
 {
-  // The starting amount reaches the wealth chart and its title (1823-1837, the rail's field at 724-725).
-  const a = fixtureAnalysis("cross");
-  const props = tabProps(a);
-  const r = render(h(Custom, { ...props, settings: { ...props.settings, amount: 25000 } }));
-  const we = figures(r.container)[1];
-  check(titleOf(we) === M.wealthTitle(wealthData(a, a.ew), 25000, true) && titleOf(we).startsWith("$25,000 in the custom mix ended at ") &&
-    text(we).includes("Growth of $25,000"), "amount: $25,000 invested is what the wealth chart and its title start from", titleOf(we));
-  r.unmount();
-}
-
-{
-  // The wealth chart carries the amount field, and says which lines are hypothetical.
-  const a = fixtureAnalysis("cross");
-  const calls = [];
-  const r = render(h(Custom, tabProps(a, { requestSettings: (p) => calls.push(p) })));
-  const we = figures(r.container)[1];
-  const input = we.querySelector(".amount-field input");
-  act(() => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, "12000");
-    input.dispatchEvent(new window.Event("input", { bubbles: true }));
-  });
-  check(JSON.stringify(calls) === JSON.stringify([{ amount: 12000 }]), "amount: the Custom tab's wealth chart edits the same starting amount", JSON.stringify(calls));
-  check(text(we.querySelector(".chart-sub")).endsWith(`GMV and Tangency are hypothetical: weights chosen with the whole period's prices. ${CUSTOM_COVERS}`),
-    "hypothetical: the Custom tab's wealth caption names GMV and Tangency as hypothetical", text(we.querySelector(".chart-sub")));
-  const tb = r.container.querySelector(".tbl:not(.sc)");
-  check(tb && !tb.querySelector(".tbl-span"), "spans: the normalized weights come from no dates, and their table claims none");
+  // megacap: seven assets, the editor and the table carry every one.
+  const a = fixtureAnalysis("megacap");
+  const r = quietRender(h(Optimization, tabProps(a)));
+  fold(mixOf(r.container), "Show the numbers");
+  check(rows(r.container).length === 7 && rows(r.container).every((x) => field(x).value === "0.1429") &&
+    tables(r.container)[0]?.querySelectorAll("tbody tr").length === 7 && clean(text(mixOf(r.container))),
+    "megacap: seven rows at 1/7, seven table rows, no NaN");
   r.unmount();
 }
 
@@ -409,16 +424,6 @@ function Harness({ a, init = {}, level = "plain" }) {
   near("Max DD: the app's path, starting a day in, reports none", summaryRow(cols, [0.5, 0.5], syn.m, syn.S, 0, false).mdd, 0, 0, 1e-15);
 }
 
-{
-  // megacap: seven assets, the editor and the table carry every one.
-  const a = fixtureAnalysis("megacap");
-  const r = render(h(Custom, tabProps(a)));
-  check(rows(r.container).length === 7 && rows(r.container).every((x) => field(x).value === "0.1429") &&
-    tables(r.container)[0]?.querySelectorAll("tbody tr").length === 7 && clean(text(r.container)),
-    "megacap: seven rows at 1/7, seven table rows, no NaN");
-  r.unmount();
-}
-
 // ---- ledger ----------------------------------------------------------------------------------------------
 // ledger:custom-normalisation, the page. The app plots the tiny-total book at 1732; the port builds none
 // and says so, with no blown-up weight anywhere on the page.
@@ -427,70 +432,74 @@ function Harness({ a, init = {}, level = "plain" }) {
   const a = fixtureAnalysis("cross", { allowShort: true });
   for (const k of ["tinyTotal", "negTotal"]) {
     const c = o.modes.short.custom[k];
-    const r = render(h(Custom, tabProps(a, { weights: byTicker(a, c.raw) })));
+    const r = quietRender(h(Optimization, tabProps(a, { weights: byTicker(a, c.raw) })));
+    openAll(r);
     const t = text(r.container);
     const v = M.customView(a, byTicker(a, c.raw));
-    const [fr, we] = figures(r.container);
     const blown = c.w.map(pct).filter((s) => s !== "0.00%");
-    check(t.includes(v.refusal.detail) && r.container.querySelector('.cust-note--error[role="alert"]')?.textContent === v.refusal.detail,
+    check(t.includes(v.refusal.detail) && mixOf(r.container).querySelector('.cust-note--error[role="alert"]')?.textContent === v.refusal.detail,
       `ledger:custom-normalisation: ${k}: the port states the refusal literally`, t.slice(0, 200));
-    check(blown.every((s) => !t.includes(s)) && !chartLabels(fr).includes("Custom") && !chartLabels(we).some((l) => l.startsWith("Custom")),
-      `ledger:custom-normalisation: ${k}: none of the app's weights (${blown.join(", ")}) and no Custom point or line on the page`);
+    // Where the mix is shown (the panel, the frontier): the equal-weight column elsewhere on the chapter rightly
+    // prints 20.00% for five assets, which is not the mix.
+    const mine = `${text(mixOf(r.container))} ${text(frontierCard(r.container))}`;
+    check(blown.every((s) => !mine.includes(s)) && !chartLabels(frontierCard(r.container)).includes("Custom"),
+      `ledger:custom-normalisation: ${k}: none of the app's weights (${blown.join(", ")}) where the mix is shown, and no Custom point on the frontier`);
     check(tables(r.container).length === 0 && t.includes(`No normalized weights: ${v.refusal.short}.`) &&
-      plates(r.container).every((p) => p.value === "–") && clean(t),
+      plates(r.container).every((p) => p.value === "–") && clean(text(mixOf(r.container))),
       `ledger:custom-normalisation: ${k}: no weights table, dashes in the plates, each saying why`);
     r.unmount();
   }
 }
 
-// ledger:boundary, the tab's half. The app: all-zero sliders call st.stop() at 1727, so nothing after it
-// in tab 5 is drawn and tab 6 is never built. The port: one refusal, the charts still drawn; and a card
-// that throws is replaced by one line naming it while the rest of the tab renders.
+// ledger:boundary, the panel's half. The app: all-zero sliders call st.stop() at 1727, so nothing after it
+// in tab 5 is drawn and tab 6 is never built. The port: one refusal, the frontier still drawn; and a card
+// that throws is replaced by one line naming it while the rest of the chapter renders.
 {
   check(/if raw_total == 0:\n\s+st\.warning\("All weights are zero\. Adjust at least one slider\."\)\n\s+st\.stop\(\)/.test(lines(1725, 1727)),
     "ledger:boundary: the app's tab 5 stops the whole script on all-zero weights (1725-1727)");
   const a = fixtureAnalysis("cross");
-  const r = render(h(Custom, tabProps(a, { weights: byTicker(a, []) })));
-  const [fr, we] = figures(r.container);
-  check(r.container.querySelector(".cust-headline")?.textContent === "No custom portfolio: every weight is zero." &&
-    fr?.querySelector("svg.recharts-surface") && we?.querySelector("svg.recharts-surface") && rows(r.container).length === 5,
-    "ledger:boundary: the port names the refusal and keeps the editor and both charts");
+  const r = quietRender(h(Optimization, tabProps(a, { weights: byTicker(a, []) })));
+  check(verdictOf(r.container) === "No custom portfolio: every weight is zero." &&
+    frontierCard(r.container)?.querySelector("svg.recharts-surface") && rows(r.container).length === 5,
+    "ledger:boundary: the port names the refusal and keeps the editor and the frontier");
   r.unmount();
-  const broken = { ...a, benchStats: null };
-  const b = quietly(() => expectUncaught(() => render(h(Custom, tabProps(broken)))));
+  // A frontier that throws: its card is one line, and the panel beside it keeps its sliders, figures and table.
+  const broken = Object.create(a);
+  Object.defineProperty(broken, "frontier", { get() { throw new Error("no frontier"); } });
+  const b = quietly(() => expectUncaught(() => render(h(Optimization, tabProps(broken)))));
+  fold(mixOf(b.container), "Show the numbers");
   const bt = text(b.container);
-  check(bt.includes("Custom portfolio on the efficient frontier could not be shown.") && figures(b.container).length === 1 &&
-    plates(b.container).length === 5 && tables(b.container).length === 1 && b.container.querySelector(".cust-headline"),
-    "ledger:boundary: a frontier that throws leaves one line naming it; the headline, plates, wealth chart and table remain", bt.slice(0, 300));
+  check(bt.includes("Efficient frontier could not be shown.") && !frontierCard(b.container) &&
+    plates(b.container).length === 5 && tables(b.container).length === 1 && rows(b.container).length === 5 && !!verdictOf(b.container),
+    "ledger:boundary: a frontier that throws leaves one line naming it; the verdict, editor, plates and table remain", bt.slice(0, 300));
   b.unmount();
 }
 
-// ledger:failed-tangency, the tab's half. The app falls back to the equal weights for a missing tangency
+// ledger:failed-tangency, the panel's half. The app falls back to the equal weights for a missing tangency
 // (1759), reached only because tab 4 stops the script first (1494-1502). The port draws no tangency.
 {
   check(/tan_w2 = st\.session_state\.get\("tan_w", ew_weights\)/.test(lines(1759, 1759)),
     "ledger:failed-tangency: the app's tab 5 would plot equal weights as Tangency (1759)");
   const a = fixtureAnalysis("cross", { allowShort: true, rf: 5 });
-  const r = render(h(Custom, tabProps(a)));
-  const [fr, we] = figures(r.container);
-  check(r.container.querySelector(".cust-headline")?.textContent.includes("the tangency solve failed") && text(fr).includes("Tangency failed"),
-    "ledger:failed-tangency: the port's headline and frontier caption say the tangency solve failed");
-  check(!chartLabels(fr).includes("Tangency") && !chartLabels(we).some((l) => l.startsWith("Tangency")) && clean(text(r.container)),
-    "ledger:failed-tangency: no Tangency point or line, and no stand-in", chartLabels(fr).join());
+  const r = quietRender(h(Optimization, tabProps(a)));
+  const fr = frontierCard(r.container);
+  check(verdictOf(r.container)?.startsWith("The tangency solve failed") && text(fold(fr, "How it is calculated")).includes("Tangency failed"),
+    "ledger:failed-tangency: the port's verdict and frontier caption say the tangency solve failed");
+  check(!chartLabels(fr).includes("Tangency") && clean(text(mixOf(r.container))), "ledger:failed-tangency: no Tangency point, and no stand-in", chartLabels(fr).join());
   r.unmount();
 }
 
-// ledger:rf-live, the tab's half. The app scores tab 5 at the rate frozen at Run (1087, read back at
+// ledger:rf-live, the panel's half. The app scores tab 5 at the rate frozen at Run (1087, read back at
 // 1158); the port's figures are the analysis's, which the page rebuilds when the rate is edited.
 {
   check(/st\.session_state\.rf = rf_annual/.test(lines(1087, 1087)) && /^rf = st\.session_state\.rf$/.test(ORACLE[1157]),
     "ledger:rf-live: the app freezes rf in session state at Run (1087) and every tab reads it back (1158)");
   const at5 = fixtureAnalysis("cross", { rf: 0.05 });
   const base = fixtureAnalysis("cross");
-  // Each render is read and unmounted at once, so no tab is left mounted for its after-paint work to land
+  // Each render is read and unmounted at once, so no chapter is left mounted for its after-paint work to land
   // outside the test.
   const once = (a, read) => {
-    const r = render(h(Custom, tabProps(a)));
+    const r = quietRender(h(Optimization, tabProps(a)));
     try {
       return read(r.container);
     } finally {
@@ -499,11 +508,11 @@ function Harness({ a, init = {}, level = "plain" }) {
   };
   const sharpe = (a) => once(a, (c) => plates(c)[2].value);
   const s5 = n3(portfolioPerformance(at5.ew, at5.m, at5.S, 0.05).sharpe);
-  check(sharpe(at5) === s5 && s5 !== sharpe(base) && once(at5, (c) => c.textContent.includes("at the 5.00% risk-free rate")),
+  check(sharpe(at5) === s5 && s5 !== sharpe(base) && once(at5, (c) => text(mixOf(c)).includes("at the 5.00% risk-free rate")),
     "ledger:rf-live: the Sharpe plate and its note follow the analysis's rate", `${sharpe(at5)} vs ${s5}`);
 }
 
-// ledger:numeric-downloads and ledger:downloads-everywhere, the tab's halves. The app: its one table holds
+// ledger:numeric-downloads and ledger:downloads-everywhere, the panel's halves. The app: its one table holds
 // "{:.2%}" strings (1736) and has no download at all (no download_button anywhere in 1708-1837). The
 // port: CSV and Excel, of raw numbers.
 {
@@ -517,79 +526,80 @@ function Harness({ a, init = {}, level = "plain" }) {
   check(csv[0].join() === "Ticker,Entered,Normalized weight" && csv.slice(1).every((c, i) => c[0] === a.tickers[i] && Number(c[1]) === v.raw[i] && Number(c[2]) === v.custom.w[i]),
     "ledger:numeric-downloads: the port's CSV carries the raw numbers, full precision", csv[1]?.join());
   check(st.value.every((row) => typeof row.entered === "number" && typeof row.weight === "number"), "ledger:numeric-downloads: the rows hold numbers, never strings");
-  const r = render(h(Custom, tabProps(a, { weights: byTicker(a, v.raw) })));
-  check(tables(r.container).length === 1 && buttons(tables(r.container)[0]).join() === "Download CSV,Download Excel",
-    "ledger:downloads-everywhere: the port's weights table downloads as CSV and Excel");
+  const r = quietRender(h(Optimization, tabProps(a, { weights: byTicker(a, v.raw) })));
+  fold(mixOf(r.container), "Show the numbers");
+  check(tables(r.container).length === 1 && buttons(tables(r.container)[0]).join() === "Download CSV,Download Excel" && !tables(r.container)[0].querySelector(".tbl-span"),
+    "ledger:downloads-everywhere: the port's weights table downloads as CSV and Excel, and, typed weights, claims no span");
   r.unmount();
 }
 
-// ledger:daily-rebalanced-label, the tab's half. The app's tab 5 scores and plots R @ w (1740, 1825-1831),
+// ledger:daily-rebalanced-label, the panel's half. The app's tab 5 scores and plots R @ w (1740, 1825-1831),
 // fixed weights applied every day, and never says so.
 {
   check(/cust_port_ret = stock_returns @ custom_w/.test(lines(1740, 1740)) && /"Custom": cust_port_ret/.test(lines(1825, 1831)) && !/rebalanc/i.test(TAB5),
     "ledger:daily-rebalanced-label: the app's tab 5 applies fixed weights every day (1740, 1829) and never says so");
   const a = fixtureAnalysis("cross");
-  const r = render(h(Custom, tabProps(a)));
-  const [, we] = figures(r.container);
-  check(r.container.querySelector(".cust-plates + .cust-note")?.textContent.includes("held fixed and rebalanced daily") && text(we).includes("rebalanced daily to the target weights"),
-    "ledger:daily-rebalanced-label: the port's figures and wealth chart both say rebalanced daily");
+  const r = quietRender(h(Optimization, tabProps(a)));
+  check(mixOf(r.container).querySelector(".cust-plates + .cust-note")?.textContent.includes("held fixed and rebalanced daily") &&
+    /rebalanced daily to the target weights/.test(wealthCaption(10000, a.dates[0], a.asOf)),
+    "ledger:daily-rebalanced-label: the port's figures say rebalanced daily, and so does the growth chart that carries the mix (Performance)");
   r.unmount();
 }
 
-// ledger:short-bounds-copy, the tab's half. The app's toggle help calls the shorting frontier
-// "unconstrained" (750); the port's tab states the [-1, 1] bounds and never says unconstrained.
+// ledger:short-bounds-copy, the panel's half. The app's toggle help calls the shorting frontier
+// "unconstrained" (750); the port's panel states the [-1, 1] bounds and never says unconstrained.
 {
   check(/unconstrained frontier/.test(ORACLE[750]) && /slider_min = -1\.0 if allow_short else 0\.0/.test(ORACLE[1718]),
     "ledger:short-bounds-copy: the app calls the shorting frontier unconstrained (750-751) while its sliders stop at -1 (1719)");
   const a = fixtureAnalysis("cross", { allowShort: true });
-  const r = render(h(Custom, tabProps(a)));
-  const t = text(r.container);
-  check(t.includes(`[${MINUS}1, 1]`) && t.includes(`from ${MINUS}1 to 1 (shorting is on)`) && !/unconstrained/i.test(t) &&
+  const r = quietRender(h(Optimization, tabProps(a)));
+  const t = text(mixOf(r.container));
+  const fr = text(fold(frontierCard(r.container), "How it is calculated"));
+  check(fr.includes(`[${MINUS}1, 1]`) && t.includes(`from ${MINUS}1 to 1 (shorting is on)`) && !/unconstrained/i.test(text(r.container)) &&
     rows(r.container).every((x) => field(x).min === "-1" && slider(x).min === "-1"),
-    "ledger:short-bounds-copy: with shorting on, the port's editor and caption state [-1, 1]", t.match(/Set a weight.{60}/)?.[0]);
+    "ledger:short-bounds-copy: with shorting on, the port's editor and frontier caption state [-1, 1]", t.match(/Drag or type.{60}/)?.[0]);
   r.unmount();
-  const l = render(h(Custom, tabProps(fixtureAnalysis("cross"))));
-  check(!/\[−1, 1\]|shorting is on/.test(text(l.container)), "ledger:short-bounds-copy: long-only, nothing about shorting bounds");
+  const l = quietRender(h(Optimization, tabProps(fixtureAnalysis("cross"))));
+  check(!/\[−1, 1\]|shorting is on/.test(text(mixOf(l.container))), "ledger:short-bounds-copy: long-only, nothing about shorting bounds on the panel");
   l.unmount();
 }
 
-// ledger:frontier-hover, the tab's half. The app asks its tab-5 frontier for "closest" (1816) and
-// style_chart at 1818 overrides it with x unified. The port's tab draws the shared frontier, a
+// ledger:frontier-hover, the panel's half. The app asks its tab-5 frontier for "closest" (1816) and
+// style_chart at 1818 overrides it with x unified. The port's mix is a point on the shared frontier, a
 // ScatterChart whose tooltip is the closest point.
 {
   check(/hovermode="closest"/.test(ORACLE[1815]) && /style_chart\(fig_ef2, height=520\)/.test(ORACLE[1817]),
     "ledger:frontier-hover: the app's tab-5 frontier asks for closest, then style_chart overrides it (1816, 1818)");
   const a = fixtureAnalysis("cross");
-  const r = render(h(Custom, tabProps(a)));
-  const [fr] = figures(r.container);
+  const r = quietRender(h(Optimization, tabProps(a)));
+  const fr = frontierCard(r.container);
   check(FRONTIER_HOVER === "closest" && !!fr?.querySelector(".recharts-scatter") && !!fr?.querySelector(".frontier-mark--custom"),
-    "ledger:frontier-hover: the port's tab draws the shared closest-point frontier, with the Custom mark");
+    "ledger:frontier-hover: the port draws the mix on the shared closest-point frontier");
   r.unmount();
 }
 
 // The clamp note on the page.
 {
   const a = fixtureAnalysis("cross");
-  const r = render(h(Custom, tabProps(a, { weights: { VTI: -0.4 } })));
-  const note = r.container.querySelector(".cust-note--flag");
+  const r = quietRender(h(Optimization, tabProps(a, { weights: { VTI: -0.4 } })));
+  const note = mixOf(r.container).querySelector(".cust-note--flag");
   check(note?.textContent === M.clampLine(M.customView(a, { VTI: -0.4 }), false) && field(rows(r.container)[0]).value === "-0.4",
     "clamp: the page shows the entered -0.4 and says it counts as 0", note?.textContent);
   // The weights table prints the entered -0.4 beside a normalized weight built from 0, so its note may not
   // say each row is its entry over the total; with nothing held to a bound it may.
-  const tableNote = () => r.container.querySelector('[aria-labelledby="cust-table"] .cust-note')?.textContent ?? "";
-  check(/counts at the nearest bound/.test(tableNote()) && !/is it divided by/.test(tableNote()),
-    "clamp: the weights table's note says a weight outside the bounds counts at the nearest bound", tableNote());
+  const tableNote = (c) => text(fold(mixOf(c), "Show the numbers")?.querySelector(".cust-table-note") ?? { textContent: "" });
+  check(/counts at the nearest bound/.test(tableNote(r.container)) && !/is it divided by/.test(tableNote(r.container)),
+    "clamp: the weights table's note says a weight outside the bounds counts at the nearest bound", tableNote(r.container));
   r.unmount();
-  const plain = render(h(Custom, tabProps(a, { weights: { VTI: 0.4 } })));
-  const plainNote = plain.container.querySelector('[aria-labelledby="cust-table"] .cust-note')?.textContent ?? "";
-  check(/the normalized weight is it divided by the weight total/.test(plainNote) && !/nearest bound/.test(plainNote),
-    "clamp: with every weight inside the bounds the note says each is its entry over the total", plainNote);
+  const plain = quietRender(h(Optimization, tabProps(a, { weights: { VTI: 0.4 } })));
+  check(/the normalized weight is it divided by the weight total/.test(tableNote(plain.container)) && !/nearest bound/.test(tableNote(plain.container)),
+    "clamp: with every weight inside the bounds the note says each is its entry over the total", tableNote(plain.container));
   plain.unmount();
 }
 
 // Every typed field is 16px on a phone: iOS Safari zooms the page when a smaller input takes focus and
 // leaves it zoomed (src/chrome/Settings.css guards the settings the same way). Each text, number or date input
-// and select the tab renders needs a 16px rule under Custom.css's 760px query.
+// and select the panel renders needs a 16px rule under Custom.css's 760px query.
 {
   const css = readFileSync(new URL("../src/tabs/custom/Custom.css", import.meta.url), "utf8");
   const at = css.indexOf("@media (max-width: 760px)");
@@ -604,13 +614,13 @@ function Harness({ a, init = {}, level = "plain" }) {
   }
   const phone = css.slice(css.indexOf("{", at) + 1, end).replace(/\/\*[\s\S]*?\*\//g, "");
   const sixteen = [...phone.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /font-size:\s*16px/.test(m[2])).flatMap((m) => m[1].split(",").map((x) => x.trim()));
-  const r = render(h(Custom, tabProps(fixtureAnalysis("cross"))));
-  // The wealth chart's starting amount is the chart's own field, held to 16px by its own sheet (t-charts-portfolio).
-  const typed = [...r.container.querySelectorAll("input, select, textarea")].filter((el) => !["range", "checkbox", "radio"].includes(el.type) && !el.closest(".amount-field"));
+  const r = quietRender(h(Optimization, tabProps(fixtureAnalysis("cross"))));
+  const typed = [...mixOf(r.container).querySelectorAll("input, select, textarea")].filter((el) => !["range", "checkbox", "radio"].includes(el.type));
   const missing = typed.filter((el) => ![...el.classList].some((k) => sixteen.includes(`.${k}`)));
   check(at >= 0 && typed.length === 5 && missing.length === 0,
     "phone: every weight field is 16px under the 760px query, so focusing one does not zoom the page", `${typed.length} fields; ${sixteen.join(" ")}`);
   r.unmount();
 }
 
-done("t-tab-custom");
+HTMLElement.prototype.getBoundingClientRect = rect;
+done("t-build-mix");

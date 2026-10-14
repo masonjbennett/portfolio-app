@@ -465,11 +465,11 @@ export function customWeights(tickers: readonly string[], weights: CustomWeights
 
 /** Why the custom weights cannot be scored, in words. */
 export const CUSTOM_REFUSAL: Readonly<Record<"zero" | "net-short" | "leverage", string>> = {
-  zero: "Every custom weight is zero, so there is no portfolio to evaluate. Set at least one weight on the Custom Portfolio tab.",
+  zero: "Every custom weight is zero, so there is no portfolio to evaluate. Set at least one weight in Build a portfolio's Your mix panel.",
   "net-short":
-    "The custom weights add up to less than 5% net long, and dividing by a total that small would multiply every weight many times over. Adjust them on the Custom Portfolio tab.",
+    "The custom weights add up to less than 5% net long, and dividing by a total that small would multiply every weight many times over. Adjust them in Build a portfolio's Your mix panel.",
   leverage:
-    "Normalised to sum to 100%, the custom weights would put an asset outside the -100% to 100% range the optimiser uses. Adjust them on the Custom Portfolio tab.",
+    "Normalised to sum to 100%, the custom weights would put an asset outside the -100% to 100% range the optimiser uses. Adjust them in Build a portfolio's Your mix panel.",
 };
 
 /** The custom weights table: one row, a column per ticker in the entered order (1974-1977). */

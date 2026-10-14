@@ -1,8 +1,9 @@
 // The page: the masthead, the basket bar (a summary chip and a sheet on a phone), the status line, the
 // chapter row and the active chapter, each card inside its own Boundary.
 //
-// Five chapters hold the seven tabs (CHAPTER_TABS in src/types.ts): a chapter renders its tabs one under
-// the other, each tab in its own Boundary. The Overview is the page's first screen (src/overview): the
+// Five chapters hold the six tabs (CHAPTER_TABS in src/types.ts): a chapter renders its tabs one under
+// the other, each tab in its own Boundary. The app's Custom tab is the Your mix panel inside Build's
+// Optimization tab; an older link to it lands there (PartId). The Overview is the page's first screen (src/overview): the
 // question, the answer, two cards, and who built it; it replaced the front-page band that sat above the
 // chapters, and the band's job of saying why nothing is shown went to the status line (./chrome/Status.tsx).
 //
@@ -29,7 +30,7 @@ import SegControl, { tabId, tabPanelId } from "./components/SegControl.tsx";
 import { TabContext, useWorkbench } from "./state/useWorkbench.ts";
 import {
   CHAPTER_IDS, CHAPTER_LABELS, CHAPTER_TABS, TAB_IDS, TAB_LABELS, chapterOf,
-  type Analysis, type ChapterId, type TabContextValue, type TabId, type TabProps, type WalkView, type Workbench,
+  type Analysis, type ChapterId, type PartId, type TabContextValue, type TabId, type TabProps, type WalkView, type Workbench,
 } from "./types.ts";
 import Status from "./chrome/Status.tsx";
 import WhatIfFold from "./chrome/WhatIfFold.tsx";
@@ -63,7 +64,6 @@ export const TAB_LOADERS: Readonly<Record<TabId, () => Promise<TabModule>>> = {
   risk: () => import("./tabs/Risk.tsx"),
   correlation: () => import("./tabs/Correlation.tsx"),
   optimization: () => import("./tabs/Optimization.tsx"),
-  custom: () => import("./tabs/Custom.tsx"),
   sensitivity: () => import("./tabs/Sensitivity.tsx"),
   walkforward: () => import("./tabs/WalkForward.tsx"),
 };
@@ -75,7 +75,6 @@ export const TABS: Readonly<Record<TabId, ComponentType<TabProps>>> = {
   risk: lazy(TAB_LOADERS.risk),
   correlation: lazy(TAB_LOADERS.correlation),
   optimization: lazy(TAB_LOADERS.optimization),
-  custom: lazy(TAB_LOADERS.custom),
   sensitivity: lazy(TAB_LOADERS.sensitivity),
   walkforward: lazy(TAB_LOADERS.walkforward),
 };
@@ -109,12 +108,13 @@ function nextFrame(fn: () => void): () => void {
 const CHAPTER_OPTIONS = CHAPTER_IDS.map((id) => ({ value: id, label: CHAPTER_LABELS[id] }));
 // The chapter row's ids: pill `chapter-tab-<id>`, the panel it shows `chapter-panel-<id>`.
 const CHAPTER_PREFIX = "chapter";
-// Each tab's part of its chapter, which the palette and an older ?tab= link land on.
-export const sectionId = (tab: TabId): string => `section-${tab}`;
+// Each part of a chapter (a tab's, or Your mix inside the Optimization tab's), which the palette and an older
+// ?tab= link land on.
+export const sectionId = (part: PartId): string => `section-${part}`;
 
 // A request to land the reader on one tab's part of a chapter; a new `n` is a new request.
 interface Focus {
-  tab: TabId;
+  tab: PartId;
   n: number;
 }
 
@@ -175,7 +175,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
     wb.entry && CHAPTER_TABS[chapterOf(wb.entry)][0] !== wb.entry ? { tab: wb.entry, n: 1 } : null,
   );
   const jump = useCallback(
-    (id: TabId) =>
+    (id: PartId) =>
       startSwitch(() => {
         setChapter(chapterOf(id));
         setFocus((f) => ({ tab: id, n: (f?.n ?? 0) + 1 }));

@@ -64,8 +64,8 @@ export interface ShareState {
   weights: CustomWeights | null;
   /** The chapter the link opens on, or null for the default (the Overview). */
   chapter: ChapterId | null;
-  /** The tab an older link named (?tab=), which the page lands on inside its chapter; null for any other link. Never written. */
-  tab?: TabId | null;
+  /** The part an older link named (?tab=), which the page lands on inside its chapter; null for any other link. Never written. */
+  tab?: PartId | null;
   /** The walk-forward tab's segment: "published" only when the link names it beside that test, else null (the first segment). */
   view?: WalkView | null;
 }
@@ -80,22 +80,42 @@ export interface Prefs {
 
 // ---- tabs ----------------------------------------------------------------------------------------
 
-/** The six tabs, in the app's order (1213-1220), then the one the app does not have: the walk-forward test. */
-export type TabId = "returns" | "risk" | "correlation" | "optimization" | "custom" | "sensitivity" | "walkforward";
+/**
+ * The tabs the page draws, in the app's order (1213-1220), then the one the app does not have: the walk-forward
+ * test. The app's fifth tab, Custom Portfolio, is no tab here: its weights and figures are the Your mix panel beside
+ * Build's frontier, drawn by the Optimization tab (see PartId).
+ */
+export type TabId = "returns" | "risk" | "correlation" | "optimization" | "sensitivity" | "walkforward";
 
-/** Tab labels, the app's text with its two-space padding trimmed (1213-1220), then the page's own seventh. */
+/** Tab labels, the app's text with its two-space padding trimmed (1213-1220), then the page's own. */
 export const TAB_LABELS: Readonly<Record<TabId, string>> = {
   returns: "Returns & Statistics",
   risk: "Risk Analysis",
   correlation: "Correlation",
   optimization: "Portfolio Optimization",
-  custom: "Custom Portfolio",
   sensitivity: "Sensitivity",
   walkforward: "Walk-forward",
 };
 
 /** The tab ids in display order. */
-export const TAB_IDS: readonly TabId[] = ["returns", "risk", "correlation", "optimization", "custom", "sensitivity", "walkforward"];
+export const TAB_IDS: readonly TabId[] = ["returns", "risk", "correlation", "optimization", "sensitivity", "walkforward"];
+
+/**
+ * A place a link or the palette lands on: a tab's part of its chapter, or Your mix, the panel beside Build's frontier,
+ * which an older link names as ?tab=custom. Its part id stays "custom", so that link still lands on it.
+ */
+export type PartId = TabId | "custom";
+
+/** The part that draws each part: a tab draws itself, Your mix sits inside the Optimization tab. */
+export function hostOf(part: PartId): TabId {
+  return part === "custom" ? "optimization" : part;
+}
+
+/** The parts in display order, Your mix after the frontier it sits beside. */
+export const PART_IDS: readonly PartId[] = ["returns", "risk", "correlation", "optimization", "custom", "sensitivity", "walkforward"];
+
+/** Part labels, as the palette lists them. */
+export const PART_LABELS: Readonly<Record<PartId, string>> = { ...TAB_LABELS, custom: "Your mix" };
 
 // ---- chapters -----------------------------------------------------------------------------------------------------
 
@@ -122,12 +142,13 @@ export const CHAPTER_TABS: Readonly<Record<ChapterId, readonly TabId[]>> = {
   overview: [],
   performance: ["returns", "risk"],
   diversification: ["correlation"],
-  build: ["optimization", "custom"],
+  build: ["optimization"],
   holdup: ["walkforward", "sensitivity"],
 };
 
-/** The chapter a tab sits in. */
-export function chapterOf(tab: TabId): ChapterId {
+/** The chapter a part sits in. */
+export function chapterOf(part: PartId): ChapterId {
+  const tab = hostOf(part);
   return CHAPTER_IDS.find((c) => CHAPTER_TABS[c].includes(tab)) ?? "overview";
 }
 
@@ -138,8 +159,8 @@ export function chapterOf(tab: TabId): ChapterId {
 export type WalkView = "basket" | "published";
 
 /**
- * Raw custom weights by ticker, exactly as typed in the Custom tab (tab 5, divided by their total at 1732); the
- * Optimization tab reads them too (1581). A ticker with no entry means 1/n, the app's default
+ * Raw custom weights by ticker, exactly as typed in the Your mix panel (the app's tab 5, divided by their total at
+ * 1732); every chapter that draws Your mix reads them (1581). A ticker with no entry means 1/n, the app's default
  * before tab 5 has run. Normalise with normalizeCustom from src/lib/portfolio.ts, never by hand.
  */
 export type CustomWeights = Record<string, number>;
@@ -333,8 +354,8 @@ export interface Workbench {
   setWeights: (next: CustomWeights) => void;
   /** The active chapter. */
   chapter: ChapterId;
-  /** The tab the page's link named on arrival (an older ?tab= link), to land on once; null otherwise. */
-  entry: TabId | null;
+  /** The part the page's link named on arrival (an older ?tab= link), to land on once; null otherwise. */
+  entry: PartId | null;
   /** Switch chapters. The walk-forward test opens on `view`, its first segment when none is named. */
   setChapter: (chapter: ChapterId, view?: WalkView) => void;
   /** The walk-forward tab's segment. */

@@ -589,9 +589,10 @@ const W0 = o.w0;
   check(sawPhone, "frontier markers: the phone case really drew at 343px, so the checks below saw a phone's crowding");
   // One known gap, pinned so it can neither spread nor go quietly: the densest layout here (nine sectors
   // and shorting at 343px put thirteen markers in about 45 by 100px) keeps ONE hairline crossing. Which
-  // pair it is moves with any change to placeLabels' costs (XLU/XLRE, then XLV/XLI); untangling it needs
-  // three names moved at once, which the pair repair does not try. Every other layout has none, and this
-  // one exactly one: if it clears, drop the pin.
+  // pair it is moves with any change to placeLabels' costs (XLU/XLRE, then XLV/XLI). Two further repairs were
+  // tried and left out: the two names trading heights, and a three-name move (each other name placed again
+  // around the first's new spot); neither found an uncrossed layout the costs prefer. Every other layout has
+  // none, and this one exactly one: if it clears, drop the pin.
   const PINNED = "sectors short @343";
   const elsewhere = strangers.filter((x) => !x.startsWith(`${PINNED}:`));
   const pinned = strangers.filter((x) => x.startsWith(`${PINNED}:`));

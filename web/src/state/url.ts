@@ -12,8 +12,8 @@ import { SYMBOL } from "../data/prices.ts";
 import { MAX_TICKERS, parseTickers } from "../lib/clean.ts";
 import { ADDED_IDS, type AddedId } from "../lib/added.ts";
 import { BENCHMARKS } from "./defaults.ts";
-import { CHAPTER_IDS, TAB_IDS, chapterOf } from "../types.ts";
-import type { ChapterId, CustomWeights, ShareSettings, ShareState, TabId, WalkView } from "../types.ts";
+import { CHAPTER_IDS, PART_IDS, chapterOf } from "../types.ts";
+import type { ChapterId, CustomWeights, PartId, ShareSettings, ShareState, WalkView } from "../types.ts";
 
 // Query keys. Short, because people read and paste the link.
 const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "bench", short: "short", cols: "cols", w: "w", ch: "ch", tab: "tab", view: "view" };
@@ -107,7 +107,7 @@ export function decodeShare(search: string): ShareState {
   const settings: Partial<ShareSettings> = {};
   let w: CustomWeights | null = null;
   let chapter: ChapterId | null = null;
-  let tab: TabId | null = null;
+  let tab: PartId | null = null;
   let view: WalkView | null = null;
   try {
     const q = new URLSearchParams(typeof search === "string" ? search : "");
@@ -137,12 +137,13 @@ export function decodeShare(search: string): ShareState {
     if (cols) settings.cols = cols;
     const wv = get(K.w);
     w = wv === null ? null : weights(wv);
-    // A chapter by its id; failing that, an older link's tab, as the chapter that holds it (and the tab to land on).
-    // A link naming both is read by its chapter, and its tab only when the tab sits in that chapter.
+    // A chapter by its id; failing that, an older link's tab, as the chapter that holds it (and the part to land on:
+    // ?tab=custom is the Your mix panel in Build). A link naming both is read by its chapter, and its tab only when
+    // the tab sits in that chapter.
     const chv = get(K.ch);
     chapter = chv !== null && (CHAPTER_IDS as readonly string[]).includes(chv) ? (chv as ChapterId) : null;
     const tb = get(K.tab);
-    const named = tb !== null && (TAB_IDS as readonly string[]).includes(tb) ? (tb as TabId) : null;
+    const named = tb !== null && (PART_IDS as readonly string[]).includes(tb) ? (tb as PartId) : null;
     if (named && (chapter === null || chapterOf(named) === chapter)) {
       tab = named;
       chapter = chapterOf(named);

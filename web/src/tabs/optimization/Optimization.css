@@ -1,7 +1,45 @@
-/* The Portfolio Optimization tab: the headline, the three rows of plates and the notes. Charts, tables,
-   plates and section headers bring their own styles; every colour here is a token. */
+/* Build a portfolio: the headline, the lead (the frontier card and the Your mix panel), the three rows of plates
+   and the notes. Charts, cards, tables, plates and section headers bring their own styles; every colour here is a
+   token. */
 .opt {
   min-width: 0;
+}
+
+/* The lead: the frontier card, then the Your mix panel under it. */
+.build-lead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  margin-bottom: var(--space-7);
+}
+
+.build-mix {
+  min-width: 0;
+}
+
+.build-mix:focus {
+  outline: none;
+}
+
+/* A desktop wide enough for both: the frontier on the left, the panel on the right, so a slider moves the mix's
+   point and the figures in view together. The markup keeps its order (frontier, then panel), so the keyboard walks
+   the lead the same at every width. 1200px is SIDE_BY_SIDE_MIN_PX in ../custom/layout.ts (a media query cannot
+   read a constant). */
+@media (min-width: 1200px) {
+  .build-lead {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+
+  /* One column of rows: two side by side in the narrower column would leave each slider a stub. */
+  .build-lead .cust-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Three figures a row, then two: five across the narrower column would cut a figure short. */
+  .build-lead .cust-plates {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 /* The headline states the finding; its face and size are .tab-finding's (App.css), this is its spacing. */

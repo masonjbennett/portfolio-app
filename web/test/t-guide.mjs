@@ -46,7 +46,7 @@ const { pdfProblems } = await import("../scripts/guide-pdf-check.mjs");
 const { ADDED_IDS } = await import("../src/lib/added.ts");
 
 const TAB_FILES = {
-  returns: "Returns", risk: "Risk", correlation: "Correlation", optimization: "Optimization", custom: "Custom",
+  returns: "Returns", risk: "Risk", correlation: "Correlation", optimization: "Optimization",
   sensitivity: "Sensitivity", walkforward: "WalkForward",
 };
 
@@ -141,14 +141,14 @@ for (const settings of [{ ...S0, end: null, rf: null }, { ...S0, end: "2025-12-3
   r.unmount();
 }
 
-// Every tab on the baked example, both walk-forward views, a custom mix set (which offers the reset), and every
+// Every tab on the baked example, both walk-forward views, a mix set in Build's Your mix panel (which offers the reset), and every
 // construction added to the scorecards (the columns a link's cols= opens with). Then every row shown, so the
 // scorecards' info marks are all on the page.
 for (const id of TAB_IDS) {
   const { default: Tab } = await import(`../src/tabs/${TAB_FILES[id]}.tsx`);
   for (const view of id === "walkforward" ? ["basket", "published"] : ["basket"]) {
     const base = tabProps(EX);
-    const props = { ...base, settings: { ...base.settings, cols: [...ADDED_IDS] }, ...(id === "custom" ? { weights: { [EX.tickers[0]]: 0.5 } } : {}) };
+    const props = { ...base, settings: { ...base.settings, cols: [...ADDED_IDS] }, ...(id === "optimization" ? { weights: { [EX.tickers[0]]: 0.5 } } : {}) };
     const r = await quietly(() => render(h(TabContext.Provider, { value: ctx(view) }, h(Tab, props))));
     await quietly(flush);
     // Every More row and card fold opened, as a reader can open them: the guide may quote what is inside.

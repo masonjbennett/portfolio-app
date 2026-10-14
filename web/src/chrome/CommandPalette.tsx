@@ -3,7 +3,7 @@
 // Type to filter, arrows to move, Enter to pick, Escape to close.
 import { useEffect, useId, useState } from "react";
 import { GUIDE_HREF, GUIDE_TITLE } from "../guide/route.ts";
-import { CHAPTER_IDS, CHAPTER_LABELS, LEVELS, TAB_IDS, TAB_LABELS, chapterOf, type ChapterId, type Level, type TabId } from "../types.ts";
+import { CHAPTER_IDS, CHAPTER_LABELS, LEVELS, PART_IDS, PART_LABELS, chapterOf, type ChapterId, type Level, type PartId } from "../types.ts";
 import "./CommandPalette.css";
 
 export interface CommandPaletteProps {
@@ -12,7 +12,7 @@ export interface CommandPaletteProps {
   chapter: ChapterId;
   setChapter: (chapter: ChapterId) => void;
   /** Opens the chapter holding a tab and lands the reader on that tab's part of it. */
-  jump: (tab: TabId) => void;
+  jump: (part: PartId) => void;
   /** Opens the guide; the page goes to its address (a suite passes its own). */
   openGuide?: () => void;
 }
@@ -57,7 +57,7 @@ export default function CommandPalette({ level, setLevel, chapter, setChapter, j
       run: () => setLevel(l.id),
     })),
     ...CHAPTER_IDS.map((c) => ({ key: `chapter-${c}`, group: "Chapter", label: CHAPTER_LABELS[c], current: c === chapter, run: () => setChapter(c) })),
-    ...TAB_IDS.map((t) => ({ key: `tab-${t}`, group: CHAPTER_LABELS[chapterOf(t)], label: TAB_LABELS[t], current: false, run: () => jump(t) })),
+    ...PART_IDS.map((t) => ({ key: `tab-${t}`, group: CHAPTER_LABELS[chapterOf(t)], label: PART_LABELS[t], current: false, run: () => jump(t) })),
     { key: "guide", group: "Guide", label: GUIDE_TITLE, current: false, run: openGuide },
   ];
   const q = query.trim().toLowerCase();

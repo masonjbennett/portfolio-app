@@ -16,6 +16,8 @@ export interface CardProps {
   label?: string;
   /** One line under the title (at most twenty-five words). */
   sub?: ReactNode;
+  /** Under the sub-line, in the card's head: the formula line that sets out the sub-line's figures. */
+  note?: ReactNode;
   /** Anchor id, if the card is linkable. */
   id?: string;
   /** The chart, or whatever the card leads with. */
@@ -44,7 +46,7 @@ function useFold() {
   return { id, open, drawn, toggle };
 }
 
-export default function Card({ title, sub, label, id, children, numbers, how, downloads }: CardProps) {
+export default function Card({ title, sub, note, label, id, children, numbers, how, downloads }: CardProps) {
   const headId = useId();
   const numbersFold = useFold();
   const howFold = useFold();
@@ -61,6 +63,7 @@ export default function Card({ title, sub, label, id, children, numbers, how, do
             </h3>
           ) : null}
           {sub ? <p className="card-sub">{sub}</p> : null}
+          {note}
         </header>
       ) : null}
       {children ? <div className="card-body">{children}</div> : null}

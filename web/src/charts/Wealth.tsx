@@ -1,6 +1,7 @@
 // Cumulative wealth: what the starting amount became in each portfolio and in the benchmark, with each
-// line NAMED AT ITS END instead of in a legend. Shared by the Optimization tab (portfolio_app.py
-// 1660-1674) and the Custom tab (1823-1837), which differ only in the custom weights they pass.
+// line NAMED AT ITS END instead of in a legend. The app draws it twice, on the Optimization tab
+// (portfolio_app.py 1660-1674) and the Custom tab (1823-1837); the page draws its lines once, on Performance's
+// growth card, the reader's mix among them.
 //
 // Where it departs from the app, on purpose:
 // - The first point is the amount invested, on the first price date. The app plots
@@ -77,7 +78,7 @@ export const wealthTooltip = tooltipProps(WEALTH_HOVER);
  * The lines for one analysis in the app's order (1661-1665): Equal-Weight, GMV, Tangency, Custom,
  * then the benchmark. A portfolio whose solve failed is left out, never replaced. `custom` is the
  * normalised custom weights, or null to leave that line off. Custom weights within 1e-12 of
- * Equal-Weight's (the tolerance the Custom tab's own equal-weights test uses) are marked customIsEqual.
+ * Equal-Weight's (the tolerance the Your mix panel's own equal-weights test uses) are marked customIsEqual.
  */
 export function wealthData(a: Analysis, custom: Vec | null = null): WealthData {
   const series: WealthSeries[] = [{ label: "Equal-Weight", role: "ew", returns: portfolioReturns(a.returns, a.ew) }];

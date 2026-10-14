@@ -36,7 +36,8 @@ const TABS = {
   risk: (await import("../src/tabs/Risk.tsx")).default,
   correlation: (await import("../src/tabs/Correlation.tsx")).default,
   optimization: (await import("../src/tabs/Optimization.tsx")).default,
-  custom: (await import("../src/tabs/Custom.tsx")).default,
+  // The Your mix panel, the app's Custom tab, is drawn by the Optimization tab; its line sits under its verdict.
+  custom: (await import("../src/tabs/Optimization.tsx")).default,
   sensitivity: (await import("../src/tabs/Sensitivity.tsx")).default,
 };
 const { default: Live } = await import("../src/tabs/walkforward/Live.tsx");
@@ -103,7 +104,9 @@ async function mountTab(name, a, level, extra = {}) {
 
 // The finding each tab's line sits under.
 // Risk is the second half of Performance: its finding is the Drawdowns row's, and the line sits under that row's button.
-const FINDING = { live: ".wfl-finding", published: ".wfp-decay", risk: "#perf-risk-drawdowns .more-finding" };
+const FINDING = { live: ".wfl-finding", published: ".wfp-decay", risk: "#perf-risk-drawdowns .more-finding", custom: ".build-mix .card-sub" };
+// Build draws two findings, each with its line: the chapter's (optimization) and the Your mix panel's (custom).
+const ownLine = (name) => (l) => (name === "custom" ? !!l.closest(".build-mix") : name === "optimization" ? !l.closest(".build-mix") : true);
 const findingOf = (root, name) => root.querySelector(FINDING[name] ?? "h2.tab-finding");
 
 /**
@@ -119,7 +122,7 @@ async function holdTab(tag, name, a, extra = {}) {
       await quietly(flush);
     }
     const f = findingOf(r.container, name);
-    const lines = [...r.container.querySelectorAll(".formula-line")];
+    const lines = [...r.container.querySelectorAll(".formula-line")].filter(ownLine(name));
     const symbols = lines.map((l) => l.querySelector(".formula-line-symbols"));
     at[level] = {
       finding: f ? text(f) : null,
@@ -362,7 +365,7 @@ check(F.publishedFormula("", "0.5", 0.02) === null, "no figure: no published fig
   const zero = Object.fromEntries(EX.tickers.map((t) => [t, 0]));
   const r = await mountTab("custom", EX, "formula", { weights: zero });
   const f = text(findingOf(r.container, "custom") ?? { textContent: "" });
-  check(/^No custom portfolio/.test(f) && !r.container.querySelector(".formula-line"), "no figure: a refused custom mix draws no line at Formula", f);
+  check(/^No custom portfolio/.test(f) && !r.container.querySelector(".build-mix .formula-line"), "no figure: a refused custom mix draws no line at Formula", f);
   r.unmount();
 }
 {

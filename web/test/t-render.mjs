@@ -151,37 +151,33 @@ function pickLevel(root) {
   return { off, label: text(off) };
 }
 
-// ---- Custom tab -------------------------------------------------------------------------------------------
+// ---- the Your mix panel (the app's Custom tab), beside Build's frontier --------------------------------------
 {
-  const { root, first, unmount } = mount("custom");
+  const { root, first, unmount } = mount("optimization");
   let now = chartsOn(root);
   const all = new Set(now.map((c) => c.title));
-  check(first.charts.size >= 2 && same(first.charts, all), "hook: on the first mount it sees every chart on the Custom tab drawn", list(first.charts));
+  check(first.charts.size >= 3 && same(first.charts, all), "hook: on the first mount it sees every chart on Build drawn", list(first.charts));
   check(first.commits > 0 && first.commits === first.profiled, "hook: it sees exactly the commits React's Profiler reports", `${first.commits} vs ${first.profiled}`);
-  check(same(new Set(now.map((c) => c.kind)), new Set(["frontier", "wealth"])), "Custom: the tab draws a frontier and a wealth chart", now.map((c) => c.kind).join(" "));
+  check(!new Set(now.map((c) => c.kind)).has("wealth"), "Your mix: the chapter draws no growth chart; Performance's carries the mix's line", now.map((c) => c.kind).join(" "));
 
-  const { off, label } = pickLevel(root);
+  // Typing a weight in the panel: the frontier is the one chart that shows the mix, and the only one drawn again.
   let before = now;
-  const lv = record(() => off.click());
-  let o = outcome(before, (now = chartsOn(root)), lv);
-  check(pickLevel(root).label !== label && lv.components.has("Tip"), "Custom, explanation level: the switch took, and the tooltips rendered again", `${label} -> ${pickLevel(root).label}`);
-  check(lv.commits === lv.profiled, "Custom, explanation level: the hook and the Profiler count the same commits", `${lv.commits} vs ${lv.profiled}`);
-  check(!kinds(o, o.drew).has("frontier"), "Custom, explanation level: the frontier does not render again", names(o, o.drew));
-  check(o.drew.size === 0, "Custom, explanation level: no chart renders again (none of them shows the level)", names(o, o.drew));
+  const wt = record(() => setValue(root.querySelector(".build-mix .cust-field"), "0.5"));
+  let o = outcome(before, (now = chartsOn(root)), wt);
+  check(same(kinds(o, o.changed), new Set(["frontier"])) && o.changed.size === 1, "Your mix, weight: the frontier is the chart that shows the mix, and its drawing changed", names(o, o.changed));
+  check(same(o.drew, o.changed), "Your mix, weight: exactly the chart that shows the mix renders again", `drew ${names(o, o.drew)}; changed ${names(o, o.changed)}`);
+  check(wt.commits === wt.profiled, "Your mix, weight: the hook and the Profiler count the same commits", `${wt.commits} vs ${wt.profiled}`);
 
-  before = now;
-  const am = record(() => setValue(root.querySelector(".cust input[name=amount]"), "25000"));
-  o = outcome(before, (now = chartsOn(root)), am);
-  check(/25,000/.test(text(root.querySelector(".cust"))), "Custom, amount: the new amount reached the page");
-  check(same(kinds(o, o.drew), new Set(["wealth"])) && o.drew.size === 1, "Custom, amount: the wealth chart renders again and no other chart does", names(o, o.drew));
-  check(!am.components.has("FrontierPlot") && !am.components.has("FrontierLabels"), "Custom, amount: nothing inside the frontier renders");
-  check(am.commits === am.profiled, "Custom, amount: the hook and the Profiler count the same commits", `${am.commits} vs ${am.profiled}`);
-
-  before = now;
-  const wt = record(() => setValue(root.querySelector(".cust .cust-field"), "0.5"));
-  o = outcome(before, (now = chartsOn(root)), wt);
-  check(o.changed.size === now.length, "Custom, weight: every chart on the Custom tab shows the custom mix, and each drawing changed", names(o, o.changed));
-  check(same(o.drew, o.changed), "Custom, weight: exactly the charts that show the custom mix render again", `drew ${names(o, o.drew)}; changed ${names(o, o.changed)}`);
+  // The amount, wherever the page offers it, reaches no chart here.
+  const amount = root.querySelector("input[name=amount]");
+  check(!root.querySelector(".app-tab input[name=amount]"), "Your mix, amount: the chapter itself offers no amount field");
+  if (amount) {
+    before = now;
+    const am = record(() => setValue(amount, "25000"));
+    o = outcome(before, (now = chartsOn(root)), am);
+    check(o.drew.size === 0 && !am.components.has("FrontierPlot") && !am.components.has("FrontierLabels"),
+      "Your mix, amount: no chart on the chapter renders again, nothing inside the frontier either", names(o, o.drew));
+  }
   unmount();
 }
 
@@ -199,27 +195,22 @@ function pickLevel(root) {
   check(o.drew.size === 0, "Optimization, explanation level: no chart renders again", names(o, o.drew));
 
   before = now;
-  const am = record(() => setValue(root.querySelector(".app-tab input[name=amount]"), "30000"));
-  o = outcome(before, (now = chartsOn(root)), am);
-  check(same(kinds(o, o.drew), new Set(["wealth"])) && o.drew.size === 1, "Optimization, amount: the wealth chart renders again and no other chart does", names(o, o.drew));
-
-  before = now;
   const tickers = EX.tickers;
   const wt = record(() => drive.setWeights({ [tickers[0]]: 0.6, [tickers[1]]: 0.1 }));
   o = outcome(before, (now = chartsOn(root)), wt);
   check(o.changed.size > 0 && o.changed.size < now.length, "Optimization, weight: some charts show the custom mix and change, some do not", names(o, o.changed));
-  check(kinds(o, o.changed).has("frontier") && kinds(o, o.changed).has("wealth"), "Optimization, weight: the frontier and the wealth chart are among those that show it");
+  check(kinds(o, o.changed).has("frontier"), "Optimization, weight: the frontier is among those that show it");
   check(same(o.drew, o.changed), "Optimization, weight: exactly the charts that show the custom mix render again", `drew ${names(o, o.drew)}; changed ${names(o, o.changed)}`);
 
   // Adding a scorecard column re-renders the scorecard and the weights table, and draws no chart but the
-  // frontier, which is handed the construction to mark. The wealth chart and the bar charts stay put.
+  // frontier, which is handed the construction to mark. The bar charts stay put.
   before = now;
   const col = record(() => root.querySelector('.addcol-btn[data-col="rp"]').click());
   o = outcome(before, (now = chartsOn(root)), col);
   check(root.querySelector('.sc th[data-col="rp"]') !== null && col.components.has("Scorecard") && col.components.has("Table") && col.components.has("AddColumns"),
     "Optimization, add a column: the column is on, and the scorecard and the weights table render again", list(col.components));
   check([...kinds(o, o.drew)].every((k) => k === "frontier") && !col.components.has("Growth") && !col.components.has("WeightChart"),
-    "Optimization, add a column: neither the wealth chart nor any bar chart renders again", names(o, o.drew));
+    "Optimization, add a column: no bar chart renders again", names(o, o.drew));
   await act(async () => {
     for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0));
   });
@@ -306,7 +297,7 @@ for (const tab of TAB_IDS) {
     return { ok: u.startsWith("/example-cross.json"), json: async () => body };
   };
   localStorage.clear();
-  // An older link: ?tab=custom opens Build a portfolio, the Custom tab under Optimization.
+  // An older link: ?tab=custom opens Build a portfolio, on the Your mix panel beside the frontier.
   history.replaceState(null, "", "/?tab=custom");
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -327,12 +318,12 @@ for (const tab of TAB_IDS) {
     return host.querySelector('[role=switch][name="allowShort"]');
   };
   const panel = () => host.querySelector('.app-chapter[role="tabpanel"]');
-  const shortingNote = () => /shorting is on/.test(text(host.querySelector(".cust") ?? host));
+  const shortingNote = () => /shorting is on/.test(text(host.querySelector(".build-mix") ?? host));
   // The what-if fold closes the same chapter and dims with it, as the band above the chapters once did.
   const bandBusy = () => !!host.querySelector(".whatif-fold--settling");
   // Drawn, and the price request answered (it fails here), so nothing but the switch can mark the page busy.
-  const drawn = await until(() => shortSwitch() && host.querySelector(".cust .cust-row") && panel() && !bandBusy());
-  check(drawn, "switch: the page draws the Custom tab from the example, with no request out");
+  const drawn = await until(() => shortSwitch() && host.querySelector(".build-mix .cust-row") && panel() && !bandBusy());
+  check(drawn, "switch: the page draws the Your mix panel from the example, with no request out");
   if (drawn) {
     check(!shortSwitch().checked && !shortingNote(), "switch: it opens with shorting off, and the tab says so");
     check(panel().getAttribute("aria-busy") === null, "switch: before the click nothing is marked busy");

@@ -191,7 +191,7 @@ const flush = async (n = 8) => {
 };
 const fiberOf = (el) => el[Object.keys(el).find((k) => k.startsWith("__reactFiber$"))];
 function frontierAdded(root) {
-  let f = fiberOf(root.querySelector('[aria-labelledby="opt-frontier"]'));
+  let f = fiberOf(root.querySelector("#build-frontier"));
   while (f && !(f.memoizedProps && "added" in f.memoizedProps && "custom" in f.memoizedProps)) f = f.return;
   return f?.memoizedProps.added;
 }

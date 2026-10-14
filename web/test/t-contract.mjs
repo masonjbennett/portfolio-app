@@ -27,7 +27,7 @@ const quiet = (fn) => {
 
 // ---- (a) every shared module imports and keeps its contract exports -------------------------------
 const EXPORTS = {
-  "src/types.ts": { LEVELS: "object", TAB_LABELS: "object", TAB_IDS: "object" },
+  "src/types.ts": { LEVELS: "object", TAB_LABELS: "object", TAB_IDS: "object", PART_IDS: "object", PART_LABELS: "object", hostOf: "function" },
   "src/App.tsx": { default: "function", TABS: "object", TAB_LOADERS: "object" },
   "src/chrome/BasketBar.tsx": { default: "function", SettingsSheetBody: "function" },
   "src/chrome/Settings.tsx": { useTickers: "function", rateInUse: "function" },
@@ -55,7 +55,7 @@ const EXPORTS = {
   "src/tabs/Risk.tsx": { default: "function" },
   "src/tabs/Correlation.tsx": { default: "function" },
   "src/tabs/Optimization.tsx": { default: "function" },
-  "src/tabs/Custom.tsx": { default: "function" },
+  "src/tabs/custom/YourMix.tsx": { default: "object", MIX_TITLE: "string", MIX_ANCHOR: "string" },
   "src/tabs/Sensitivity.tsx": { default: "function" },
   "src/tabs/WalkForward.tsx": { default: "function", walkRates: "function", rerunSettings: "function" },
   "src/lib/added.ts": { ADDED_IDS: "object", isAddedId: "function" },
@@ -328,19 +328,24 @@ check(T.LEVELS?.find((l) => l.id === D.DEFAULT_LEVEL)?.oracle === knowledge, "de
 const points = Number(grab(/def efficient_frontier\([^)]*n_points=(\d+)/, "efficient_frontier's n_points")[1]);
 check(D.FRONTIER_POINTS === points, "defaults: FRONTIER_POINTS (948)", `${D.FRONTIER_POINTS} vs ${points}`);
 const tabs = grab(/st\.tabs\(\[([\s\S]*?)\]\)/, "the tab labels")[1]?.match(/"([^"]+)"/g)?.map((s) => s.slice(1, -1).trim());
-check(tabs?.length === 6 && JSON.stringify(T.TAB_IDS?.slice(0, 6).map((id) => T.TAB_LABELS[id])) === JSON.stringify(tabs) && D.DEFAULT_CHAPTER === T.CHAPTER_IDS?.[0],
-  "types: the first six TAB_LABELS are the app's six, trimmed, in order (1213-1220), and the page opens on its first chapter", JSON.stringify(tabs));
-// The five chapters hold the seven tabs, each exactly once, and keep the app's order inside each chapter but one: Does
+// The app's six tabs are the page's first six parts, in order: five draw themselves, under the app's labels, and the
+// fifth, Custom Portfolio, is the Your mix panel inside the Optimization tab.
+const APP_PARTS = ["returns", "risk", "correlation", "optimization", "custom", "sensitivity"];
+check(tabs?.length === 6 && same(T.PART_IDS?.slice(0, 6) ?? [], APP_PARTS) && tabs[4] === "Custom Portfolio" && T.hostOf?.("custom") === "optimization" &&
+  APP_PARTS.every((id, i) => id === "custom" || T.TAB_LABELS[id] === tabs[i]) && D.DEFAULT_CHAPTER === T.CHAPTER_IDS?.[0],
+  "types: the app's six tabs (1213-1220) are the page's first six parts, in order, five under the app's labels, trimmed, and Custom Portfolio the panel inside Optimization; the page opens on its first chapter",
+  JSON.stringify(tabs));
+// The five chapters hold the six tabs, each exactly once, and keep the app's order inside each chapter but one: Does
 // it hold up? leads with the walk-forward test, the page's own.
 const held = (T.CHAPTER_IDS ?? []).flatMap((c) => T.CHAPTER_TABS?.[c] ?? []);
 check(T.CHAPTER_IDS?.length === 5 && T.CHAPTER_IDS[0] === "overview" && T.CHAPTER_TABS?.overview?.length === 0 &&
   same(held, T.TAB_IDS ?? []) && held.length === T.TAB_IDS?.length && held.every((t) => T.CHAPTER_TABS[T.chapterOf(t)].includes(t)) &&
   T.CHAPTER_TABS.holdup?.[0] === "walkforward",
-  "types: five chapters, the Overview first and holding no tab, the other four holding the seven tabs once each, Does it hold up? led by the walk-forward test", JSON.stringify(T.CHAPTER_TABS));
-// The seventh is the page's own, which the app does not have: last, so the app's six keep their places.
-check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?.walkforward === "Walk-forward" &&
-  Object.keys(T.TAB_LABELS ?? {}).length === 7,
-  "types: a seventh tab, walkforward, labelled Walk-forward, comes after the app's six", JSON.stringify(T.TAB_IDS));
+  "types: five chapters, the Overview first and holding no tab, the other four holding the six tabs once each, Does it hold up? led by the walk-forward test", JSON.stringify(T.CHAPTER_TABS));
+// The page's own test, which the app does not have, comes last, so the app's keep their places.
+check(T.TAB_IDS?.length === 6 && T.TAB_IDS[5] === "walkforward" && T.PART_IDS?.length === 7 && T.PART_IDS[6] === "walkforward" &&
+  T.TAB_LABELS?.walkforward === "Walk-forward" && Object.keys(T.TAB_LABELS ?? {}).length === 6 && !T.TAB_IDS.includes("custom"),
+  "types: the walk-forward test, labelled Walk-forward, comes after the app's tabs; Custom is a part, not a tab", JSON.stringify(T.TAB_IDS));
 
 // ---- (h) the published sets come first in the rail; the app's own follow -----------------------------
 {
