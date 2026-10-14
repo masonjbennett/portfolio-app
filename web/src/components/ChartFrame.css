@@ -23,6 +23,20 @@
   font-size: 14px;
 }
 
+/* Inside a Card: the card's title says it, so the frame's is kept for a screen reader only. */
+.chart-head--bare .chart-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.chart-head--bare:not(:has(.chart-control)) {
+  margin-bottom: 0;
+}
+
 .chart-control {
   margin-top: var(--space-2);
 }

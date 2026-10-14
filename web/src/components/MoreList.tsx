@@ -17,6 +17,8 @@ export interface MoreRow {
   finding: ReactNode;
   /** The full card, drawn when the row first opens. */
   children: ReactNode;
+  /** A line under the row's button, shown open or closed (the formula behind the finding, at the Formula level). */
+  note?: ReactNode;
 }
 
 export interface MoreListProps {
@@ -98,6 +100,7 @@ export default function MoreList({ id, rows, heading = "More" }: MoreListProps) 
                 {open ? "−" : "+"}
               </span>
             </button>
+            {row.note ?? null}
             <div className="more-body" id={bodyId} hidden={!open}>
               {drawn ? row.children : null}
             </div>

@@ -86,7 +86,7 @@ export default function GrowthChart({ growth: g, lines, width, height }: GrowthC
         tickFormatter={(v: number) => tickText(v, "usd")}
         allowDataOverflow
       />
-      {/* The amount invested, dashed. Not labelled: every line starts on it, so a label at either end
+      {/* The amount invested, dotted. Not labelled: every line starts on it, so a label at either end
           sits on the lines; the subtitle names it. */}
       <ReferenceLine y={g.amount} stroke={tokens.color.ink2} strokeDasharray={DASH.reference} className="ret-start" />
       <Tooltip
@@ -103,6 +103,7 @@ export default function GrowthChart({ growth: g, lines, width, height }: GrowthC
           name={l.name}
           stroke={l.color}
           strokeWidth={l.bench ? 2 : 1.5}
+          strokeDasharray={l.bench ? DASH.bench : undefined}
           dot={false}
           activeDot={{ r: 3 }}
           isAnimationActive={false}

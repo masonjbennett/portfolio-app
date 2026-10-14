@@ -1,6 +1,8 @@
 // A card: one analysis on flat paper inside a hairline. A title that states the finding, an optional
 // sub-line, the chart, then two folds, "Show the numbers" and "How it is calculated", and a row of
 // downloads. Paragraphs live in the folds, so at rest a card shows a title, one line and a picture.
+// Inside a More row the row's own title names the card, so a card there may carry no title of its own
+// (one that is only a table, whose caption names it); it is then labelled by its `label`.
 //
 // A fold's contents are drawn the first time it opens and kept after it closes, so a table inside one
 // costs nothing until someone asks for it and keeps its scroll and sort when closed and reopened.
@@ -8,8 +10,10 @@ import { useId, useState, type ReactNode } from "react";
 import "./Card.css";
 
 export interface CardProps {
-  /** The finding, as a title (at most fourteen words). */
-  title: string;
+  /** The finding, as a title (at most fourteen words). Left out inside a More row, which names the card. */
+  title?: string;
+  /** The card's accessible name when it has no title. */
+  label?: string;
   /** One line under the title (at most twenty-five words). */
   sub?: ReactNode;
   /** Anchor id, if the card is linkable. */
@@ -40,7 +44,7 @@ function useFold() {
   return { id, open, drawn, toggle };
 }
 
-export default function Card({ title, sub, id, children, numbers, how, downloads }: CardProps) {
+export default function Card({ title, sub, label, id, children, numbers, how, downloads }: CardProps) {
   const headId = useId();
   const numbersFold = useFold();
   const howFold = useFold();
@@ -48,13 +52,17 @@ export default function Card({ title, sub, id, children, numbers, how, downloads
   if (numbers) folds.push(["numbers", numbersFold]);
   if (how) folds.push(["how", howFold]);
   return (
-    <section className="card" id={id} aria-labelledby={headId}>
-      <header className="card-head">
-        <h3 className="card-title" id={headId}>
-          {title}
-        </h3>
-        {sub ? <p className="card-sub">{sub}</p> : null}
-      </header>
+    <section className={title || sub ? "card" : "card card--untitled"} id={id} aria-labelledby={title ? headId : undefined} aria-label={title ? undefined : label}>
+      {title || sub ? (
+        <header className="card-head">
+          {title ? (
+            <h3 className="card-title" id={headId}>
+              {title}
+            </h3>
+          ) : null}
+          {sub ? <p className="card-sub">{sub}</p> : null}
+        </header>
+      ) : null}
       {children ? <div className="card-body">{children}</div> : null}
       {folds.length ? (
         <>

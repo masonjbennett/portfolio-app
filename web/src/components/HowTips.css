@@ -1,0 +1,20 @@
+/* A card's terms under "How it is calculated": the term, then its three texts, one paragraph each. */
+.how-tips {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+
+.how-tip dt {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.how-tip dd {
+  margin: var(--space-1) 0 0;
+}
+
+.how-tip-level {
+  color: var(--color-ink);
+  font-weight: 500;
+}

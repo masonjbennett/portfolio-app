@@ -1,7 +1,7 @@
 // Tables and their downloads: the Table component, the CSV and Excel cells behind its two buttons,
 // and a sweep that keeps every tab and chrome file from rendering a raw <table> that would carry
 // neither download.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, openAll } from "./_dom.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "esbuild";
@@ -296,7 +296,8 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
     for (const [file, seg] of screens) {
       const name = seg ? `${file} (${seg})` : file;
       const Tab = (await import(`../src/tabs/${file}.tsx`)).default;
-      const tr = render(h(Tab, tabProps(fixtureAnalysis("cross"))));
+      // Every More row and card fold opened: a closed one draws no table, and the sweep would pass on fewer.
+      const tr = openAll(render(h(Tab, tabProps(fixtureAnalysis("cross")))));
       const box = tr.container.querySelector(".sens-check input");
       if (box) act(() => box.click());
       if (seg) {
@@ -310,7 +311,7 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
       // For the heading check below: the section heading last before each table, and whether a chart's
       // own title sits between the two (4 = DOCUMENT_POSITION_FOLLOWING: the argument comes later).
       const after = (x, y) => (x.compareDocumentPosition(y) & 4) !== 0;
-      const heads = [...tr.container.querySelectorAll("h2.slug-text")];
+      const heads = [...tr.container.querySelectorAll("h2.slug-text, .more-title")];
       const charts = [...tr.container.querySelectorAll("h3.chart-title")];
       for (const tb of tr.container.querySelectorAll(".tbl")) {
         const t = tb.querySelector(".tbl-title");
@@ -336,7 +337,7 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   const basket = found.filter((f) => f.tab === "WalkForward (Your basket)" && f.span !== "(none)");
   check(basket.length >= 3, "spans: the sweep reads Your basket's tables after its solve lands, not the empty segment before it",
     `${basket.length} tables read on Your basket`);
-  check(found.length >= 17 && TYPED.every((t) => found.some((f) => f.title === t)) && bad.length === 0,
+  check(found.length >= 24 && TYPED.every((t) => found.some((f) => f.title === t)) && bad.length === 0,
     "spans: every table on the seven tabs (both walk-forward segments) states its window and return frequency; only the typed weights claim none",
     `${found.length} tables; ${bad.map((f) => `${f.tab}/${f.title}=${f.span}`).join(" | ")}`);
 

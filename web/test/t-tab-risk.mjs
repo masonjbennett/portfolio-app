@@ -8,13 +8,14 @@
 //     numeric-downloads and downloads-everywhere (the tab halves), boundary (the tab half), rf-live.
 // (d) The whole tab rendered in jsdom: the headline, three charts drawn, three tables with both
 //     downloads, no NaN, and the level, window and asset controls doing what they say.
-import { render, text, act, expectUncaught } from "./_dom.mjs";
+import { render, text, act, expectUncaught, openAll } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, json, done } from "./_assert.mjs";
 import { exampleAnalysis, fixtureAnalysis, tabProps, ORACLE_RF } from "./_analysis.mjs";
 
 const { createElement: h } = await import("react");
 const M = await import("../src/tabs/risk/model.ts");
+const P = await import("../src/tabs/performance.ts");
 const Risk = (await import("../src/tabs/Risk.tsx")).default;
 const RC = await import("../src/tabs/risk/charts.tsx");
 const { BETA_ABOVE, BETA_BELOW } = RC;
@@ -280,15 +281,20 @@ HTMLElement.prototype.getBoundingClientRect = function () {
 };
 const click = (el) => act(() => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
 const pill = (root, label) => [...root.querySelectorAll("button[role=radio]")].find((b) => text(b) === label);
-const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby="${id}"]`);
+// The old sections' anchors, now rows of the Performance chapter's risk list.
+const ROW_OF = { "risk-falls": "falls", "risk-drawdown": "drawdowns", "risk-volatility": "volatility", "risk-metrics": "metrics", "risk-capm": "capm" };
+const sectionOf = (r, id) => r.container.querySelector(`#perf-risk-${ROW_OF[id]}`);
 
 {
   const props = tabProps(a);
-  const r = quiet(() => render(h(Risk, props)));
+  const r = quiet(() => openAll(render(h(Risk, props))));
   const all = text(r.container);
   check(!/NaN|undefined|Infinity|\bnan\b/.test(all), "tab: no NaN, undefined or Infinity anywhere on it");
-  const head = r.container.querySelector(".risk-headline");
-  check(head && text(head) === M.headline(a) && text(head).startsWith("VNQ fell furthest: 42.4%"), "tab: the headline is on it, literal", head ? text(head) : "none");
+  const head = r.container.querySelector("#perf-risk-drawdowns .more-finding");
+  check(head && text(head) === M.headline(a) && text(head).startsWith("VNQ fell furthest: 42.4%"),
+    "tab: the old headline's finding is the Drawdowns row's, literal", head ? text(head) : "none");
+  const titles = [...r.container.querySelectorAll(".more-title")].map(text);
+  check(JSON.stringify(titles) === JSON.stringify(Object.values(P.RISK_ROWS)), "tab: one More row per old section, the portfolios' falls first", titles.join(" | "));
   check(r.container.querySelectorAll(".recharts-surface").length === 3, "tab: all three charts are drawn",
     `${r.container.querySelectorAll(".recharts-surface").length}`);
 
@@ -343,26 +349,24 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
   check(!v60p.late && peakText?.getAttribute("text-anchor") === "start", "tab: an early volatility peak is labelled to its right", peakText?.outerHTML ?? "no label");
   check(r.container.querySelectorAll(".recharts-legend-wrapper").length === 0, "tab: no legend, the labels are in the charts");
 
-  // The level switch changes the tooltip text.
-  const tipOf = () => r.container.querySelector("button[aria-label='About maximum drawdown']")?.parentElement.querySelector("[role=tooltip]");
-  const plain = tipOf() ? text(tipOf()) : "";
+  // The info marks' texts, all three levels at once, under each card's How it is calculated.
+  const tipsOf = (k) => [...r.container.querySelectorAll(`.how-tip[data-tip="${k}"] dd`)].map((d) => text(d).replace(/^[^:]+: /, ""));
+  const levels = (k) => ["plain", "finance", "formula"].map((l) => tipText(k, l));
+  check(["max_dd", "volatility", "sharpe", "sortino", "beta", "alpha"].every((k) => JSON.stringify(tipsOf(k)) === JSON.stringify(levels(k))),
+    "tab: every term the cards' marks carried has its three texts under How it is calculated", tipsOf("max_dd").join(" / "));
   quiet(() => r.rerender(h(Risk, { ...props, level: "formula" })));
-  const formula = tipOf() ? text(tipOf()) : "";
-  check(plain === tipText("max_dd", "plain") && formula === tipText("max_dd", "formula") && plain !== formula, "tab: the level switch changes the tooltip text", `${plain} / ${formula}`);
-  const betaTip = r.container.querySelector("button[aria-label='About beta']")?.parentElement.querySelector("[role=tooltip]");
-  check(betaTip && text(betaTip) === tipText("beta", "formula"), "tab: the beta tip follows the level too");
+  check(JSON.stringify(tipsOf("beta")) === JSON.stringify(levels("beta")), "tab: the level switch leaves them as they were");
 
   // The hero opens on the asset the headline names; another asset's pill switches chart and plate.
-  const heroTitle = () => text(dd.querySelector(".chart-title"));
-  const plate = () => text(dd.querySelector(".plate-value"));
-  check(heroTitle() === M.drawdownTitle(wd) && plate() === format(wd.max, "pct2"), "tab: the hero chart shows the headline's asset", heroTitle());
+  const heroTitle = () => text(dd.querySelector(".card-title"));
+  check(heroTitle() === M.drawdownTitle(wd) && heroTitle().includes(format(-wd.max, "pct2")), "tab: the drawdown card opens on the finding's asset, its depth in the title", heroTitle());
   const other = M.tickerDrawdowns(a).find((d) => d.name !== wd.name);
   quiet(() => click(pill(dd, other.name)));
-  check(heroTitle() === M.drawdownTitle(other) && plate() === format(other.max, "pct2"), "tab: picking another asset redraws the hero and its plate", `${heroTitle()} ${plate()}`);
+  check(heroTitle() === M.drawdownTitle(other) && text(dd.querySelector(".chart-title")) === heroTitle(), "tab: picking another asset redraws the chart and retitles the card", heroTitle());
 
   // The window switch.
   const vol = sectionOf(r, "risk-volatility");
-  const volTitle = () => text(vol.querySelector(".chart-title"));
+  const volTitle = () => text(vol.querySelector(".card-title"));
   const v60 = M.volChart(a, 60);
   check(volTitle() === M.volTitle(v60.value) && volTitle().includes("60-day"), "tab: the volatility chart opens on the app's 60-day window", volTitle());
   quiet(() => click(pill(vol, "120 days")));
@@ -390,15 +394,15 @@ const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby=
   Object.defineProperty(broken, "benchStats", { get() { throw new Error("no benchmark stats"); } });
   let r = null;
   try {
-    r = quiet(() => expectUncaught(() => render(h(Risk, tabProps(broken)))));
+    r = quiet(() => expectUncaught(() => openAll(render(h(Risk, tabProps(broken))))));
   } catch (err) {
     check(false, "ledger:boundary a failing section stays inside its own boundary", err.message);
   }
   if (r) {
     const fallback = [...r.container.querySelectorAll(".boundary")].map(text);
     check(JSON.stringify(fallback) === JSON.stringify(["Risk-adjusted metrics could not be shown."]), "ledger:boundary the failed section is one line naming it", fallback.join(" | "));
-    check(!!r.container.querySelector(".risk-headline") && r.container.querySelectorAll(".recharts-surface").length === 3 && r.container.querySelectorAll(".tbl").length === 4,
-      "ledger:boundary the headline, the three charts and the other four tables still render");
+    check(r.container.querySelectorAll(".more-title").length === 5 && r.container.querySelectorAll(".recharts-surface").length === 3 && r.container.querySelectorAll(".tbl").length === 4,
+      "ledger:boundary the five rows, the three charts and the other four tables still render");
     r.unmount();
   }
 }

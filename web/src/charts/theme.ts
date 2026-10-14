@@ -44,7 +44,8 @@ export const ROLE = {
 export type Role = keyof typeof ROLE;
 
 // Dash patterns: the CAL (1612, 1775) and reference lines such as beta = 1 (1403) are dashed.
-export const DASH = { cal: "5 4", reference: "2 3" } as const;
+// The benchmark is the one dashed series (redesign 5c.4), so a reference line is dotted beside it.
+export const DASH = { cal: "5 4", reference: "2 3", bench: "6 3" } as const;
 
 // Axis, grid and label styling shared by every chart.
 export const chartTheme = {

@@ -24,7 +24,7 @@ import type { Analysis, LoadState } from "../types.ts";
 import { labelFill } from "./contrast.ts";
 import { CHAR_PX, LabelText, useBoxWidth, type PlacedLabel } from "./Frontier.tsx";
 import { spreadLabels } from "./labels.ts";
-import { axisProps, gridProps, ROLE, tooltipProps, type Hover } from "./theme.ts";
+import { axisProps, DASH, gridProps, ROLE, tooltipProps, type Hover } from "./theme.ts";
 
 const c = tokens.color;
 
@@ -243,6 +243,7 @@ export const WealthLines = memo(function WealthLines({ plot, height }: { plot: W
             name={l.label}
             stroke={ROLE[l.role]}
             strokeWidth={l.role === "bench" ? 1.5 : 2}
+            strokeDasharray={l.role === "bench" ? DASH.bench : undefined}
             dot={false}
             activeDot={{ r: 3, stroke: c.paper, strokeWidth: 1 }}
             isAnimationActive={false}

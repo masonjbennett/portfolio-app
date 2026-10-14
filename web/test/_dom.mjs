@@ -130,4 +130,19 @@ export function text(node) {
   return (node.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
+// Opens every closed More row and card fold under `root`, as a reader clicking each one would, until none
+// is left (a row, once open, draws a card whose folds are closed). Returns what it was given, so it can wrap
+// a render: openAll(render(h(Tab, props))). The rows stay open for the rest of the process (MoreList keeps
+// them for the visit), the folds for the life of their card.
+const CLOSED = 'button.more-button[aria-expanded="false"], button.card-fold-button[aria-expanded="false"]';
+export function openAll(r) {
+  const root = r.container ?? r;
+  for (let pass = 0; pass < 10; pass += 1) {
+    const closed = [...root.querySelectorAll(CLOSED)];
+    if (!closed.length) break;
+    for (const b of closed) act(() => b.click());
+  }
+  return r;
+}
+
 export { act };

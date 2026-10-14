@@ -1,17 +1,7 @@
-/* The Risk Analysis tab: the headline, the section controls and the notes. Charts, tables, plates and
-   section headers bring their own styles; every colour here is a token. */
+/* The risk half of Performance: the cards' controls and notes. Cards, charts and tables bring their own
+   styles; every colour here is a token. */
 .risk {
   min-width: 0;
-}
-
-/* The headline states the finding, in the headline face. */
-.risk-headline {
-  margin: 0 0 var(--space-6);
-}
-
-.risk-section {
-  min-width: 0;
-  margin-bottom: var(--space-7);
 }
 
 .risk-controls {
@@ -37,23 +27,6 @@
   color: var(--color-ink2);
 }
 
-.risk-plates {
-  display: grid;
-  grid-template-columns: minmax(0, 240px);
-  margin-bottom: var(--space-4);
-}
-
-.risk-terms {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1);
-  margin: var(--space-2) 0 var(--space-3);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  color: var(--color-ink2);
-}
-
 .risk-note {
   margin: var(--space-3) 0 0;
   max-width: 72ch;
@@ -70,15 +43,4 @@
   font-size: 13px;
   font-style: italic;
   color: var(--color-ink2);
-}
-
-/* Phone: 760px, tokens.breakpoint.phone (a media query cannot read a custom property). */
-@media (max-width: 760px) {
-  .risk-headline {
-    margin-bottom: var(--space-5);
-  }
-
-  .risk-plates {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

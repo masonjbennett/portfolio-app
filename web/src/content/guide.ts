@@ -254,7 +254,12 @@ export const GUIDE_CHAPTERS: Readonly<Record<ChapterId, GuideChapter>> = {
   },
   performance: {
     question: "How did each investment and each mix grow, and how far did they fall?",
-    opens: ["Two parts: the returns first, then the risk."],
+    opens: [
+      "It opens on one sentence: where a starting amount ended highest and lowest. Under it, one chart draws what that " +
+        "amount became. Every further analysis is a row below, a title and its finding in one line; a row opens in place " +
+        "to its chart or table, and the rows you open stay open until you reload. The returns' rows come first, then " +
+        "the falls', under How deep the falls went.",
+    ],
   },
   diversification: {
     question: "Which of the investments moved together?",
@@ -274,16 +279,22 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
   returns: {
     question: "How did each investment grow, and how bumpy was the ride?",
     opens: [
-      "It opens on where a starting amount ended in each asset and in the benchmark, drawn as one line each. The buttons " +
-        "above the chart switch lines on and off, and the box after [[Growth of $]] changes the starting amount; it is " +
-        "remembered in this browser and never put in a link. The table under the chart gives each line's end figures.",
+      "The chart shows where a starting amount ended in [[Each asset]] and in the benchmark, drawn as one line each, or in " +
+        "[[The mixes]]: the three mixes the page builds, your own mix once you have set one in Build a portfolio, and the " +
+        "benchmark. The buttons above the asset lines switch them on and off, and the box after [[Growth of $]] changes the " +
+        "starting amount; it is remembered in this browser and never put in a link. [[Show the numbers]] under the chart " +
+        "gives each line's end figures, and [[How it is calculated]] says how.",
     ],
     sections: [
       {
         heading: "Calendar years",
+        body: ["Each calendar year's return for the four portfolios and the benchmark."],
+      },
+      {
+        heading: "Month by month",
         body: [
-          "Each calendar year's return for the four portfolios and the benchmark. Below the table, [[Months of]] picks one of " +
-            "them for a grid of every month, shaded from loss to gain, with the same months as a table under it.",
+          "[[Months of]] picks one of the portfolios for a grid of every month, shaded from loss to gain; the same months " +
+            "are a table under [[Show the numbers]].",
         ],
       },
       {
@@ -312,7 +323,10 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
   },
   risk: {
     question: "How far did things fall, and how long did the falls last?",
-    opens: ["It opens on the asset that fell furthest from a high, and when it got back to that level, if it did."],
+    opens: [
+      "The second list of rows. The Drawdowns row names the asset that fell furthest from a high, and when; its chart " +
+        "opens on that asset.",
+    ],
     sections: [
       {
         heading: "The portfolios in a fall",

@@ -18,7 +18,7 @@
 //       When this fails after the guide changed, export it again: npm run guide:pdf.
 import { existsSync, readFileSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
-import { act, render, setMedia, text } from "./_dom.mjs";
+import { act, openAll, render, setMedia, text } from "./_dom.mjs";
 
 const { createElement: h } = await import("react");
 const G = await import("../src/content/guide.ts");
@@ -79,7 +79,7 @@ function take(name, root) {
   const p = (parts[name] ??= { text: "", marks: new Set(), slugs: new Set() });
   p.text += ` \n ${corpus(root)}`;
   for (const b of root.querySelectorAll("button.tip-mark")) p.marks.add((b.getAttribute("aria-label") ?? "").replace(/^About /, ""));
-  for (const s of root.querySelectorAll(".slug-text")) p.slugs.add(text(s));
+  for (const s of root.querySelectorAll(".slug-text, .more-title")) p.slugs.add(text(s));
 }
 
 const EX = exampleAnalysis();
@@ -147,6 +147,9 @@ for (const id of TAB_IDS) {
     const base = tabProps(EX);
     const props = { ...base, settings: { ...base.settings, cols: [...ADDED_IDS] }, ...(id === "custom" ? { weights: { [EX.tickers[0]]: 0.5 } } : {}) };
     const r = await quietly(() => render(h(TabContext.Provider, { value: ctx(view) }, h(Tab, props))));
+    await quietly(flush);
+    // Every More row and card fold opened, as a reader can open them: the guide may quote what is inside.
+    await quietly(() => openAll(r));
     await quietly(flush);
     take(`tab.${id}`, r.container);
     const more = [...r.container.querySelectorAll("button.sc-toggle[aria-pressed='false']")];

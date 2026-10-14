@@ -26,6 +26,10 @@
   margin-top: var(--space-4);
 }
 
+.card--untitled > .card-body:first-child {
+  margin-top: 0;
+}
+
 .card-folds {
   display: flex;
   flex-wrap: wrap;
@@ -60,6 +64,12 @@
   padding: 6px 0 var(--space-1);
   color: var(--color-ink2);
   font-size: var(--type-2);
+}
+
+/* A fold's paragraphs keep a reading measure while its tables take the card's width. */
+.card-fold-body p,
+.card-fold-body dl {
+  max-width: min(46em, var(--prose-measure, 100%));
 }
 
 .card-fold-body[hidden] {

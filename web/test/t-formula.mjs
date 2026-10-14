@@ -102,7 +102,8 @@ async function mountTab(name, a, level, extra = {}) {
 }
 
 // The finding each tab's line sits under.
-const FINDING = { live: ".wfl-finding", published: ".wfp-decay" };
+// Risk is the second half of Performance: its finding is the Drawdowns row's, and the line sits under that row's button.
+const FINDING = { live: ".wfl-finding", published: ".wfp-decay", risk: "#perf-risk-drawdowns .more-finding" };
 const findingOf = (root, name) => root.querySelector(FINDING[name] ?? "h2.tab-finding");
 
 /**

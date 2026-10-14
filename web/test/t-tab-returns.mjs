@@ -10,7 +10,7 @@
 // (d) The rendered tab: headline, both tables with both downloads, no NaN / undefined / Infinity, the
 //     level switch changes the tooltip text, the toggles, the distribution controls, and every card's
 //     empty and error state failing closed and named.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, openAll } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, json, done } from "./_assert.mjs";
 import { fixtureAnalysis, tabProps, ORACLE_RF } from "./_analysis.mjs";
@@ -18,6 +18,7 @@ import { fixtureAnalysis, tabProps, ORACLE_RF } from "./_analysis.mjs";
 const { createElement: h } = await import("react");
 const M = await import("../src/tabs/returns/model.ts");
 const Returns = (await import("../src/tabs/Returns.tsx")).default;
+const { DASH, ROLE } = await import("../src/charts/theme.ts");
 const { endLabelValues } = await import("../src/tabs/returns/GrowthChart.tsx");
 const { csvText, worksheet } = await import("../src/download.ts");
 const { format } = await import("../src/format.ts");
@@ -215,7 +216,7 @@ const oCross = dump("cross");
 const clean = (s) => !/NaN|undefined|Infinity/.test(s);
 {
   const props = tabProps(cross);
-  const r = render(h(Returns, props));
+  const r = openAll(render(h(Returns, props)));
   const $ = (sel) => r.container.querySelector(sel);
   const $$ = (sel) => [...r.container.querySelectorAll(sel)];
   const want = M.headline(M.growth(cross, props.settings.amount));
@@ -250,17 +251,21 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
     "tab: the growth chart draws six lines, each named in the chart", endLabels().join());
   check(!$(".recharts-legend-wrapper"), "tab: no legend where the labels do the work");
   const start = $(".ret-start line");
+  const growthHow = text($('#perf-growth [data-fold="how"]'));
   check(start?.getAttribute("y") === "10000" && start.getAttribute("stroke-dasharray") === "2 3" &&
-    text($(".chart-sub")).endsWith("The dashed line is the $10,000 invested."),
-    "tab: the starting amount is a dashed line on the chart, named under its title", text($(".chart-sub")));
+    growthHow.includes("The dotted line is the $10,000 invested; the S&P 500 is the dashed one."),
+    "tab: the starting amount is a dotted line on the chart, named under the card's How it is calculated", growthHow);
+  const benchCurve = $$(".recharts-line-curve").find((p) => p.getAttribute("stroke-dasharray") === DASH.bench);
+  check($$(".recharts-line-curve").filter((p) => p.getAttribute("stroke-dasharray") === DASH.bench).length === 1 && benchCurve?.getAttribute("stroke") === ROLE.bench,
+    "tab: the benchmark is the one dashed line, in its own ink");
 
-  // The level switch changes the tooltip text; the tips follow the shorting toggle too.
-  const tips = () => $$(".ret-key .tip-text").map(text);
-  const plain = [tipText("return", "plain"), tipText("volatility", "plain")];
-  const formula = [tipText("return", "formula"), tipText("volatility", "formula")];
-  check(plain[0] !== formula[0] && JSON.stringify(tips()) === JSON.stringify(plain), "tab: the tooltips show the Plain text", tips().join(" | "));
+  // The two info marks' texts, every level at once, under the Summary Statistics' How it is calculated; the
+  // explanation level no longer chooses among them.
+  const tips = () => $$('.how-tip[data-tip="return"] dd, .how-tip[data-tip="volatility"] dd').map((d) => text(d).replace(/^[^:]+: /, ""));
+  const all = ["return", "volatility"].flatMap((k) => ["plain", "finance", "formula"].map((l) => tipText(k, l)));
+  check(all[0] !== all[2] && JSON.stringify(tips()) === JSON.stringify(all), "tab: the Summary Statistics' terms carry all three texts, as the marks had them", tips().join(" | "));
   r.rerender(h(Returns, { ...props, level: "formula" }));
-  check(JSON.stringify(tips()) === JSON.stringify(formula), "tab: switching the level to Formula changes the tooltip text", tips().join(" | "));
+  check(JSON.stringify(tips()) === JSON.stringify(all), "tab: switching the level to Formula leaves the three texts as they were", tips().join(" | "));
 
   // Toggles: hide AGG, then everything.
   const toggle = (name) => $$(".ret-toggle").find((b) => text(b) === name);
@@ -304,7 +309,7 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
   // Fail closed and named: one ticker with a hole in its returns. Its growth line, its summary row and
   // its distribution say so; every other card still renders; no NaN reaches the page.
   const holed = { ...cross, returns: cross.returns.map((c, i) => (i === 0 ? c.map((v, k) => (k === 40 ? NaN : v)) : c)) };
-  const r = render(h(Returns, tabProps(holed)));
+  const r = openAll(render(h(Returns, tabProps(holed))));
   const all = text(r.container);
   check(/Chart not drawn: the VTI growth line failed/.test(all), "tab: a broken growth line fails the chart closed, naming it");
   check(/Chart not drawn: the return series failed/.test(all), "tab: the distribution of that ticker fails closed, named");
@@ -319,7 +324,7 @@ const clean = (s) => !/NaN|undefined|Infinity/.test(s);
 }
 {
   // A starting amount the rail would refuse still draws nothing rather than a line at zero.
-  const r = render(h(Returns, tabProps(cross, { settings: { ...tabProps(cross).settings, amount: 0 } })));
+  const r = openAll(render(h(Returns, tabProps(cross, { settings: { ...tabProps(cross).settings, amount: 0 } }))));
   check(/Enter a starting amount above \$0/.test(text(r.container)) && /returned the most/.test(text(r.container.querySelector(".ret-finding"))),
     "tab: with no usable amount the chart says so and the headline speaks in returns", text(r.container.querySelector(".ret-finding")));
   check(clean(r.container.innerHTML), "tab: no NaN with no usable amount");
@@ -334,10 +339,9 @@ const typeInto = (input, v) => act(() => {
 // ---- the kicker, the tables' spans, and the starting amount on the growth chart ------------------------
 {
   const calls = [];
-  const r = render(h(Returns, tabProps(cross, { requestSettings: (p) => calls.push(p) })));
-  const kicker = text(r.container.querySelector(".ret-kicker"));
-  check(kicker === "Growth, summary statistics and the shape of daily returns" && !/Return computation|exploratory analysis/i.test(text(r.container)),
-    "kicker: names the view in plain words, not the assignment's heading", kicker);
+  const r = openAll(render(h(Returns, tabProps(cross, { requestSettings: (p) => calls.push(p) }))));
+  check(!r.container.querySelector(".ret-kicker") && !/Return computation|exploratory analysis/i.test(text(r.container)),
+    "kicker: the chapter row names the view, so the tab carries no kicker, and never the assignment's heading");
   const spans = [...r.container.querySelectorAll(".tbl")].map((t) => [text(t.querySelector(".tbl-title")), text(t.querySelector(".tbl-span"))]);
   check(JSON.stringify(spans) === JSON.stringify([
     ["Growth of $10,000", `Daily closes, ${cross.prices.dates[0]} to ${cross.asOf}`],
@@ -345,7 +349,7 @@ const typeInto = (input, v) => act(() => {
     ["Monthly returns, Equal-Weight", `Monthly returns, ${cross.prices.dates[0]} to ${cross.asOf}`],
     ["Summary Statistics", `Daily returns, ${cross.dates[0]} to ${cross.asOf}`],
   ]), "spans: the growth, calendar-year and month tables start at the window's first close, the statistics at its first return", JSON.stringify(spans));
-  const monthSub = text(r.container.querySelector('section[aria-labelledby="ret-years"] .chart-sub'));
+  const monthSub = text(r.container.querySelector("#perf-months .ret-months-sub"));
   check(monthSub.startsWith(`Each month's trading days compounded, ${cross.prices.dates[0]} to `),
     "spans: the months grid dates its window from the first close, as the calendar years do", monthSub);
   const frame = r.container.querySelector(".ret-chart .chart-frame");
@@ -405,14 +409,14 @@ const typeInto = (input, v) => act(() => {
     const tag = (x) => `${set}: ${x}`;
     const typed = Object.fromEntries(a.tickers.map((t, i) => [t, (a.tickers.length - i) / 10]));
     const cols = columnsOf(a, typed);
-    const r = render(h(Returns, tabProps(a, { weights: typed })));
-    const sec = r.container.querySelector("section[aria-labelledby=ret-years]");
+    const r = openAll(render(h(Returns, tabProps(a, { weights: typed }))));
+    const sec = r.container.querySelector("#perf-years")?.parentElement ?? null;
 
-    // Where it sits: right after the growth chart and its table, before the Summary Statistics.
-    const heads = [...r.container.querySelectorAll("h2.slug-text")].map(text);
-    const growthTbl = tableTitled(r.container, "Growth of $10,000");
-    check(!!sec && !!sec.querySelector("h2#ret-years") && heads.indexOf("Calendar years") === heads.indexOf("Summary Statistics") - 1
-      && (growthTbl.compareDocumentPosition(sec) & 4) !== 0, tag("years: the Calendar years section follows the growth chart, anchored ret-years"), heads.join(" | "));
+    // Where it sits: the first More row after the growth card, Month by month next, before the Summary Statistics.
+    const heads = [...r.container.querySelectorAll(".more-title")].map(text);
+    const growthCard = r.container.querySelector("#perf-growth");
+    check(!!sec && same(heads, ["Calendar years", "Month by month", "Summary Statistics", "Return Distribution"])
+      && (growthCard.compareDocumentPosition(sec) & 4) !== 0, tag("years: the Calendar years row is the first under the growth card, anchored perf-years"), heads.join(" | "));
     if (!sec) {
       r.unmount();
       continue;
@@ -500,6 +504,71 @@ const typeInto = (input, v) => act(() => {
     const css = readFileSync(new URL("../src/tabs/returns/Returns.css", import.meta.url), "utf8");
     check(/\.ret-months-scroll \{[^}]*overflow-x: auto;[^}]*max-width: 100%;/.test(css) && /\.ret-months-pick > \.seg \{[^}]*min-width: 0;/.test(css),
       "months: the grid scrolls inside its own box and the pill row may shrink, so the page never scrolls sideways");
+  }
+}
+
+// ---- the Performance chapter's shape: closed rows draw nothing, findings are their cards' figures ---------
+{
+  const P = await import("../src/tabs/performance.ts");
+  const { forgetMore } = await import("../src/components/MoreList.tsx");
+  const { portfolioSeries, yearRows } = await import("../src/tabs/returns/years.ts");
+  const { customWeights } = await import("../src/tabs/optimization/model.ts");
+  forgetMore();
+  const r = render(h(Returns, tabProps(cross)));
+  const bodies = [...r.container.querySelectorAll(".more-body")];
+  check(bodies.length === 4 && bodies.every((b) => b.hidden && b.childElementCount === 0) && r.container.querySelectorAll(".tbl").length === 0,
+    "rows: at rest every row is closed and has drawn nothing, its table included", `${bodies.length} rows`);
+  const series = portfolioSeries(cross, customWeights(cross, {}));
+  const findings = [...r.container.querySelectorAll(".more-finding")].map(text);
+  const want = [P.yearsFinding(cross, series), P.monthsFinding(cross, series), P.summaryFinding(cross), P.distFinding(cross)];
+  check(JSON.stringify(findings) === JSON.stringify(want), "rows: each row's finding is its model's, in the rows' order", findings.join(" | "));
+  // The summary finding names the highest and lowest volatility in the table, rebuilt here.
+  const rows = M.summaryRows(cross).filter((x) => typeof x.annVol === "number");
+  const hi = rows.reduce((a, b) => (b.annVol > a.annVol ? b : a));
+  const lo = rows.reduce((a, b) => (b.annVol < a.annVol ? b : a));
+  check(findings[2] === `${hi.asset} swung most, ${format(hi.annVol, "pct1")} a year; ${lo.asset} least, ${format(lo.annVol, "pct1")}.`,
+    "rows: the summary row names the table's most and least volatile, at its figures", findings[2]);
+  // The years finding reads whole years only: the window's partial first and last years are left out.
+  const whole = yearRows(cross, series).filter((y) => !String(y.year).includes(",")).map((y) => String(y.year));
+  const named = [...findings[0].matchAll(/ in (\d{4})\b/g)].map((m) => m[1]);
+  check(named.length === 2 && named.every((y) => whole.includes(y)) && /^Best whole year: .+\(.+\), /.test(findings[0]),
+    "rows: the years row names two whole years, the plain name first and the scorecard's beside it", findings[0]);
+  // A series whose partial first year is by far its best (five +20% days on its first closes) still has a whole year
+  // named as its best.
+  const first = String(cross.dates[0].slice(0, 4));
+  const boosted = cross.bench.map((v, i) => (i < 5 ? 0.2 : v));
+  const only = [{ id: "bench", label: cross.benchLabel, sub: null, r: boosted }];
+  const top = /^Best whole year: [^,]+, \S+ in ([^.]+)\./.exec(P.yearsFinding(cross, only))?.[1];
+  check(top !== undefined && top !== first && whole.includes(top), "rows: a partial year is never the years row's best, however large", P.yearsFinding(cross, only));
+  // A finding that throws costs only its line.
+  const err = console.error;
+  console.error = () => {};
+  const fell = P.said("Test", () => { throw new Error("planted"); });
+  console.error = err;
+  check(fell === "This finding could not be stated.", "rows: a finding that throws says so in its row and throws no further", fell);
+  // A chart inside a card: the card's title says it, so the frame's subtitle is not drawn and its title is for a screen reader.
+  openAll(r);
+  const heads = [...r.container.querySelectorAll(".card .chart-head")];
+  check(heads.length > 0 && heads.every((x) => x.classList.contains("chart-head--bare") && !x.querySelector(".chart-sub")),
+    "cards: every chart inside a card is bare, with no subtitle under the card's own title", `${heads.length} charts`);
+  r.unmount();
+
+  // The mixes view: the three mixes under their plain names and the benchmark, dashed; Your mix joins only once it
+  // is not the equal split; the numbers fold lists the same lines.
+  const growthCard = (root) => root.querySelector("#perf-growth");
+  const ends = (root) => [...growthCard(root).querySelectorAll(".wealth-line")].map((l) => l.getAttribute("class"));
+  const names = (root) => [...growthCard(root).querySelectorAll("tbody tr")].map((tr) => text(tr.children[0]));
+  for (const [weights, mine] of [[{}, false], [{ VTI: 0.7, AGG: 0.3 }, true]]) {
+    const m = openAll(render(h(Returns, tabProps(cross, { weights }))));
+    const pill = [...growthCard(m.container).querySelectorAll("[role=radio]")].find((b) => text(b) === "The mixes");
+    act(() => pill.click());
+    openAll(m);
+    const want = ["Best-tradeoff", "Equal split", "Lowest-risk", ...(mine ? ["Your mix"] : []), cross.benchLabel];
+    const dashed = [...growthCard(m.container).querySelectorAll(".recharts-line-curve")].filter((p) => p.getAttribute("stroke-dasharray") === DASH.bench);
+    check(JSON.stringify(names(m.container)) === JSON.stringify(want) && ends(m.container).length === want.length && dashed.length === 1 &&
+      !growthCard(m.container).querySelector(".ret-toggle"),
+      `mixes: the mixes view draws ${mine ? "Your mix with" : "only"} the three mixes and the benchmark, the benchmark dashed`, names(m.container).join(" | "));
+    m.unmount();
   }
 }
 

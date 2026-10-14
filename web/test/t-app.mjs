@@ -8,7 +8,7 @@
 // portfolio_app.py or reproduced with the engine, and the port's side, rendered.
 import { readFileSync, readdirSync } from "node:fs";
 import { check, done } from "./_assert.mjs";
-import { act, expectUncaught, render, setMedia, text } from "./_dom.mjs";
+import { act, expectUncaught, openAll, render, setMedia, text } from "./_dom.mjs";
 
 const { createElement: h, useState, lazy } = await import("react");
 const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
@@ -271,7 +271,8 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     let failed = [];
     let after = ["never rendered"];
     try {
-      const r = quietly(() => expectUncaught(() => render(mount(id, poisoned))));
+      // Every More row and fold opened, as a reader would: a closed row draws no card that could fail.
+      const r = quietly(() => expectUncaught(() => openAll(render(mount(id, poisoned)))));
       failed = [...r.container.querySelectorAll(".boundary")].map(text);
       quietly(() => r.rerender(mount(id, { ...EX })));
       after = [...r.container.querySelectorAll(".boundary")].map(text);
@@ -299,6 +300,13 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     seen.push(`${id}: ${first?.tagName}.${first?.className} "${finding.slice(0, 40)}"`);
     // The walk-forward tab is the one exception, by name: it opens on its section heading and the switch
     // between its two segments, and each segment states its own finding under them.
+    // Risk is the second half of Performance, which states the chapter's one finding above it: it opens on its
+    // More list, and the Drawdowns row carries what was its finding.
+    if (id === "risk") {
+      check(first?.tagName === "H3" && first.classList.contains("more-head") && !!panel.querySelector("#perf-risk-drawdowns .more-finding"),
+        "tabs: the risk part opens on its More list's heading, under Performance's finding", seen.at(-1));
+      continue;
+    }
     if (id === "walkforward") {
       check(first?.tagName === "H2" && first.classList.contains("slug-text") && finding === "Walk-forward test",
         "tabs: the walkforward tab's first heading is its section heading, Walk-forward test, above its two segments", seen.at(-1));

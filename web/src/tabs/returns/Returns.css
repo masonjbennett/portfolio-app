@@ -1,4 +1,4 @@
-/* The Returns & Statistics tab: the finding in the headline face, then the chart, then the tables.
+/* The returns half of Performance: the finding in the headline face, the growth card, then the More rows.
    Every colour is a token; the one inline colour on the page is a toggle's swatch, which is its
    line's colour from src/charts/theme.ts. */
 .ret {
@@ -9,13 +9,15 @@
   margin: 0 0 var(--space-5);
 }
 
-.ret-kicker {
-  margin: 0 0 var(--space-2);
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-ink2);
+/* A section gap, not a hairline, between the lead card and the rows (40 px; 28 on a phone, below). */
+#perf-growth {
+  margin-bottom: 40px;
+}
+
+@media (max-width: 760px) {
+  #perf-growth {
+    margin-bottom: 28px;
+  }
 }
 
 .ret-finding {
@@ -87,12 +89,6 @@
   line-height: 1.5;
 }
 
-.ret-term {
-  white-space: nowrap;
-  color: var(--color-ink);
-  font-weight: 600;
-}
-
 .ret-controls {
   display: flex;
   flex-wrap: wrap;
@@ -117,11 +113,6 @@
   background: var(--color-paper);
   border: var(--line-hair) solid var(--color-hairline);
   border-radius: 6px;
-}
-
-/* Calendar years and the months grid. */
-.ret-section {
-  min-width: 0;
 }
 
 .ret-note {

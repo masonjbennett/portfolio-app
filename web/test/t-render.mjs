@@ -57,7 +57,7 @@ globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
 };
 
 const { check, done } = await import("./_assert.mjs");
-const { act, render, text } = await import("./_dom.mjs");
+const { act, openAll, render, text } = await import("./_dom.mjs");
 const { createElement: h, Profiler, useCallback, useState } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { default: App, AppView, TAB_LOADERS, settlingOf } = await import("../src/App.tsx");
@@ -137,7 +137,8 @@ function Harness({ tab }) {
 function mount(tab) {
   let page = null;
   const first = record(() => {
-    page = render(h(Harness, { tab }));
+    // Every More row and card fold opened, as a reader would: a closed row draws no chart to hold.
+    page = openAll(render(h(Harness, { tab })));
   }, false);
   // The level switch sits in the Assumptions drawer, closed at first: open it, outside any recorded change.
   const drawer = page.container.querySelector(".bar-assumptions");
@@ -241,7 +242,10 @@ for (const tab of TAB_IDS) {
   let before = now;
   const lv = record(() => pickLevel(root).off.click());
   let o = outcome(before, (now = chartsOn(root)), lv);
-  check(lv.components.has("Tip") && o.drew.size === 0, `${tab}, explanation level: the tooltips render again and no chart does`, names(o, o.drew));
+  // Performance's cards carry no info marks (their texts are under How it is calculated); there the level reaches
+  // only the formula line.
+  check((lv.components.has("Tip") || lv.components.has("FormulaLine")) && o.drew.size === 0,
+    `${tab}, explanation level: the tooltips or the formula line render again and no chart does`, names(o, o.drew));
   const amount = root.querySelector(".app-tab input[name=amount]");
   if (amount) {
     before = now;

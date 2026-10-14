@@ -6,13 +6,14 @@
 // own helpers: the deepest falls against drawdownEpisodes, the named falls against windowReturn over the
 // falls covers() admits, and the related event against an overlap computed here from the dates alone.
 // On the baked example and on the mega-cap fixture, then on windows cut to leave falls out.
-import { render, text, act } from "./_dom.mjs";
+import { render, text, act, openAll } from "./_dom.mjs";
 import { check, done } from "./_assert.mjs";
 import { exampleAnalysis, fixtureAnalysis, fixturePayload, settingsFor, tabProps, ORACLE_RF } from "./_analysis.mjs";
 
 const { createElement: h } = await import("react");
 const Risk = (await import("../src/tabs/Risk.tsx")).default;
 const F = await import("../src/tabs/risk/falls.ts");
+const P = await import("../src/tabs/performance.ts");
 const RM = await import("../src/tabs/risk/model.ts");
 const { drawdownEpisodes, windowReturn, covers } = await import("../src/lib/episodes.ts");
 const { NAMED_FALLS, LISTED_FALLS } = await import("../src/content/episodes.ts");
@@ -35,7 +36,9 @@ HTMLElement.prototype.getBoundingClientRect = function () {
   return { x: 0, y: 0, top: 0, left: 0, right: 720, bottom: 360, width: 720, height: 360, toJSON() {} };
 };
 const click = (el) => act(() => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
-const section = (r, id) => r.container.querySelector(`section[aria-labelledby="${id}"]`);
+// The old sections' anchors, now rows of the Performance chapter's risk list.
+const ROW_OF = { "risk-falls": "falls", "risk-drawdown": "drawdowns", "risk-volatility": "volatility", "risk-metrics": "metrics", "risk-capm": "capm" };
+const section = (r, id) => r.container.querySelector(`#perf-risk-${ROW_OF[id]}`);
 const pills = (root) => [...root.querySelectorAll("button[role=radio]")];
 // The text a table's Download CSV button saves, caught where the browser would be handed the file.
 async function savedCsv(tbl) {
@@ -129,14 +132,14 @@ for (const [set, a] of [["example", exampleAnalysis()], ["megacap", fixtureAnaly
   const tag = (s) => `${set}: ${s}`;
   const typed = typedMix(a);
   const cols = columns(a, typed);
-  const r = quiet(() => render(h(Risk, tabProps(a, { weights: typed }))));
+  const r = quiet(() => openAll(render(h(Risk, tabProps(a, { weights: typed })))));
   const sec = section(r, "risk-falls");
 
-  // Order: the new section is the tab's first, under the headline, which is unchanged.
-  const order = [...r.container.querySelectorAll("section[aria-labelledby]")].map((s) => s.getAttribute("aria-labelledby"));
-  check(same(order, ["risk-falls", "risk-drawdown", "risk-volatility", "risk-metrics", "risk-capm"]) && !!r.container.querySelector("h2#risk-falls"),
-    tag("order: the portfolios in a fall is the tab's first section, anchored risk-falls"), order.join());
-  check(text(r.container.querySelector(".risk-headline")) === RM.headline(a), tag("order: the headline above it is the asset headline, as it was"));
+  // Order: the portfolios in a fall is the risk list's first row; the Drawdowns row carries the old headline's finding.
+  const order = [...r.container.querySelectorAll(".more-row")].map((s) => s.id);
+  check(same(order, ["perf-risk-falls", "perf-risk-drawdowns", "perf-risk-volatility", "perf-risk-metrics", "perf-risk-capm"]),
+    tag("order: the portfolios in a fall is the risk list's first row, anchored perf-risk-falls"), order.join());
+  check(text(r.container.querySelector("#perf-risk-drawdowns .more-finding")) === P.drawdownsFinding(a), tag("order: the Drawdowns row states the deepest fall, as the headline did"));
   check(!/NaN|undefined|Infinity|\bnan\b/.test(text(r.container)), tag("tab: no NaN, undefined or Infinity with the section on it"));
 
   // The pill: the scorecard's five heads, in its order.
@@ -221,7 +224,7 @@ for (const [set, a] of [["example", exampleAnalysis()], ["megacap", fixtureAnaly
 // and an asset whose worst fall overlaps no named fall shows an empty Related event cell, never a word or a dash.
 {
   const after = cut("cross", "2021-01-01");
-  const r = quiet(() => render(h(Risk, tabProps(after))));
+  const r = quiet(() => openAll(render(h(Risk, tabProps(after)))));
   const sec = section(r, "risk-falls");
   const named = [...sec.querySelectorAll(".tbl")].find((t) => text(t.querySelector(".tbl-title")) === "Named falls in this window");
   const labels = named ? rowsOf(named).map((row) => row[0]) : [];
@@ -230,7 +233,7 @@ for (const [set, a] of [["example", exampleAnalysis()], ["megacap", fixtureAnaly
   r.unmount();
 
   const late = cut("cross", "2023-01-01");
-  const r2 = quiet(() => render(h(Risk, tabProps(late))));
+  const r2 = quiet(() => openAll(render(h(Risk, tabProps(late)))));
   const sec2 = section(r2, "risk-falls");
   const titles = [...sec2.querySelectorAll(".tbl")].map((t) => text(t.querySelector(".tbl-title")));
   const lineEl = sec2.querySelector("[data-note=no-named-falls]");
@@ -255,7 +258,7 @@ for (const [set, a] of [["example", exampleAnalysis()], ["megacap", fixtureAnaly
   for (const [bench, want, what] of [[twoDips, 2, "two falls print two rows"], [rising, 0, "no fall prints one line and no table"]]) {
     const b = Object.create(a);
     Object.defineProperty(b, "bench", { value: bench });
-    const r = quiet(() => render(h(Risk, tabProps(b))));
+    const r = quiet(() => openAll(render(h(Risk, tabProps(b)))));
     const sec = section(r, "risk-falls");
     quiet(() => click(pills(sec).find((x) => text(x) === a.benchLabel)));
     const tbl = sec.querySelector(".tbl");

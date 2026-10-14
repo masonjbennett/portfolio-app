@@ -4,17 +4,22 @@
 import { useMemo } from "react";
 import { ChartNote } from "../components/ChartFrame.tsx";
 import { wealthData, wealthPlot, WealthLines, type WealthData } from "../charts/Wealth.tsx";
+import type { Vec } from "../lib/num.ts";
 import type { Analysis, LoadState } from "../types.ts";
 import { MIX } from "./model.ts";
 
 // The lines in the order the eye should meet them, under their plain names; the benchmark keeps its own.
-const NAME = { tangency: MIX.tangency.short, ew: MIX.ew.short, gmv: MIX.gmv.short } as const;
+export const YOUR_MIX = "Your mix";
+const NAME = { tangency: MIX.tangency.short, ew: MIX.ew.short, gmv: MIX.gmv.short, custom: YOUR_MIX } as const;
 const ORDER = { tangency: 0, ew: 1, gmv: 2, custom: 3, bench: 4 } as const;
 
-export function overviewWealth(a: Analysis): WealthData {
-  const d = wealthData(a);
+// `custom` is the reader's own mix (Performance draws it); a mix that is still the equal split is left off,
+// since its line would lie exactly on the equal split's.
+export function overviewWealth(a: Analysis, custom: Vec | null = null): WealthData {
+  const d = wealthData(a, custom);
   const series = d.series
-    .map((s) => (s.role === "tangency" || s.role === "ew" || s.role === "gmv" ? { ...s, label: NAME[s.role] } : s))
+    .filter((s) => !(s.role === "custom" && d.customIsEqual))
+    .map((s) => (s.role === "bench" ? s : { ...s, label: NAME[s.role] }))
     .sort((x, y) => ORDER[x.role] - ORDER[y.role]);
   return { ...d, series };
 }

@@ -6,6 +6,9 @@
 //
 // A chart may carry one control of its own in the head, under the subtitle (the starting amount on a
 // growth chart): it sits outside the drawing's boundary, so a chart that fails to draw keeps it.
+//
+// Inside a Card the card's own title states the finding, so a `bare` frame keeps its title for a screen
+// reader only and draws no subtitle (the card moves it into its "How it is calculated" fold).
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import type { ChartFrameProps } from "../types.ts";
 import "./ChartFrame.css";
@@ -15,6 +18,8 @@ const DEFAULT_HEIGHT = 320;
 type Props<T> = ChartFrameProps<T> & {
   /** A control that acts on this chart, drawn in the head under the subtitle. */
   control?: ReactNode;
+  /** Inside a Card: the title is for a screen reader only and the subtitle is not drawn. */
+  bare?: boolean;
 };
 
 type NoteKind = "loading" | "empty" | "error";
@@ -73,7 +78,7 @@ class Draw extends Component<DrawProps, { error: Error | null }> {
   }
 }
 
-export default function ChartFrame<T>({ title, state, children, subtitle, height = DEFAULT_HEIGHT, control }: Props<T>) {
+export default function ChartFrame<T>({ title, state, children, subtitle, height = DEFAULT_HEIGHT, control, bare = false }: Props<T>) {
   let body: ReactNode;
   switch (state.status) {
     case "loading":
@@ -95,9 +100,9 @@ export default function ChartFrame<T>({ title, state, children, subtitle, height
   }
   return (
     <figure className="chart-frame" aria-busy={state.status === "loading" || undefined}>
-      <figcaption className="chart-head">
+      <figcaption className={bare ? "chart-head chart-head--bare" : "chart-head"}>
         <h3 className="chart-title">{title}</h3>
-        {subtitle ? <p className="chart-sub">{subtitle}</p> : null}
+        {subtitle && !bare ? <p className="chart-sub">{subtitle}</p> : null}
         {control ? <div className="chart-control">{control}</div> : null}
       </figcaption>
       <div className="chart-body">{body}</div>
