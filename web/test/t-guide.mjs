@@ -25,14 +25,14 @@ const G = await import("../src/content/guide.ts");
 const { default: GuidePage, markGlossary, GUIDE_SECTIONS } = await import("../src/guide/GuidePage.tsx");
 const { GUIDE_HREF, GUIDE_TITLE, isGuide } = await import("../src/guide/route.ts");
 const { TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
-const { RAIL_IDS, RAIL_HEADINGS } = await import("../src/content/rail.ts");
+const { INPUT_IDS, INPUT_HEADINGS } = await import("../src/content/inputs.ts");
 const P = await import("../src/content/published.ts");
 const A = await import("../src/content/about.tsx");
 const { decodeShare } = await import("../src/state/url.ts");
 const { default: Band } = await import("../src/chrome/Band.tsx");
 const { default: WhatIf } = await import("../src/chrome/WhatIf.tsx");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
-const { default: Rail } = await import("../src/chrome/Rail.tsx");
+const { default: BasketBar, SettingsSheetBody } = await import("../src/chrome/BasketBar.tsx");
 const { default: Footer } = await import("../src/chrome/Footer.tsx");
 const { default: CommandPalette } = await import("../src/chrome/CommandPalette.tsx");
 const { default: SummaryChip } = await import("../src/chrome/SummaryChip.tsx");
@@ -98,23 +98,31 @@ setMedia(() => false);
   await quietly(flush);
   take("band", r.container);
   r.unmount();
-  const m = render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false }));
+  const m = render(h(Masthead));
+  const link = m.container.querySelector(".masthead-links a");
+  check(link?.getAttribute("href") === GUIDE_HREF && link.getAttribute("title") === GUIDE_TITLE && text(link) === "Guide",
+    "ways in: the masthead carries a link to the guide", link?.outerHTML ?? "none");
   take("band", m.container);
   m.unmount();
 }
 
-// The rail, in the two states that between them show every button it has: the rate over the window with today's
-// beside it (which offers today's), and a typed rate with a set end date (which offer the window's and today).
+// The settings, in the two states that between them show every button they have: the rate over the window with
+// today's beside it (which offers today's), and a typed rate with a set end date (which offer the window's and today).
+// Each is read twice: the basket bar with its drawer open (the panels are on the page, closed), and every group
+// inline as the phone's sheet holds them, which is where the headings' order is read.
 const S0 = settingsFor(examplePayload());
 const LIVE = { rate: 0.0412, date: "2026-09-25", source: "FRED DGS3MO" };
 const VIEW = { ...LIVE, window: { rate: 0.0301, from: S0.start, to: "2026-09-25", days: 1900 }, basis: "window", inUse: 0.0301, loading: false };
 let railOrder = [];
 for (const settings of [{ ...S0, end: null, rf: null }, { ...S0, end: "2025-12-31", rf: 0.04 }]) {
-  const r = render(h(Rail, { settings, setSettings() {}, level: "plain", setLevel() {}, rf: { status: "ready", value: VIEW }, fetching: false, failure: null }));
+  const props = { settings, setSettings() {}, level: "plain", setLevel() {}, rf: { status: "ready", value: VIEW } };
+  const b = render(h(BasketBar, { ...props, fetching: false, analysis: { status: "ready", value: EX } }));
+  act(() => b.container.querySelector(".bar-assumptions").click());
+  take("rail", b.container);
+  b.unmount();
+  const r = render(h(SettingsSheetBody, props));
   take("rail", r.container);
-  railOrder = [...r.container.querySelectorAll(".rail-heading")].map(text);
-  const link = r.container.querySelector(".rail-guide a");
-  check(link?.getAttribute("href") === GUIDE_HREF && text(link) === GUIDE_TITLE, "ways in: the rail opens on a link to the guide", link?.outerHTML ?? "none");
+  railOrder = [...r.container.querySelectorAll(".set-heading")].map(text);
   r.unmount();
 }
 {
@@ -181,10 +189,9 @@ for (const id of TAB_IDS) {
     setMedia(() => phone);
     const r = await quietly(() => render(h(AppView, { wb, tabs: stub })));
     take("app", r.container);
-    const link = r.container.querySelector("a.app-guide");
-    check(phone ? link?.getAttribute("href") === GUIDE_HREF && link.getAttribute("title") === GUIDE_TITLE : !link,
-      `ways in: ${phone ? "a phone's settings row carries a link to the guide beside the chip" : "a desktop has no phone row link (the rail's is there)"}`,
-      link?.outerHTML ?? "none");
+    const link = r.container.querySelector("header .masthead-links a");
+    check(link?.getAttribute("href") === GUIDE_HREF && link.getAttribute("title") === GUIDE_TITLE,
+      `ways in: on a ${phone ? "phone" : "desktop"} the masthead's row carries the link to the guide`, link?.outerHTML ?? "none");
     r.unmount();
   }
   setMedia(() => false);
@@ -207,10 +214,10 @@ for (const id of TAB_IDS) {
   check(page.size > 0 && missing.length === 0, `tabs: every section heading ${TAB_LABELS[id]} renders has its entry in the guide`, missing.join(" | "));
 }
 
-// ---- (b) the rail, both ways ------------------------------------------------------------------------------------
-check(sameList(G.GUIDE_RAIL_IDS, RAIL_IDS) && Object.keys(G.GUIDE_RAIL).every((id) => RAIL_IDS.includes(id)),
-  "rail: the guide has one entry per rail section, in the rail's order", `${Object.keys(G.GUIDE_RAIL).join(",")} | ${RAIL_IDS.join(",")}`);
-check(sameList(railOrder, RAIL_IDS.map((id) => RAIL_HEADINGS[id])), "rail: the rail renders exactly the headings the guide's entries are filed under, in order",
+// ---- (b) the settings, both ways ------------------------------------------------------------------------------------
+check(sameList(G.GUIDE_INPUT_IDS, INPUT_IDS) && Object.keys(G.GUIDE_INPUT).every((id) => INPUT_IDS.includes(id)),
+  "settings: the guide has one entry per settings group, in the page's order", `${Object.keys(G.GUIDE_INPUT).join(",")} | ${INPUT_IDS.join(",")}`);
+check(sameList(railOrder, INPUT_IDS.map((id) => INPUT_HEADINGS[id])), "settings: the page renders exactly the headings the guide's entries are filed under, in order",
   `${railOrder.join(" | ")}`);
 
 // ---- (c) every quoted name is on the part of the page its entry describes -----------------------------------------
@@ -220,10 +227,10 @@ const SCOPES = [
   ["the start", G.GUIDE_START, ALL],
   ["the one idea", G.GUIDE_IDEA.body, ALL],
   ["the first screen", G.GUIDE_FIRST_SCREEN.flatMap(bodies), parts.band.text],
-  ["the settings", [...G.GUIDE_RAIL_INTRO, ...RAIL_IDS.flatMap((id) => G.GUIDE_RAIL[id] ?? [])], parts.rail.text],
-  ["the phone's settings", [G.GUIDE_RAIL_PHONE], parts.chip.text],
+  ["the settings", [...G.GUIDE_INPUT_INTRO, ...INPUT_IDS.flatMap((id) => G.GUIDE_INPUT[id] ?? [])], parts.rail.text],
+  ["the phone's settings", [G.GUIDE_INPUT_PHONE], parts.chip.text],
   ["the tabs", G.GUIDE_TABS_INTRO, ALL],
-  // A tab is read with the page around it (the tab bar, the band, the rail), which a reader on that tab also sees.
+  // A tab is read with the page around it (the tab bar, the band, the basket bar), which a reader on that tab also sees.
   ...TAB_IDS.map((id) => [TAB_LABELS[id], [...(G.GUIDE_TABS[id]?.opens ?? []), ...(G.GUIDE_TABS[id]?.sections ?? []).flatMap(bodies)], `${tabPart(id).text} ${parts.app.text}`]),
   ["every tab", G.GUIDE_EVERYWHERE.flatMap(bodies), ALL],
   ["the method", [G.GUIDE_METHOD], parts.footer.text],
@@ -236,7 +243,7 @@ for (const [where, paras, page] of SCOPES) {
   check(gone.length === 0, `names: every name the guide quotes in ${where} is on that part of the page`, gone.join(" | "));
 }
 check(quoted >= 40, "names: the guide quotes the page's names, and this suite read them", `${quoted} quoted`);
-const unclosed = [G.GUIDE_START, G.GUIDE_IDEA.body, ...G.GUIDE_FIRST_SCREEN.map((p) => p.body), ...Object.values(G.GUIDE_RAIL), [G.GUIDE_RAIL_PHONE],
+const unclosed = [G.GUIDE_START, G.GUIDE_IDEA.body, ...G.GUIDE_FIRST_SCREEN.map((p) => p.body), ...Object.values(G.GUIDE_INPUT), [G.GUIDE_INPUT_PHONE],
   G.GUIDE_TABS_INTRO, ...Object.values(G.GUIDE_TABS).flatMap((t) => [t.opens, ...t.sections.map((s) => s.body)]), ...G.GUIDE_EVERYWHERE.map((p) => p.body), [G.GUIDE_METHOD]]
   .flat().filter((p) => p.replace(/\[\[(.+?)\]\]/g, "").includes("[[") || p.replace(/\[\[(.+?)\]\]/g, "").includes("]]"));
 check(unclosed.length === 0, "names: every [[ in the guide is closed, so no quoted name escapes the check above", unclosed.join(" | "));
@@ -320,7 +327,7 @@ check([P.MEGA_CAP_IN_SAMPLE, mega.tangency, mega.ew, cross.tangency, cross.ew].e
 // ---- the page the guide renders ------------------------------------------------------------------------------------
 const C = guide.container;
 const h3s = [...C.querySelectorAll("#settings .guide-h3")].map(text);
-check(sameList(h3s, RAIL_IDS.map((id) => RAIL_HEADINGS[id])), "page: the settings section is filed under the rail's headings, in order", h3s.join(" | "));
+check(sameList(h3s, INPUT_IDS.map((id) => INPUT_HEADINGS[id])), "page: the settings section is filed under the page's group headings, in order", h3s.join(" | "));
 const tabsShown = [...C.querySelectorAll(".guide-tab > .guide-h3")].map(text);
 check(sameList(tabsShown, TAB_IDS.map((id) => TAB_LABELS[id])), "page: one section per tab, under the tab's label, in order", tabsShown.join(" | "));
 const opens = [...C.querySelectorAll(".guide-open a")].map((a) => a.getAttribute("href"));

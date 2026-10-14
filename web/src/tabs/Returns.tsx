@@ -15,7 +15,7 @@ import SegControl from "../components/SegControl.tsx";
 import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
 import Tip from "../components/Tip.tsx";
-import AmountField from "../charts/AmountField.tsx";
+import AmountField from "../components/AmountField.tsx";
 import { format } from "../format.ts";
 import type { Analysis, CustomWeights, Level, TabProps } from "../types.ts";
 import { tableSpan } from "./caption.ts";

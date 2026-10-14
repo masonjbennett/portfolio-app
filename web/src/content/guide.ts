@@ -1,7 +1,7 @@
 // The guide's words: "How to read this page", for a reader new to all of this. The in-app page (src/guide/GuidePage.tsx)
 // is the source, and the PDF (public/guide.pdf, scripts/guide-pdf.mjs) is exported from it, never written apart.
 //
-// It is written from the page's own names and held to them. Every tab, rail section and tab section is keyed by the
+// It is written from the page's own names and held to them. Every tab, settings group and tab section is keyed by the
 // page's id or heading, and test/t-guide.mjs fails when the guide names one the page no longer renders, AND when the
 // page renders one the guide has no entry for, so it cannot go stale by omission either. A name the page prints, quoted
 // inside the prose, is written [[like this]]: the page shows it in bold, and the suite finds every one of them on the
@@ -19,7 +19,7 @@ import { TRADING_DAYS } from "../lib/stats.ts";
 import { BENCHMARKS } from "../state/defaults.ts";
 import { LEVELS, TAB_IDS, TAB_LABELS, type TabId } from "../types.ts";
 import { MEGA_CAP_IN_SAMPLE, MEGA_CAP_IN_SAMPLE_END, MEGA_CAP_IN_SAMPLE_RF, PUBLISHED_SETS } from "./published.ts";
-import { RAIL_HEADINGS, RAIL_IDS, type RailId } from "./rail.ts";
+import { ASSUMPTIONS, INPUT_HEADINGS, INPUT_IDS, type InputId } from "./inputs.ts";
 
 /** The guide's title (src/guide/route.ts, which the page's first chunk carries for its links). */
 export { GUIDE_TITLE } from "../guide/route.ts";
@@ -62,7 +62,7 @@ export const GUIDE_START: readonly string[] = [
   "This page takes a handful of investments you choose, looks at how their prices moved, and works out how different ways of " +
     "splitting money between them would have done. This guide says what each part of the page shows, in plain words, for a " +
     "reader who has not met these ideas before.",
-  `Names in bold, like [[${RAIL_HEADINGS.tickers}]] or [[${TAB_LABELS.risk}]], are written exactly as the page prints them, ` +
+  `Names in bold, like [[${INPUT_HEADINGS.tickers}]] or [[${TAB_LABELS.risk}]], are written exactly as the page prints them, ` +
     "so you can find them on the screen. Words in the glossary at the end are explained there.",
   "Every figure describes the past: the prices between two dates you pick. Nothing on the page is a forecast or a " +
     "recommendation, and nothing you do on it is saved anywhere but in your own browser.",
@@ -102,11 +102,10 @@ export const GUIDE_FIRST_SCREEN: readonly GuidePart[] = [
   {
     heading: "The masthead",
     body: [
-      "At the top: the title, one line on what the page does, and who made it. To the right, a chip names the basket (how " +
-        "many assets, the benchmark and the dates asked for), and [[Prices as of]] says which day's closing prices the figures " +
-        "run to.",
+      "At the top: the title, who made it and a link to this guide, with one line under them on what the page does. The " +
+        "basket the figures are about sits in the bar just below; the settings section of this guide walks through it.",
       `On a first visit the page opens on a saved example, so it is never blank: the ${cross.name.toLowerCase()} set ` +
-        "described above. While it shows, the word [[example]] sits beside the date; fresh prices replace it when they arrive.",
+        "described above.",
     ],
   },
   {
@@ -152,29 +151,30 @@ export const GUIDE_FIRST_SCREEN: readonly GuidePart[] = [
 
 // ---- the settings -----------------------------------------------------------------------------------------------
 
-export const GUIDE_RAIL_INTRO: readonly string[] = [
-  "The settings run down the left of the page. Most changes apply at once, with no button to press; new tickers apply " +
-    "when you press Enter. Only a new basket, new dates or a new benchmark fetch prices.",
+export const GUIDE_INPUT_INTRO: readonly string[] = [
+  "The settings sit in the basket bar across the top of the page, which stays in view as you scroll: the tickers, the " +
+    `ready-made baskets and the dates, then [[${ASSUMPTIONS}]], which opens the rest in a strip under the bar. Most changes ` +
+    "apply at once, with no button to press; new tickers apply when you press Enter. Only a new basket, new dates or a new " +
+    "benchmark fetch prices.",
+  "At the bar's right end, [[Prices to]] says which day's closing prices the figures run to. While the saved example " +
+    "shows, the word [[example]] sits beside the date; fresh prices replace it when they arrive.",
 ];
 
-export const GUIDE_RAIL: Readonly<Record<RailId, readonly string[]>> = {
-  level: [
-    `How much the small i marks beside the figures explain. [[${plain}]], the default, uses everyday words; [[${finance}]] ` +
-      `uses the terms a finance course would; [[${formula}]] gives the formula, and also adds a line under each tab's opening ` +
-      "sentence with the formula behind its figure. The level changes the explanations, never a figure. This guide uses the " +
-      `${plain} wording.`,
-  ],
+export const GUIDE_INPUT: Readonly<Record<InputId, readonly string[]>> = {
   tickers: [
     "A ticker is the short code a market uses for an investment: AAPL for Apple, VTI for a fund that holds the whole US stock " +
-      `market. Type between ${MIN_TICKERS} and ${MAX_TICKERS} of them, separated by commas, and press Enter. The codes are ` +
+      "market. Each ticker in the basket is a chip on the bar, and its cross takes it out. [[+ Add]] opens a box holding the " +
+      `whole list: type between ${MIN_TICKERS} and ${MAX_TICKERS} codes, separated by commas, and press Enter. The codes are ` +
       "Yahoo Finance's, so funds and indexes work too.",
-    "The buttons above the box fill it with a ready-made basket. The first three, marked [[Published]], are the sets whose " +
-      "out-of-sample result is published; here they are recomputed in-sample on the prices loaded, so their figures are not " +
-      "the published ones. [[More baskets]] opens the rest.",
+  ],
+  baskets: [
+    `[[${INPUT_HEADINGS.baskets}]] fills the list with a ready-made basket. The first three, marked [[Published]], are the sets ` +
+      "whose out-of-sample result is published; here they are recomputed in-sample on the prices loaded, so their figures are " +
+      "not the published ones. [[More baskets]] opens the rest.",
   ],
   dates: [
-    "[[Start]] and [[End]] set the window: the stretch of prices every figure is computed from. The end is today unless you " +
-      "pick a day; then [[End today instead]] puts it back. A new window fetches prices again.",
+    "The dates on the bar open [[Start]] and [[End]], the window: the stretch of prices every figure is computed from. The " +
+      "end is today unless you pick a day; then [[End today instead]] puts it back. A new window fetches prices again.",
   ],
   rf: [
     "The risk-free rate is what a safe investment paid over the same time; the page uses short-term US Treasury bills. A " +
@@ -194,12 +194,23 @@ export const GUIDE_RAIL: Readonly<Record<RailId, readonly string[]>> = {
       "still make the whole. The note under the switch gives the limits. Switching solves the mixes again on the prices " +
       "already loaded.",
   ],
+  amount: [
+    "The sum every growth chart starts from. It changes the dollar figures only, never a return or a ratio. The growth " +
+      "charts carry the same field, so a change in either place moves both; it is kept in this browser and never travels " +
+      "in a shared link.",
+  ],
+  level: [
+    `How much the small i marks beside the figures explain. [[${plain}]], the default, uses everyday words; [[${finance}]] ` +
+      `uses the terms a finance course would; [[${formula}]] gives the formula, and also adds a line under each tab's opening ` +
+      "sentence with the formula behind its figure. The level changes the explanations, never a figure. This guide uses the " +
+      `${plain} wording.`,
+  ],
 };
 
 /** The settings on a phone, where they fold into a sheet. The page prints it straight after the settings' first words. */
-export const GUIDE_RAIL_PHONE =
-  "On a phone the settings sit behind the [[Settings]] bar at the top of the page; tap it to open them, and its summary " +
-  "says what is set.";
+export const GUIDE_INPUT_PHONE =
+  "On a phone the bar folds into one row at the top of the page that says what is set; tap [[Settings]] on it to open " +
+  "every setting in a sheet.";
 
 // ---- the tabs ---------------------------------------------------------------------------------------------------
 
@@ -671,6 +682,6 @@ export const GUIDE_METHOD =
   "Every formula and data source is listed under [[Methodology]] at the foot of the page, and of this guide. The code is " +
   "public, linked beside it.";
 
-// The structure the suite holds to the page, exported for it: the tab ids in the guide's order, the rail ids in the guide's order.
+// The structure the suite holds to the page, exported for it: the tab ids in the guide's order, the settings groups in the guide's order.
 export const GUIDE_TAB_IDS: readonly TabId[] = TAB_IDS.filter((id) => Object.hasOwn(GUIDE_TABS, id));
-export const GUIDE_RAIL_IDS: readonly RailId[] = RAIL_IDS.filter((id) => Object.hasOwn(GUIDE_RAIL, id));
+export const GUIDE_INPUT_IDS: readonly InputId[] = INPUT_IDS.filter((id) => Object.hasOwn(GUIDE_INPUT, id));

@@ -1,4 +1,4 @@
-// The page's chrome: masthead, rail, phone chip and sheet, band, tab switch, command palette.
+// The page's chrome: masthead, basket bar and its drawer, phone chip and sheet, band, tab switch, command palette.
 //
 // Drives the shipping components in jsdom (test/_dom.mjs) with a stand-in workbench, so nothing
 // here waits on the state hook, and with stand-in tabs where a check is about the page rather
@@ -17,15 +17,15 @@ const OPT = await import("../src/tabs/optimization/model.ts");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: Footer } = await import("../src/chrome/Footer.tsx");
 const P = await import("../src/content/published.ts");
-const { default: Rail, symbolMessage } = await import("../src/chrome/Rail.tsx");
+const { symbolMessage } = await import("../src/chrome/Settings.tsx");
+const { default: BasketBar, SettingsSheetBody, windowLabel, assumptionsLabel } = await import("../src/chrome/BasketBar.tsx");
 const { default: SummaryChip, summaryText } = await import("../src/chrome/SummaryChip.tsx");
-const { titleChip } = await import("../src/chrome/Masthead.tsx");
 const { format, DASH } = await import("../src/format.ts");
 const { parseTickers } = await import("../src/lib/clean.ts");
 const { portfolioPerformance, portfolioReturns } = await import("../src/lib/portfolio.ts");
 const { sharpeSE } = await import("../src/lib/stats.ts");
 const { MESSAGES } = await import("../src/state/analyze.ts");
-const { PRESETS, RF_FALLBACK } = await import("../src/state/defaults.ts");
+const { PRESETS, PUBLISHED_PRESETS, RF_FALLBACK } = await import("../src/state/defaults.ts");
 const { PHONE_QUERY } = await import("../src/styles/tokens.ts");
 const { TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
 const { exampleAnalysis, examplePayload, fixtureAnalysis, settingsFor } = await import("./_analysis.mjs");
@@ -133,28 +133,35 @@ function Harness({ wb, tabs }) {
 const STAND_TABS = Object.fromEntries(TAB_IDS.map((id) => [id, () => h("p", { "data-tab": id }, `tab body ${id}`)]));
 const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb, tabs }));
 
-// ---- (a) the masthead ----------------------------------------------------------------------------
+// ---- (a) the masthead and the basket bar's summary --------------------------------------------------
 {
-  // Requested dates a month either side of the data, so the chip cannot pass by printing the span.
+  // Requested dates a month either side of the data, so the bar cannot pass by printing the span.
   const a = { ...EX, requested: { start: "2018-12-15", end: "2026-10-03" } };
-  const r = page({ analysis: { status: "ready", value: a } });
-  const head = text(r.container.querySelector("header"));
-  check(head.includes("Portfolio Analytics"), "masthead: the app's title (1177)");
-  const chip = `${a.tickers.length} assets · ${a.benchLabel} · Dec 2018 – Oct 2026`;
-  check(head.includes(chip) && titleChip(a) === chip, "masthead: the title chip prints the REQUESTED dates (1182)", head);
-  check(head.includes(`Prices as of ${format(a.asOf, "date")}`), "masthead: prices as of the last price date", head);
-  check(/\bexample\b/.test(head), "masthead: says 'example' while the baked example shows", head);
-  check(!/updating/.test(head), "masthead: says nothing about updating while idle", head);
+  const r = page({ analysis: { status: "ready", value: a }, settings: { ...EX_SETTINGS, start: "2018-12-15", end: "2026-10-03" } });
+  const head = r.container.querySelector("header.masthead");
+  check(text(head).includes("Portfolio Analytics"), "masthead: the app's title (1177)");
+  const guide = head?.querySelector(".masthead-links a");
+  check(!!guide && text(guide) === "Guide", "masthead: the guide's link sits in the masthead's row", guide?.outerHTML ?? "none");
+  const bar = r.container.querySelector(".bar");
+  const barText = text(bar ?? {});
+  // ledger: the app's title chip (1182) printed the REQUESTED dates; the bar's dates button does, from the settings.
+  check(barText.includes("Dec 2018 – Oct 2026") && windowLabel({ ...EX_SETTINGS, start: "2019-01-01", end: null }) === "Jan 2019 – today",
+    "bar: the dates button prints the REQUESTED window, and an open end as today (1182)", barText);
+  check(a.tickers.every((t) => bar.querySelector(`.bar-chip [aria-label="Remove ${t}"]`)) && barText.includes(a.benchLabel),
+    "bar: every ticker is a chip with its remove button, and the benchmark is named", barText);
+  check(barText.includes(`Prices to ${format(a.asOf, "date")}`), "bar: prices to the last price date", barText);
+  check(/\bexample\b/.test(barText) && !/updating/.test(barText), "bar: says 'example' while the baked example shows, nothing about updating while idle", barText);
+  check(!/Prices|assets ·/.test(text(head)), "masthead: carries no chip and no prices line now that the bar does", text(head));
   r.unmount();
 
   const busy = page({ fetching: true });
-  check(/\bupdating\b/.test(text(busy.container.querySelector("header"))), "masthead: says 'updating' while prices are fetched");
+  check(/\bupdating\b/.test(text(busy.container.querySelector(".bar"))), "bar: says 'updating' while prices are fetched");
   busy.unmount();
 
   const liveA = fixtureAnalysis("cross");
   const lv = page({ analysis: { status: "ready", value: liveA } });
-  const lh = text(lv.container.querySelector("header"));
-  check(!/\bexample\b/.test(lh) && lh.includes(`Prices as of ${format(liveA.asOf, "date")}`), "masthead: a live analysis is not labelled example", lh);
+  const lb = text(lv.container.querySelector(".bar"));
+  check(!/\bexample\b/.test(lb) && lb.includes(`Prices to ${format(liveA.asOf, "date")}`), "bar: a live analysis is not labelled example", lb);
   lv.unmount();
 }
 
@@ -757,17 +764,17 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   r.unmount();
 }
 
-// ---- (f) the rail ----------------------------------------------------------------------------------
+// ---- (f) the settings' fields, every group inline as the phone's sheet holds them -----------------------
 function rail(over = {}) {
   const { wb, calls } = stand(over);
-  const r = render(h(Rail, { settings: wb.settings, setSettings: wb.setSettings, level: wb.level, setLevel: wb.setLevel, rf: wb.rf, fetching: wb.fetching, failure: wb.failure }));
+  const r = render(h(SettingsSheetBody, { settings: wb.settings, setSettings: wb.setSettings, level: wb.level, setLevel: wb.setLevel, rf: wb.rf }));
   return { r, calls, root: r.container };
 }
 {
   const { r, calls, root } = rail();
   const levels = root.querySelector('[aria-label="Explanation level"]');
-  check(!!levels && ["Plain", "Finance", "Formula"].every((l) => byLabel(levels, l)), "rail: the level is a named three-way control on top", levels ? text(levels) : "none");
-  check(root.querySelector(".rail-group") === levels?.closest(".rail-group"), "rail: the level group comes first");
+  check(!!levels && ["Plain", "Finance", "Formula"].every((l) => byLabel(levels, l)), "rail: the level is a named three-way control", levels ? text(levels) : "none");
+  check([...root.querySelectorAll(".set-group")].at(-1) === levels?.closest(".set-group"), "rail: the level group comes last, until it is retired");
   if (levels) click(byLabel(levels, "Finance"));
   check(calls.level.join() === "finance", "rail: choosing Finance sets the level", calls.level.join());
 
@@ -830,13 +837,17 @@ function rail(over = {}) {
   const bounds = ORACLE.slice(777, 783).join(" ");
   check(/"Allow short positions"/.test(ORACLE[747]) && /unconstrained frontier/.test(ORACLE[750]) && /\[−1,\s*1\]/.test(bounds),
     "ledger:short-bounds-copy: the app's shorting help says 'unconstrained' (750-751) while its bounds are [−1, 1] (780-782)", help.trim());
-  const shortGroup = field(root, "allowShort").closest(".rail-group");
+  const shortGroup = field(root, "allowShort").closest(".set-group");
   const shortHelp = shortGroup ? text(shortGroup) : "";
   check(/each asset's weight is bounded to \[−1, 1\]/.test(shortHelp) && !/unconstrained/i.test(text(root)),
     "ledger:short-bounds-copy: the rail's shorting help states [−1, 1] per asset and never says unconstrained", shortHelp);
   n = calls.settings.length;
-  // The starting amount is edited on the growth charts themselves, not here.
-  check(field(root, "amount") == null && !/starting investment/i.test(text(root)), "rail: no starting-amount field; the growth charts carry it");
+  // The starting amount: the same setting the growth charts' field writes, kept to this browser.
+  setValue(field(root, "amount"), "25000");
+  check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ amount: 25000 }), "rail: the starting amount applies", JSON.stringify(calls.settings.at(-1)));
+  n = calls.settings.length;
+  setValue(field(root, "amount"), "5");
+  check(calls.settings.length === n && field(root, "amount").getAttribute("aria-invalid") === "true", "rail: an amount under the floor is refused and not applied");
 
   // A rate set here, with the way back to live.
   check(text(root).includes(LIVE.date) && field(root, "rf").value === String(Number((EX.rf * 100).toFixed(4))), "rail: a set rate shows beside the live one and its date", field(root, "rf").value);
@@ -860,9 +871,78 @@ function rail(over = {}) {
   check(field(down.root, "rf").value === String(RF_FALLBACK * 100) && /placeholder/.test(text(down.root)), "rail: an unreachable live rate says it uses the placeholder (711-713)");
   down.r.unmount();
 
-  const busy = rail({ fetching: true });
-  check(/Fetching prices/.test(text(busy.root)), "rail: says when prices are being fetched");
-  busy.r.unmount();
+  const { wb: bw } = stand({ fetching: true });
+  const busy = render(h(BasketBar, { settings: bw.settings, setSettings: bw.setSettings, level: bw.level, setLevel: bw.setLevel, rf: bw.rf, fetching: true, analysis: { status: "loading" } }));
+  check(/Fetching prices/.test(text(busy.container)), "bar: says when prices are being fetched");
+  busy.unmount();
+}
+
+// ---- (f2) the basket bar: chips, panels, the drawer ----------------------------------------------------
+function bar(over = {}) {
+  const { wb, calls } = stand(over);
+  const r = render(h(BasketBar, { settings: wb.settings, setSettings: wb.setSettings, level: wb.level, setLevel: wb.setLevel, rf: wb.rf, fetching: false, analysis: wb.analysis }));
+  const panelOf = (btn) => document.getElementById(btn.getAttribute("aria-controls"));
+  return { r, calls, root: r.container, panelOf };
+}
+{
+  const { r, calls, root, panelOf } = bar({ settings: { ...EX_SETTINGS, tickers: ["VTI", "AGG", "GLD", "VNQ"] } });
+  const add = byLabel(root, "+ Add");
+  const tickersPanel = panelOf(add);
+  check(!!add && add.getAttribute("aria-expanded") === "false" && tickersPanel?.hidden, "bar: the panels start closed");
+  click(root.querySelector('[aria-label="Remove AGG"]'));
+  check(JSON.stringify(calls.settings.at(-1)) === JSON.stringify({ tickers: ["VTI", "GLD", "VNQ"] }), "bar: a chip's cross takes that ticker out, through the same checks",
+    JSON.stringify(calls.settings.at(-1)));
+  r.unmount();
+
+  // A basket of three: removing one is refused, and the message opens the tickers' panel so it is in sight.
+  const three = bar({ settings: { ...EX_SETTINGS, tickers: ["VTI", "AGG", "GLD"] } });
+  const n3 = three.calls.settings.length;
+  click(three.root.querySelector('[aria-label="Remove GLD"]'));
+  const add3 = byLabel(three.root, "+ Add");
+  check(three.calls.settings.length === n3 && add3.getAttribute("aria-expanded") === "true" && !three.panelOf(add3).hidden &&
+    text(three.panelOf(add3)).includes(MESSAGES["too-few"]), "bar: a refused removal keeps the basket and opens the tickers' panel on the app's message (1011)");
+  three.r.unmount();
+
+  // + Add: the whole list, the cursor after it; Escape closes and hands focus back.
+  const b = bar({ settings: { ...EX_SETTINGS, tickers: ["VTI", "AGG", "GLD"] } });
+  const addB = byLabel(b.root, "+ Add");
+  click(addB);
+  const box = field(b.root, "tickers");
+  check(addB.getAttribute("aria-expanded") === "true" && !b.panelOf(addB).hidden && box.value === "VTI, AGG, GLD, " && document.activeElement === box,
+    "bar: + Add opens the list with room for the next ticker, and the cursor in it", box.value);
+  setValue(box, "VTI, AGG, GLD, EFA");
+  key(box, "Enter");
+  check(JSON.stringify(b.calls.settings.at(-1)) === JSON.stringify({ tickers: ["VTI", "AGG", "GLD", "EFA"] }), "bar: a ticker typed after the list is added");
+  key(box, "Escape");
+  check(addB.getAttribute("aria-expanded") === "false" && b.panelOf(addB).hidden && document.activeElement === addB, "bar: Escape closes the panel and focus goes back to its button");
+
+  // Baskets: the published sets first; a pick applies and closes.
+  const baskets = byLabel(b.root, "Baskets");
+  click(baskets);
+  check(!b.panelOf(baskets).hidden && b.panelOf(addB).hidden, "bar: one panel at a time");
+  click(byLabel(b.panelOf(baskets), PUBLISHED_PRESETS[0].name));
+  check(JSON.stringify(b.calls.settings.at(-1)) === JSON.stringify({ tickers: parseTickers(PUBLISHED_PRESETS[0].tickers) }) && b.panelOf(baskets).hidden,
+    "bar: a basket applies and its menu closes", JSON.stringify(b.calls.settings.at(-1)));
+
+  // Assumptions: a drawer of the rate, the benchmark, shorting, the amount and the level; its button says what is set.
+  const assume = b.root.querySelector(".bar-assumptions");
+  const drawer = b.panelOf(assume);
+  check(!!assume && drawer.hidden && !drawer.querySelector("[name=rf]"), "bar: the drawer starts closed, its fields not drawn");
+  check(text(assume) === `Assumptions${assumptionsLabel(EX_SETTINGS, stand({}).wb.rf)}` && /^S&P 500 · rf \d+\.\d\d% · long only$/.test(assumptionsLabel(EX_SETTINGS, stand({}).wb.rf)),
+    "bar: the Assumptions button carries the benchmark, the rate and the shorting setting", text(assume));
+  click(assume);
+  check(!drawer.hidden && ["rf", "benchmark", "allowShort", "amount"].every((nm) => !!field(drawer, nm)) && !!drawer.querySelector('[aria-label="Explanation level"]'),
+    "bar: the drawer holds the rate, the benchmark, shorting, the amount and the level");
+  click(assume);
+  check(drawer.hidden, "bar: the same button closes it");
+  b.r.unmount();
+  // The bar, and the phone's chip row, stay at the top of the screen as the page scrolls.
+  const rule = (file, sel) => {
+    const css = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    return new RegExp(`(^|\n)${sel.replace(".", "\.")} \{([^}]*)\}`).exec(css)?.[2] ?? "";
+  };
+  const held = (body) => /position:\s*sticky/.test(body) && /top:\s*0/.test(body);
+  check(held(rule("chrome/BasketBar.css", ".bar")) && held(rule("App.css", ".app-chip")), "bar: the bar and the phone's chip row are held at the top as the page scrolls");
 }
 
 // ---- (g) the phone: a summary chip that opens the rail as a sheet ----------------------------------
@@ -880,10 +960,10 @@ function rail(over = {}) {
   setMedia((q) => q === PHONE_QUERY);
   const r = page({});
   const chip = r.container.querySelector("button.chip");
-  check(!!chip && !r.container.querySelector('[aria-label="Explanation level"]'), "phone: the chip stands in for the rail");
+  check(!!chip && !r.container.querySelector('[aria-label="Explanation level"]') && !r.container.querySelector(".bar"), "phone: the chip stands in for the basket bar");
   if (chip) click(chip);
   const sheet = document.querySelector("[role=dialog]");
-  check(!!sheet && !!sheet.querySelector('[aria-label="Explanation level"]') && !!sheet.querySelector('[name="tickers"]'), "phone: the chip opens a sheet holding the rail");
+  check(!!sheet && !!sheet.querySelector('[aria-label="Explanation level"]') && !!sheet.querySelector('[name="tickers"]'), "phone: the chip opens a sheet holding every setting");
   key(document.body, "Escape");
   check(!document.querySelector("[role=dialog]"), "phone: Escape closes the sheet");
   // The published strip: the sentence folds away, the figures and the one link do not.
@@ -931,7 +1011,8 @@ function rail(over = {}) {
   r.unmount();
   setMedia(() => false);
   const desk = page({});
-  check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector("aside [name=tickers]"), "desktop: the rail stands in the left column, no chip");
+  check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector(".bar [name=tickers]") && !desk.container.querySelector("aside"),
+    "desktop: the basket bar holds the settings, no chip and no side column");
   check(!desk.container.querySelector(".band-published details") && text(desk.container.querySelector(".band-published blockquote") ?? {}) === P.CARD_SENTENCE,
     "desktop: the published sentence is printed open");
   check(!desk.container.querySelector(".band-published-whose") && text(desk.container.querySelector(".band-published-figures") ?? {}).endsWith(` ${whoseFigures()}`),

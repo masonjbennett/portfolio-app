@@ -1,0 +1,157 @@
+/* The basket bar: one row between hairlines, held at the top of the screen as the page scrolls. Chips in
+   mono (they are tickers), buttons in the page's face, panels dropping from their buttons, the drawer a
+   full-width strip under the row. */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  margin: 0 calc(-1 * var(--space-5));
+  padding: 0 var(--space-5);
+  background: var(--color-paper);
+  border-block: var(--line-hair) solid var(--color-hairline);
+}
+
+.bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) 10px;
+  padding-block: 10px;
+}
+
+.bar-chips {
+  display: contents;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 10px;
+  font-weight: 500;
+  font-size: var(--type-2);
+  color: var(--color-ink);
+  background: var(--color-card);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 6px;
+}
+
+.bar-chip-x {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 4px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--color-fund2);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bar-chip-x:hover {
+  color: var(--color-claret);
+}
+
+.bar-add,
+.bar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: var(--type-2);
+  color: var(--color-ink);
+  background: var(--color-card);
+  border: var(--line-hair) solid var(--color-hairline);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.bar-add {
+  color: var(--color-fund2);
+  background: transparent;
+  border-style: dashed;
+}
+
+.bar-add[aria-expanded="true"],
+.bar-button[aria-expanded="true"] {
+  border-color: var(--color-ink);
+  border-style: solid;
+}
+
+.bar-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 var(--space-1);
+  background: var(--color-hairline);
+}
+
+.bar-assumptions-sum {
+  color: var(--color-ink2);
+  font-size: var(--type-1);
+}
+
+/* The prices' day, pushed to the row's right end. */
+.bar-prices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5ch;
+  margin: 0 0 0 auto;
+  font-size: var(--type-1);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink2);
+}
+
+.prices-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.prices-tag-example {
+  color: var(--color-plum);
+}
+
+/* A panel drops from its button, over the page. */
+.bar-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.bar-panel {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 22rem;
+  padding: var(--space-4);
+  background: var(--color-card);
+  border: var(--line-hair) solid var(--color-cardline);
+  border-radius: var(--radius-card);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--color-ink) 12%, transparent);
+}
+
+.bar-panel--wide {
+  width: 30rem;
+}
+
+.bar-panel[hidden],
+.bar-drawer[hidden] {
+  display: none;
+}
+
+/* The drawer: the four assumptions side by side, and the level wide enough for its three pills, which do not wrap. */
+.bar-drawer.set {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(16.5rem, 1fr);
+  gap: var(--space-5);
+  padding-block: var(--space-4) var(--space-5);
+  border-top: var(--line-hair) solid var(--color-hairline2);
+}
+
+.bar-drawer .set-group {
+  align-content: start;
+}

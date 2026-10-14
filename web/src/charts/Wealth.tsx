@@ -14,7 +14,7 @@ import { memo, useMemo, type ReactNode } from "react";
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis, usePlotArea, useYAxisScale } from "recharts";
 import { usePhone } from "../chrome/usePhone.ts";
 import ChartFrame from "../components/ChartFrame.tsx";
-import AmountField from "./AmountField.tsx";
+import AmountField from "../components/AmountField.tsx";
 import { format } from "../format.ts";
 import type { Vec } from "../lib/num.ts";
 import { portfolioReturns } from "../lib/portfolio.ts";

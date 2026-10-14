@@ -1,4 +1,4 @@
-/* The page grid: a sticky rail beside the main column on a desktop, one column on a phone.
+/* The page: one column under the masthead and the basket bar, which stays at the top as the page scrolls.
    The page is 1,280 px wide on every screen up to 1,640 px, so nothing on it moves there; past that it
    widens with the screen, 10 px for every 7, until 1,680 px at a 1,920 px screen, and stays there. The
    charts measure their own width and take the room; prose does not (--prose-measure, below). */
@@ -21,38 +21,21 @@
 
 .app-body {
   display: grid;
-  grid-template-columns: 272px minmax(0, 1fr);
-  gap: var(--space-6);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.app-rail {
-  position: sticky;
-  top: var(--space-4);
-  max-height: calc(100vh - var(--space-5));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: var(--space-2);
-}
 
 .app-main {
   min-width: 0;
 }
 
-/* A phone's settings row: the chip, which takes the room and cuts its summary short, and the guide's link. */
+/* A phone's basket bar: the chip, full width, held at the top of the screen as the page scrolls. */
 .app-chip {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.app-chip > .chip {
-  min-width: 0;
-}
-
-.app-guide {
-  flex: none;
-  font-size: 0.85rem;
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  padding-block: var(--space-1);
+  background: var(--color-paper);
 }
 
 /* The tab switch scrolls sideways and never wraps: seven labels do not fit a phone. */
@@ -126,10 +109,6 @@
     padding: var(--space-4) var(--space-4) var(--space-6);
   }
 
-  .app-body {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-4);
-  }
 
   /* Full-bleed strip, so the row scrolls from the screen edge, with the gutter kept inside it. */
   .app-tabs {

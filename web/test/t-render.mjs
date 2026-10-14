@@ -136,6 +136,9 @@ function mount(tab) {
   const first = record(() => {
     page = render(h(Harness, { tab }));
   }, false);
+  // The level switch sits in the Assumptions drawer, closed at first: open it, outside any recorded change.
+  const drawer = page.container.querySelector(".bar-assumptions");
+  if (drawer) act(() => drawer.click());
   return { root: page.container, unmount: page.unmount, first };
 }
 function pickLevel(root) {
@@ -309,7 +312,12 @@ for (const tab of TAB_IDS) {
     }
     return true;
   };
-  const shortSwitch = () => host.querySelector('[role=switch][name="allowShort"]');
+  // The switch sits in the Assumptions drawer: open it the first time the bar is there and the drawer is not.
+  const shortSwitch = () => {
+    const assume = host.querySelector(".bar-assumptions");
+    if (assume && assume.getAttribute("aria-expanded") === "false") act(() => assume.click());
+    return host.querySelector('[role=switch][name="allowShort"]');
+  };
   const panel = () => host.querySelector('.app-tab[role="tabpanel"]');
   const shortingNote = () => /shorting is on/.test(text(host.querySelector(".cust") ?? host));
   const bandBusy = () => host.querySelector("section.band")?.getAttribute("aria-busy") === "true";

@@ -1,79 +1,62 @@
-/* The masthead: serif title over an ink rule, the chip and the price-date line to its right. */
+/* The masthead: title, byline and the guide's link on one row, the dek under them. No rule beneath: the
+   basket bar's hairline does that work. */
 .masthead {
+  padding-bottom: var(--space-3);
+}
+
+.masthead-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-5);
-  padding-bottom: var(--space-3);
-  margin-bottom: var(--space-5);
-  border-bottom: var(--line-hair) solid var(--color-ink);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
 }
 
 .masthead-title {
-  font-size: clamp(2rem, 4vw, 2.75rem);
-}
-
-.masthead-dek {
-  max-width: var(--prose-measure, 100%);
-  margin: var(--space-1) 0 0;
-  color: var(--color-ink2);
-  font-size: 0.95rem;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--type-4);
+  line-height: 1.2;
 }
 
 .masthead-byline {
-  margin: var(--space-1) 0 0;
+  margin: 0;
   color: var(--color-ink2);
-  font-size: 0.82rem;
+  font-size: var(--type-2);
 }
 
 .masthead-byline a {
   color: var(--color-ink);
 }
 
-.masthead-meta {
-  display: grid;
-  justify-items: end;
-  gap: var(--space-1);
-}
-
-.masthead-chip {
-  margin: 0;
-  padding: 2px var(--space-3);
-  border: var(--line-hair) solid var(--color-hairline);
-  border-radius: 999px;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-ink2);
-}
-
-.masthead-asof {
+.masthead-links {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5ch;
-  margin: 0;
-  min-height: 1.2em;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  gap: 18px;
+  margin-left: auto;
+  font-size: var(--type-2);
+  white-space: nowrap;
+}
+
+.masthead-links a {
+  color: var(--color-ink);
+  text-underline-offset: 3px;
+}
+
+.masthead-dek {
+  max-width: var(--prose-measure, 100%);
+  margin: var(--space-1) 0 0;
   color: var(--color-ink2);
+  font-size: var(--type-2);
 }
 
-.masthead-tag {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.masthead-tag-example {
-  color: var(--color-plum);
-}
-
-.masthead-tag-updating {
-  color: var(--color-teal);
-}
-
+/* Phone (760px, tokens.breakpoint.phone): the title and the guide's link share the first line, the byline
+   takes the next one whole (its words are the resume's and do not shorten). */
 @media (max-width: 760px) {
-  .masthead-meta {
-    justify-items: start;
+  .masthead-links {
+    order: 1;
+  }
+
+  .masthead-byline {
+    order: 2;
+    flex-basis: 100%;
   }
 }

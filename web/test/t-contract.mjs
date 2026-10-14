@@ -29,7 +29,8 @@ const quiet = (fn) => {
 const EXPORTS = {
   "src/types.ts": { LEVELS: "object", TAB_LABELS: "object", TAB_IDS: "object" },
   "src/App.tsx": { default: "function", TABS: "object", TAB_LOADERS: "object" },
-  "src/chrome/Rail.tsx": { default: "function" },
+  "src/chrome/BasketBar.tsx": { default: "function", SettingsSheetBody: "function" },
+  "src/chrome/Settings.tsx": { useTickers: "function", rateInUse: "function" },
   "src/chrome/SummaryChip.tsx": { default: "function" },
   "src/chrome/Band.tsx": { default: "function" },
   "src/state/analyze.ts": { analyze: "function", MESSAGES: "object" },
@@ -356,24 +357,24 @@ check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?
   check(D.publishedPresetOf?.(["JPM", "AMZN", "GOOGL", "MSFT", "AAPL"])?.name === "Five mega-caps" && D.publishedPresetOf?.(["AAPL", "MSFT", "GOOGL"]) === null,
     "defaults: publishedPresetOf names a published set in any order, and nothing else");
 
-  // The rail as rendered: the published row first, the app's under More baskets, no amount field.
-  const Rail = m("src/chrome/Rail.tsx").default;
+  // The settings as rendered: the published row first, the app's under More baskets.
+  const Rail = m("src/chrome/BasketBar.tsx").SettingsSheetBody;
   const r = render(h(Rail, {
     settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
     rf: { status: "loading" }, fetching: false, failure: null,
   }));
-  const buttons = [...r.container.querySelectorAll("button.rail-preset")];
-  const labels = buttons.map((b) => b.querySelector(".rail-preset-name")?.textContent);
-  const more = r.container.querySelector("details.rail-more");
-  check(inOrder(labels.slice(0, 3), names(D.PUBLISHED_PRESETS)) && buttons.slice(0, 3).every((b) => b.classList.contains("rail-preset-published") && text(b).endsWith("Published")) &&
+  const buttons = [...r.container.querySelectorAll("button.set-preset")];
+  const labels = buttons.map((b) => b.querySelector(".set-preset-name")?.textContent);
+  const more = r.container.querySelector("details.set-more");
+  check(inOrder(labels.slice(0, 3), names(D.PUBLISHED_PRESETS)) && buttons.slice(0, 3).every((b) => b.classList.contains("set-preset-published") && text(b).endsWith("Published")) &&
     buttons.slice(0, 3).every((b) => !more?.contains(b)),
     "ledger:published-presets: the rail shows the three published sets first, outside More baskets, each marked", JSON.stringify(labels));
   check(more && text(more.querySelector("summary")) === "More baskets" && inOrder(labels.slice(3), names(D.MORE_PRESETS)) &&
-    buttons.slice(3).every((b) => more.contains(b) && !b.classList.contains("rail-preset-published")) && !more.open,
+    buttons.slice(3).every((b) => more.contains(b) && !b.classList.contains("set-preset-published")) && !more.open,
     "rail: the app's presets sit under a closed More baskets, unmarked", JSON.stringify(labels.slice(3)));
-  check(r.container.querySelector('[name="amount"]') === null && !/Starting investment|Initial Amount/.test(text(r.container)) &&
+  check(r.container.querySelector('[name="amount"]')?.value === String(D.DEFAULT_AMOUNT) && !/Starting investment|Initial Amount/.test(text(r.container)) &&
     D.DEFAULT_SETTINGS?.amount === D.DEFAULT_AMOUNT,
-    "rail: no starting-amount field (it is edited on the growth chart); the settings still hold the $10,000 default");
+    "settings: the starting-amount field shows the $10,000 default, under the page's own words, not the app's");
   r.unmount();
 
   // The rate group with the workbench's view: both rates on one line, and today's one click away.
@@ -384,9 +385,9 @@ check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?
     settings: D.DEFAULT_SETTINGS, setSettings: (x) => patches.push(x), level: "plain", setLevel: () => {},
     rf: { status: "ready", value: view }, fetching: false, failure: null,
   }));
-  const rfGroup = v.container.querySelector('[name="rf"]')?.closest(".rail-group");
+  const rfGroup = v.container.querySelector('[name="rf"]')?.closest(".set-group");
   const today = [...(rfGroup?.querySelectorAll("button") ?? [])].find((b) => text(b) === "Use today's rate instead");
-  check(text(rfGroup?.querySelector(".rail-rates")) === "rf over window 3.12% · today 4.55%" && v.container.querySelector('[name="rf"]').value === "3.12" &&
+  check(text(rfGroup?.querySelector(".set-rates")) === "rf over window 3.12% · today 4.55%" && v.container.querySelector('[name="rf"]').value === "3.12" &&
     /from 2019-01-02 to 2026-09-28/.test(text(rfGroup)),
     "rail: the rate over the window is in use, shown beside today's on one line, with the days it covers", text(rfGroup));
   act(() => today?.click());
@@ -395,7 +396,7 @@ check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?
     settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
     rf: { status: "ready", value: { ...view, window: { ...view.window, days: 1935 } } }, fetching: false, failure: null,
   }));
-  const manyText = text(many.container.querySelector('[name="rf"]')?.closest(".rail-group"));
+  const manyText = text(many.container.querySelector('[name="rf"]')?.closest(".set-group"));
   check(/\(1,935 daily readings,/.test(manyText), "rail: the count of daily readings is grouped by thousands", manyText);
   many.unmount();
   v.unmount();
@@ -406,7 +407,7 @@ check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?
     settings: { ...D.DEFAULT_SETTINGS, rf: 0.0421 }, setSettings: () => {}, level: "plain", setLevel: () => {},
     rf: { status: "ready", value: { ...view, basis: "manual", inUse: 0.0421 } }, fetching: false, failure: null,
   }));
-  const note = text(fixed.container.querySelector('[name="rf"]')?.closest(".rail-group")?.querySelector(".rail-note"));
+  const note = text(fixed.container.querySelector('[name="rf"]')?.closest(".set-group")?.querySelector(".set-note"));
   const back = [...fixed.container.querySelectorAll("button")].some((b) => text(b) === "Use the rate over the window");
   check(/^Using a fixed 4\.21%: it stays until changed here and does not follow FRED\.$/.test(note) && !/typed/i.test(note) && back,
     "rail: a fixed rate is called fixed, never typed, with the way back to the window's rate beside it", note);
@@ -418,7 +419,7 @@ check(T.TAB_IDS?.length === 7 && T.TAB_IDS[6] === "walkforward" && T.TAB_LABELS?
       settings: D.DEFAULT_SETTINGS, setSettings: () => {}, level: "plain", setLevel: () => {},
       rf: { status: "ready", value: { ...view, basis: "today", window: null, inUse: 0.0455, loading } }, fetching: false, failure: null,
     }));
-    const s = text(t.container.querySelector('[name="rf"]')?.closest(".rail-group")?.querySelector(".rail-note"));
+    const s = text(t.container.querySelector('[name="rf"]')?.closest(".set-group")?.querySelector(".set-note"));
     t.unmount();
     return s;
   };

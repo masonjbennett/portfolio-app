@@ -1,5 +1,5 @@
-// Whether the page is at phone width (760px and under), live: the rail turns into a summary chip
-// and a sheet there. One Rail instance at a time, so its drafts and ids are never doubled, which
+// Whether the page is at phone width (760px and under), live: the basket bar turns into a summary chip
+// and a sheet there. One copy of the settings at a time, so its drafts and ids are never doubled, which
 // hiding a second copy with CSS would do. Server rendering (t-contract) always answers desktop.
 import { useSyncExternalStore } from "react";
 import { PHONE_QUERY } from "../styles/tokens.ts";

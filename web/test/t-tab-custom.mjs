@@ -588,7 +588,7 @@ function Harness({ a, init = {}, level = "plain" }) {
 }
 
 // Every typed field is 16px on a phone: iOS Safari zooms the page when a smaller input takes focus and
-// leaves it zoomed (src/chrome/Rail.css guards the rail the same way). Each text, number or date input
+// leaves it zoomed (src/chrome/Settings.css guards the settings the same way). Each text, number or date input
 // and select the tab renders needs a 16px rule under Custom.css's 760px query.
 {
   const css = readFileSync(new URL("../src/tabs/custom/Custom.css", import.meta.url), "utf8");

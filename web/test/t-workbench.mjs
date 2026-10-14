@@ -569,7 +569,8 @@ v3.unmount();
 // message, says why in the estimation lines' own terms, and "Keep the first N" applies the first N
 // distinct tickers, in the order typed, as an edit would, so the analysis runs on them.
 {
-  const { default: Rail, capReason, firstTickers } = await import("../src/chrome/Rail.tsx");
+  const { capReason, firstTickers } = await import("../src/chrome/Settings.tsx");
+  const { SettingsSheetBody: Rail } = await import("../src/chrome/BasketBar.tsx");
   const { MAX_TICKERS } = await import("../src/lib/clean.ts");
   const { loadVerdict, TN_WARN, TRADING_DAYS } = await import("../src/lib/stats.ts");
   const { text } = await import("./_dom.mjs");
@@ -601,7 +602,7 @@ v3.unmount();
     "cap: with the cap, the window and the thin-data line moved, the sentence's every figure moves with them, and it shows only where they call the window thin",
     String(moved));
   // Equal figures could still be typed: the sentence's source holds no figure of its own, only the constants'.
-  const railSrc = readFileSync(new URL("../src/chrome/Rail.tsx", import.meta.url), "utf8");
+  const railSrc = readFileSync(new URL("../src/chrome/Settings.tsx", import.meta.url), "utf8");
   const body = /export function capReason[\s\S]*?\n}\n/.exec(railSrc)?.[0] ?? "";
   const typedFigures = body.replace(/toFixed\(1\)/g, "").match(/\d+/g) ?? [];
   check(body.includes("MAX_TICKERS") && body.includes("TN_WARN") && body.includes("TRADING_DAYS") && typedFigures.length === 0,
@@ -644,7 +645,7 @@ v3.unmount();
   const keep = () => [...root.querySelectorAll("button")].find((b) => text(b) === `Keep the first ${MAX_TICKERS}`);
   check(!!box && !keep() && !text(root).includes(MESSAGES["too-many"]), "cap: at the example's five tickers neither the reason nor the button shows");
   // The level's note: the app's caption at Plain, so the rail keeps its length; the Formula level's line named at Formula.
-  const levelNote = () => text(root.querySelector('[aria-labelledby$="-level"] .rail-note') ?? { textContent: "" });
+  const levelNote = () => text(root.querySelector('[data-input="level"] .set-note') ?? { textContent: "" });
   const CAPTION = "How much the info marks beside each figure explain. Plain = plain English. Finance = finance terms. Formula = formulas.";
   const atPlain = levelNote();
   act(() => wb.setLevel("formula"));
@@ -673,9 +674,9 @@ v3.unmount();
   check(!!alert && text(alert).startsWith(MESSAGES["too-many"]) && text(alert).includes(why) && described.includes(MESSAGES["too-many"]) &&
     described.split(why).length === 2,
     "cap: the alert that reads the message reads the reason too, and the field is described by both, once each", `${alert ? text(alert) : "no alert"} | ${described}`);
-  const railCss = readFileSync(new URL("../src/chrome/Rail.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const target = /\.rail-link--target\s*\{([^}]*)\}/.exec(railCss)?.[1] ?? "";
-  check(keep().classList.contains("rail-link--target") && /min-height:\s*24px/.test(target),
+  const railCss = readFileSync(new URL("../src/chrome/Settings.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const target = /\.set-link--target\s*\{([^}]*)\}/.exec(railCss)?.[1] ?? "";
+  check(keep().classList.contains("set-link--target") && /min-height:\s*24px/.test(target),
     "cap: the button is at least a 24px target", target.replace(/\s+/g, " "));
 
   act(() => keep().focus());
@@ -691,7 +692,7 @@ v3.unmount();
     `cap: the analysis runs on the ${MAX_TICKERS} kept`, `${priceCalls().length - n1} ${got?.source} ${got?.tickers}`);
   // Exactly the cap, typed: nothing extra shows.
   type(TEN.join(","));
-  check(!keep() && !text(root).includes(MESSAGES["too-many"]) && !root.querySelector(".rail-error"),
+  check(!keep() && !text(root).includes(MESSAGES["too-many"]) && !root.querySelector(".set-error"),
     `cap: ${MAX_TICKERS} tickers typed show neither the reason nor the button`);
   pv.unmount();
 

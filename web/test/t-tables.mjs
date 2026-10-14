@@ -164,7 +164,7 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   "ledger:downloads-everywhere the sweep ignores the Table component, comments and strings");
 {
   const files = [...tsxUnder("src/tabs"), ...tsxUnder("src/chrome")];
-  const need = ["src/tabs/Returns.tsx", "src/tabs/Sensitivity.tsx", "src/chrome/Rail.tsx", "src/chrome/Band.tsx"];
+  const need = ["src/tabs/Returns.tsx", "src/tabs/Sensitivity.tsx", "src/chrome/BasketBar.tsx", "src/chrome/Band.tsx"];
   check(files.length >= 9 && need.every((f) => files.includes(f)), "ledger:downloads-everywhere the sweep sees every tab and chrome file", files.join(" "));
   const hits = files.filter((f) => rawTable(readFileSync(WEB + f, "utf8"), f));
   check(hits.length === 0, "ledger:downloads-everywhere no tab or chrome file renders a raw <table>", hits.join(" "));

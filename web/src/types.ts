@@ -369,10 +369,7 @@ export interface TabProps {
 
 // ---- chrome ----------------------------------------------------------------------------------------
 
-/** The desktop rail: level, tickers and presets, dates, rf, amount, benchmark, shorting. */
-export type RailProps = Pick<Workbench, "settings" | "setSettings" | "level" | "setLevel" | "rf" | "fetching" | "failure">;
-
-/** The phone summary chip ("5 tickers · 2019–today · rf 4.1%") that opens the rail as a sheet. */
+/** The phone summary chip ("5 tickers · 2019 to today · rf 4.1%") that opens the settings as a sheet. */
 export interface SummaryChipProps {
   /** The current settings. */
   settings: Settings;
@@ -382,6 +379,10 @@ export interface SummaryChipProps {
   open: boolean;
   /** Open or close the sheet. */
   onToggle: () => void;
+  /** The analysis on screen, for the day its prices run to; left out, no prices line. */
+  analysis?: LoadState<Analysis>;
+  /** A price request is in flight. */
+  fetching?: boolean;
 }
 
 /** The front-page band: one sentence stating the finding and four stat plates (1192-1208). */

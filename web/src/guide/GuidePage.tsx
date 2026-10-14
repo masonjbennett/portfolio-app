@@ -13,10 +13,10 @@ import Footer from "../chrome/Footer.tsx";
 import Slug from "../components/Slug.tsx";
 import { APP_URL, AUTHOR, CREDENTIAL, SITE_URL } from "../content/about.tsx";
 import {
-  GUIDE_DEK, GUIDE_EVERYWHERE, GUIDE_FIRST_SCREEN, GUIDE_IDEA, GUIDE_MARKS_INTRO, GUIDE_METHOD, GUIDE_PDF, GUIDE_RAIL, GUIDE_RAIL_IDS,
-  GUIDE_RAIL_INTRO, GUIDE_RAIL_PHONE, GUIDE_START, GUIDE_TAB_IDS, GUIDE_TABS, GUIDE_TABS_INTRO, GUIDE_TERMS, GUIDE_TITLE, type GuidePart,
+  GUIDE_DEK, GUIDE_EVERYWHERE, GUIDE_FIRST_SCREEN, GUIDE_IDEA, GUIDE_MARKS_INTRO, GUIDE_METHOD, GUIDE_PDF, GUIDE_INPUT, GUIDE_INPUT_IDS,
+  GUIDE_INPUT_INTRO, GUIDE_INPUT_PHONE, GUIDE_START, GUIDE_TAB_IDS, GUIDE_TABS, GUIDE_TABS_INTRO, GUIDE_TERMS, GUIDE_TITLE, type GuidePart,
 } from "../content/guide.ts";
-import { RAIL_HEADINGS } from "../content/rail.ts";
+import { INPUT_HEADINGS } from "../content/inputs.ts";
 import { SCORE_TIP_NAMES, TIP_NAMES, tipText, type ScoreTipKey } from "../content/tooltips.ts";
 import { WALK_TIPS } from "../tabs/walkforward/tips.ts";
 import { TAB_LABELS, type TabId, type TipKey } from "../types.ts";
@@ -143,14 +143,14 @@ export default function GuidePage() {
 
         <section id="settings" aria-labelledby="settings-h">
           <Slug id="settings-h">{title("settings")}</Slug>
-          <Paras body={GUIDE_RAIL_INTRO} />
+          <Paras body={GUIDE_INPUT_INTRO} />
           <p>
-            <Marked text={GUIDE_RAIL_PHONE} />
+            <Marked text={GUIDE_INPUT_PHONE} />
           </p>
-          {GUIDE_RAIL_IDS.map((id) => (
-            <div key={id} className="guide-part" data-rail={id}>
-              <h3 className="guide-h3">{RAIL_HEADINGS[id]}</h3>
-              <Paras body={GUIDE_RAIL[id]} />
+          {GUIDE_INPUT_IDS.map((id) => (
+            <div key={id} className="guide-part" data-input={id}>
+              <h3 className="guide-h3">{INPUT_HEADINGS[id]}</h3>
+              <Paras body={GUIDE_INPUT[id]} />
             </div>
           ))}
         </section>

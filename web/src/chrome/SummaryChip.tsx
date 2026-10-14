@@ -1,22 +1,15 @@
-// The phone's rail: one line saying what the page is computing ("5 tickers · 2019 to today ·
-// rf 4.1%"), which opens a sheet holding the same Rail. Computed from the settings, never typed.
+// The phone's basket bar: one row saying what the page is computing ("5 tickers · 2019 to today ·
+// rf 4.1%") over the benchmark and the day the prices run to, which opens a sheet holding every setting.
+// Computed from the settings, never typed.
 import { useEffect, useRef, type ReactNode } from "react";
 import { format } from "../format.ts";
-import { RF_FALLBACK } from "../state/defaults.ts";
-import { isRfView } from "../state/rfwindow.ts";
+import { benchDisplay } from "../state/defaults.ts";
 import type { LoadState, RfRate, Settings, SummaryChipProps } from "../types.ts";
+import { PricesLine } from "./BasketBar.tsx";
+import { rateInUse } from "./Settings.tsx";
 import "./SummaryChip.css";
 
 export const SHEET_ID = "settings-sheet";
-
-// The rate the page is using: the typed one, else the one the workbench scored the numbers on screen
-// against (by default the mean over the window), else today's, else the placeholder the page falls
-// back to when the live lookup fails (711). null while the lookup is still out.
-function rateInUse(settings: Settings, rf: LoadState<RfRate>): number | null {
-  if (settings.rf !== null) return settings.rf;
-  if (rf.status === "ready") return isRfView(rf.value) ? rf.value.inUse : rf.value.rate;
-  return rf.status === "loading" ? null : RF_FALLBACK;
-}
 
 export function summaryText(settings: Settings, rf: LoadState<RfRate>): string {
   const n = settings.tickers.length;
@@ -25,11 +18,17 @@ export function summaryText(settings: Settings, rf: LoadState<RfRate>): string {
   return `${n} ${n === 1 ? "ticker" : "tickers"} · ${settings.start.slice(0, 4)} to ${to} · rf ${rate === null ? "loading" : format(rate, "pct1")}`;
 }
 
-export default function SummaryChip({ settings, rf, open, onToggle }: SummaryChipProps) {
+export default function SummaryChip({ settings, rf, open, onToggle, analysis, fetching = false }: SummaryChipProps) {
   return (
     <button type="button" className="chip" aria-expanded={open} aria-controls={SHEET_ID} onClick={onToggle}>
+      <span className="chip-lines">
+        <span className="chip-summary">{summaryText(settings, rf)}</span>
+        <span className="chip-sub">
+          {benchDisplay(settings.benchmark)}
+          {analysis ? <PricesLine analysis={analysis} fetching={fetching} className="chip-prices" /> : null}
+        </span>
+      </span>
       <span className="chip-label">Settings</span>
-      <span className="chip-summary">{summaryText(settings, rf)}</span>
     </button>
   );
 }

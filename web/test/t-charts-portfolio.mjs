@@ -683,12 +683,12 @@ const W0 = o.w0;
 
 // ---- the starting amount's own field ------------------------------------------------------------------
 {
-  const { amountProblem } = await import("../src/charts/AmountField.tsx");
+  const { amountProblem } = await import("../src/components/AmountField.tsx");
   check(amountProblem("10000") === null && amountProblem("100") === null && /at least \$100/.test(amountProblem("99.5") ?? "") &&
     amountProblem("") !== null && amountProblem("abc") !== null,
     "amount: the chart's field takes $100 and up, and refuses an empty, non-numeric or smaller amount");
   // Under 16px iOS zooms the page when a field takes focus; the field's phone rule holds it there.
-  const css = readFileSync(new URL("../src/charts/AmountField.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = readFileSync(new URL("../src/components/AmountField.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   const phone = css.slice(css.indexOf("@media (max-width: 760px)"));
   check(phone.length > 0 && /\.amount-field input\s*\{[^}]*font-size:\s*16px/.test(phone),
     "amount: under the 760px query the field is 16px, so focusing it does not zoom the page");
