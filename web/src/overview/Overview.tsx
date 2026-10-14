@@ -183,7 +183,9 @@ function WealthTable({ a, amount }: { a: Analysis; amount: number }) {
 
 function WealthCard({ a, amount }: { a: Analysis; amount: number }) {
   const phone = usePhone();
-  const height = phone ? 192 : 280;
+  // 168 on a phone keeps the whole chart on a 375 x 812 first screen under the longest lede, the one a
+  // basket outside the published sets gets with its run button (192 ended 21 px below the fold).
+  const height = phone ? 168 : 280;
   const span = `${monthYear(a.prices.dates[0])} to ${monthYear(a.asOf)}`;
   const how = (
     <p>
