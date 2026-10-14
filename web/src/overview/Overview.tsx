@@ -13,6 +13,7 @@
 import { lazy, Suspense, useContext, useMemo, type ReactElement } from "react";
 import Card from "../components/Card.tsx";
 import { ChartNote } from "../components/ChartFrame.tsx";
+import HowTips from "../components/HowTips.tsx";
 import Plate from "../components/Plate.tsx";
 import Table from "../components/Table.tsx";
 import Term from "../components/Term.tsx";
@@ -137,7 +138,7 @@ function HindsightCard({ a, level }: { a: Analysis; level: Level }) {
       <p className="ov-finding">{finding(a)}</p>
       <div className="ov-plates">
         {snapshotPlates(a).map((p) => (
-          <Plate key={p.tip} label={p.label} value={p.value} format={p.format} tip={p.tip} level={level} allowShort={a.allowShort} se={p.se} />
+          <Plate key={p.tip} label={p.label} value={p.value} format={p.format} level={level} se={p.se} />
         ))}
       </div>
       <figure className="ov-published" aria-label="Published result">
@@ -160,8 +161,10 @@ function HindsightCard({ a, level }: { a: Analysis; level: Level }) {
       without hindsight are that test's published figures, quoted as published and never recomputed here.
     </p>
   );
+  // The plates' Sharpe ratios, as the marks beside their labels used to explain them: every level at once.
+  const plateTips = <HowTips keys={snapshotPlates(a).map((p) => p.tip)} allowShort={a.allowShort} />;
   return (
-    <Card id="overview-hindsight" title={h.title} sub={h.sub} numbers={numbers} how={how}>
+    <Card id="overview-hindsight" title={h.title} sub={h.sub} numbers={numbers} how={<>{how}{plateTips}</>}>
       <HindsightBars h={h} narrow={phone} />
     </Card>
   );

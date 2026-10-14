@@ -3,7 +3,7 @@
 // with both downloads, the tooltip following the level, and closest-cell hover.
 //
 // Every assertion here was mutation-tested by hand: the code it guards broken, the check seen red.
-import { render, text, act, expectUncaught } from "./_dom.mjs";
+import { render, text, act, expectUncaught, openAll } from "./_dom.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { check, nearAll, json, done } from "./_assert.mjs";
 import { fixtureAnalysis, tabProps } from "./_analysis.mjs";
@@ -200,6 +200,34 @@ const t = render(h(Correlation, tabProps(cross)));
 const page = () => text(t.container);
 const n = cross.tickers.length;
 
+// At rest the chapter is its finding, the heatmap card and three closed rows: no table and no row's card is drawn
+// until someone opens it, and each row's finding is the one its model states.
+{
+  const D = await import("../src/tabs/diversification.ts");
+  const rows = [...t.container.querySelectorAll(".more-row")];
+  check(rows.map((r) => r.id).join() === "div-rolling,div-spread,div-covariance" &&
+    rows.map((r) => text(r.querySelector(".more-title"))).join("|") === Object.values(D.DIV_ROWS).join("|"),
+    "rest: three More rows, in order, anchored div-<key>", rows.map((r) => r.id).join());
+  check(t.container.querySelectorAll(".tbl, .corr-spread, .corr-roll, .corr-controls").length === 0 && t.container.querySelectorAll("figure.chart-frame").length === 1,
+    "rest: only the heatmap is drawn; both tables, the rolling chart and the volatility sentence wait for their fold or row");
+  const findings = rows.map((r) => text(r.querySelector(".more-finding")));
+  check(findings[0] === D.rollingFinding(cross) && findings[1] === D.spreadFinding(cross) && findings[2] === D.covarianceFinding(cross) &&
+    findings.every((f) => f.split(/\s+/).length <= 20),
+    "rest: each row's finding is its model's, at most twenty words", findings.join(" | "));
+  const iv = cross.tickers.map((_, i) => cross.S[i][i]);
+  const top = iv.indexOf(Math.max(...iv));
+  check(findings[2].includes(cross.tickers[top]) && findings[2].includes(format(iv[top], "num6")),
+    "rest: the covariance row names the asset with the largest daily variance, and the figure its table prints", findings[2]);
+}
+openAll(t);
+{
+  const row = t.container.querySelector("#div-rolling");
+  const finding = text(row.querySelector(".more-finding"));
+  const title = text(row.querySelector(".card-title"));
+  check(finding === `${title}.` && finding === `${M.rollTitle(M.rollView(cross, cross.tickers[0], cross.tickers[1], M.DEFAULT_WINDOW).value)}.`,
+    "rest: the rolling row's finding is the title its card opens on (the first two assets, 60 days)", `${finding} / ${title}`);
+}
+
 check(text(t.container.querySelector("h2.corr-headline")) === HEAD, "tab: the headline states the finding, literally", text(t.container.querySelector("h2.corr-headline")));
 check(!/NaN|undefined|Infinity|null/.test(page()), "tab: no NaN, undefined, Infinity or null on the page");
 
@@ -219,11 +247,12 @@ check(!/NaN|undefined|Infinity|null/.test(page()), "tab: no NaN, undefined, Infi
   t.rerender(h(Correlation, tabProps(cross)));
   check(Object.values(at).every((xs) => xs.length === 1 && xs[0] === want), "volatility sentence: one sentence, literally, at Plain, Finance and Formula", JSON.stringify(at) + `\n   want ${want}`);
   const p = notes()[0];
-  const frame = t.container.querySelector("svg.corr-heat-svg")?.closest(".chart-frame, figure, section, div");
-  const before = p && p.previousElementSibling;
-  const after = p && p.nextElementSibling;
-  check(!!before && before.contains(t.container.querySelector("svg.corr-heat-svg")) && !!after && after.querySelector("table") && !after.contains(t.container.querySelector("svg.corr-heat-svg")),
-    "volatility sentence: directly under the heatmap's frame and above the correlation table", `${before?.className} / ${after?.className} / ${frame?.className}`);
+  const row = p?.closest(".more-row");
+  const S = M.spread(cross, M.corrView(cross));
+  const finding = text(row?.querySelector(".more-finding") ?? {});
+  check(row?.id === "div-spread" && finding.includes(format(S.together, "pct1")) && finding.includes(format(S.apart, "pct1")) &&
+    want.includes(format(S.together, "pct1")) && want.includes(format(S.apart, "pct1")),
+    "volatility sentence: in its own row, whose finding carries the same two volatilities", `${row?.id} / ${finding}`);
   check((want.match(/\. |\.$/g) ?? []).length === 1 && /over this window/.test(want), "volatility sentence: a single sentence that says it is about this window");
 }
 
@@ -384,9 +413,9 @@ const buttons = (tb) => [...tb.querySelectorAll(".tbl-dl button")].map((b) => te
 check(tables.length === 2 && caption(tables[0]) === "Pairwise correlation of daily returns" && caption(tables[1]) === "Daily covariance matrix",
   "tab: two tables, the correlation under the heatmap and the covariance matrix", tables.map(caption).join(" | "));
 {
-  const an = t.container.querySelector(".corr-kicker") ? text(t.container.querySelector(".corr-kicker")) : "none";
-  check(an === "How the assets move together" && !/Correlation & Covariance Analysis/.test(text(t.container)),
-    "kicker: names the view in plain words, not the assignment's heading", an);
+  // The chapter leads with its finding: no eyebrow over it, and never the assignment's heading.
+  check(!t.container.querySelector(".corr-kicker") && t.container.querySelector("h2")?.classList.contains("corr-headline") && !/Correlation & Covariance Analysis/.test(text(t.container)),
+    "lead: the finding is the chapter's first heading, with no kicker and no assignment heading");
   const spans = tables.map((tb) => text(tb.querySelector(".tbl-span")));
   check(spans.length === 2 && spans.every((s) => /^Daily returns, \d{4}-\d\d-\d\d to \d{4}-\d\d-\d\d$/.test(s)) && spans[0] === spans[1],
     "spans: both matrices state their window and that the returns are daily", spans.join(" | "));
@@ -406,14 +435,12 @@ check(tables.every((tb) => buttons(tb).includes("Download CSV") && buttons(tb).i
     "correlation table: every cell is the oracle's matrix to three places", JSON.stringify(corr[0]));
 }
 
-// The tooltip follows the level.
+// The covariance card's former info mark: its three texts under How it is calculated, every level at once.
 {
-  const tip = () => text(t.container.querySelector(".tip-text"));
-  const plain = tip();
-  t.rerender(h(Correlation, tabProps(cross, { level: "formula" })));
-  const formula = tip();
-  check(plain === TIPS.volatility.plain && formula === TIPS.volatility.formula && plain !== formula,
-    "tab: the volatility tooltip beside the covariance matrix changes with the level", `${plain.slice(0, 30)} / ${formula.slice(0, 30)}`);
+  const d = t.container.querySelector('#div-covariance .how-tip[data-tip="volatility"]');
+  const at = (l) => text(d?.querySelector(`dd[data-level=${l}]`) ?? {}).replace(/^[^:]+: /, "");
+  check(!t.container.querySelector(".tip-mark") && at("plain") === TIPS.volatility.plain && at("formula") === TIPS.volatility.formula,
+    "tab: no info mark; the volatility texts sit under the covariance card's How it is calculated, plain and formula both", `${at("plain").slice(0, 30)} / ${at("formula").slice(0, 30)}`);
 }
 
 // Rolling: the default pair and window, the window switch, the same asset twice.
@@ -473,6 +500,7 @@ check(line(1421) === "with tab3:" && line(1467) === "with tab4:" && !SRC.slice(1
   let r;
   try {
     r = expectUncaught(() => render(h(Correlation, tabProps({ ...cross, S: null }))));
+    openAll(r);
   } finally {
     loud();
   }

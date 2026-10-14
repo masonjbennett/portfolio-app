@@ -27,6 +27,7 @@ const { GUIDE_HREF, GUIDE_TITLE, isGuide } = await import("../src/guide/route.ts
 const { CHAPTER_IDS, CHAPTER_LABELS, CHAPTER_TABS, TAB_IDS, TAB_LABELS } = await import("../src/types.ts");
 const { INPUT_IDS, INPUT_HEADINGS } = await import("../src/content/inputs.ts");
 const P = await import("../src/content/published.ts");
+const { tipName } = await import("../src/content/tooltips.ts");
 const A = await import("../src/content/about.tsx");
 const { decodeShare } = await import("../src/state/url.ts");
 const { default: Overview } = await import("../src/overview/Overview.tsx");
@@ -79,6 +80,8 @@ function take(name, root) {
   const p = (parts[name] ??= { text: "", marks: new Set(), slugs: new Set() });
   p.text += ` \n ${corpus(root)}`;
   for (const b of root.querySelectorAll("button.tip-mark")) p.marks.add((b.getAttribute("aria-label") ?? "").replace(/^About /, ""));
+  // A former mark's texts printed under "How it is calculated" (HowTips) are that mark, still on the page.
+  for (const d of root.querySelectorAll(".how-tip[data-tip]")) p.marks.add(tipName(d.getAttribute("data-tip")));
   for (const s of root.querySelectorAll(".slug-text, .more-title")) p.slugs.add(text(s));
 }
 

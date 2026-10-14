@@ -2,7 +2,7 @@
 // in plain words, in finance terms and as the formula, the same texts the marks carried (content/tooltips.ts,
 // whose parity with the app's TOOLTIPS is held by test/t-tooltips.mjs), so nothing is reworded and a
 // reader sees every level at once instead of choosing one.
-import { tipName, tipText } from "../content/tooltips.ts";
+import { tipName, tipText, type ScoreTipKey } from "../content/tooltips.ts";
 import { LEVELS, type Level, type TipKey } from "../types.ts";
 import "./HowTips.css";
 
@@ -14,7 +14,7 @@ export const LEVEL_HEADS: Readonly<Record<Level, string>> = {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function HowTips({ keys, allowShort = false }: { keys: readonly TipKey[]; allowShort?: boolean }) {
+export default function HowTips({ keys, allowShort = false }: { keys: readonly (TipKey | ScoreTipKey)[]; allowShort?: boolean }) {
   return (
     <dl className="how-tips">
       {keys.map((k) => (

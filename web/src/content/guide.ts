@@ -373,7 +373,8 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
     opens: [
       "Correlation runs from minus one (always moving opposite) through zero (unrelated) to plus one (always moving " +
         "together). Investments that do not move together are what makes spreading money between them worth anything. The " +
-        "chapter opens on the most and the least correlated pair, a shaded grid of every pair, and the same figures in a table.",
+        "chapter opens on the most and the least correlated pair and a shaded grid of every pair; the same figures are under " +
+        "[[Show the numbers]]. Three rows below it open in place.",
     ],
     sections: [
       {
@@ -381,6 +382,13 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
         body: [
           "Pick two assets and a window length to see how their correlation changed over time, rather than one figure for the " +
             "whole window.",
+        ],
+      },
+      {
+        heading: "Equal weights against each on its own",
+        body: [
+          "What spreading money evenly did in your window: how much the equal split swung in a year, set against how much " +
+            "the assets swung on average one by one. The gap is what diversification took away.",
         ],
       },
       {

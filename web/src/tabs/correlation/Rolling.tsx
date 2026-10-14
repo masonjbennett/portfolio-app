@@ -6,6 +6,7 @@
 // same choices open here. Two identical assets give the app's st.info (1458) in the chart's place.
 import { memo, useId, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
+import Card from "../../components/Card.tsx";
 import ChartFrame from "../../components/ChartFrame.tsx";
 import SegControl from "../../components/SegControl.tsx";
 import { axisProps, DASH, gridProps, tooltipProps } from "../../charts/theme.ts";
@@ -34,9 +35,12 @@ function Rolling({ analysis }: { analysis: Analysis }) {
   const b = tickers.includes(selB) ? selB : pickB;
   const state = rollView(analysis, a, b, win);
   const id = useId();
+  const title = state.status === "ready" ? rollTitle(state.value) : `${win}-day rolling correlation`;
+  // What is plotted, over which days: under "How it is calculated", since the card's title states the finding.
+  const how = state.status === "ready" ? <p className="corr-note">{rollSubtitle(state.value)}</p> : undefined;
 
   return (
-    <div className="corr-roll">
+    <Card title={title} how={how}>
       <div className="corr-controls">
         <label className="corr-field" htmlFor={`${id}-a`}>
           <span>Asset A</span>
@@ -68,15 +72,10 @@ function Rolling({ analysis }: { analysis: Analysis }) {
           />
         </div>
       </div>
-      <ChartFrame
-        title={state.status === "ready" ? rollTitle(state.value) : `${win}-day rolling correlation`}
-        subtitle={state.status === "ready" ? rollSubtitle(state.value) : undefined}
-        state={state}
-        height={HEIGHT}
-      >
+      <ChartFrame title={title} state={state} height={HEIGHT} bare>
         {(v) => <RollChart v={v} />}
       </ChartFrame>
-    </div>
+    </Card>
   );
 }
 

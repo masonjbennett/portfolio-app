@@ -360,16 +360,20 @@ const COLUMN_NAMES = await (async () => {
   check(own.every((k) => /× 252|× √252/.test(SCORE_TIPS[k].formula) && /r_f/.test(SCORE_TIPS[k].formula)) &&
     own.every((k) => T(k).every((t) => !/\b(best|optimal\w*|winners?|race|outperform\w*|beat\w*|won)\b/i.test(t))),
     "plate tips: every formula annualises by 252 days at the page's rate, and no text has a word of contest", own.map((k) => SCORE_TIPS[k].formula).join(" | "));
-  // On the page: each plate's mark carries its own key's text, at each level.
-  const shown = LEVEL_IDS.map((level) => {
-    const r = render(h(Overview, { analysis: a, amount: 10000, level, setTickers() {} }));
-    const fold = [...r.container.querySelectorAll("#overview-hindsight .card-fold-button")].find((b) => text(b) === "Show the numbers");
-    if (fold) act(() => fold.click());
-    const got = [...r.container.querySelectorAll(".ov-plates .plate")].map((p) => text(p.querySelector("[role=tooltip]") ?? {}));
-    r.unmount();
-    return got.every((t, i) => t === tipText(plates[i].tip, level, a.allowShort)) && got.length === 4;
-  });
-  check(shown.every(Boolean), "plate tips: each plate shows its own tip's text at Plain, Finance and Formula", shown.join(","));
+  // On the page: the plates carry no mark; under the card's "How it is calculated" each plate's key prints all three
+  // of its texts, in the plates' order, and no plate keeps a mark of its own.
+  const r = render(h(Overview, { analysis: a, amount: 10000, level: "plain", setTickers() {} }));
+  const fold = [...r.container.querySelectorAll("#overview-hindsight .card-fold-button")];
+  for (const b of fold) act(() => b.click());
+  const marks = r.container.querySelectorAll(".ov-plates .tip-mark, .ov-plates [role=tooltip]").length;
+  const tips = [...r.container.querySelectorAll("#overview-hindsight .how-tip")];
+  const texts = tips.map((d) => LEVEL_IDS.map((l) => text(d.querySelector(`dd[data-level=${l}]`) ?? {}).replace(/^[^:]+: /, "")));
+  const plateCount = r.container.querySelectorAll(".ov-plates .plate").length;
+  r.unmount();
+  check(marks === 0 && plateCount === 4 && same(tips.map((d) => d.getAttribute("data-tip")), plates.map((p) => p.tip)) &&
+    texts.every((ts, i) => ts.every((t, k) => t === tipText(plates[i].tip, LEVEL_IDS[k], a.allowShort))),
+    "plate tips: no mark on the plates; How it is calculated prints each plate's tip at Plain, Finance and Formula, in the plates' order",
+    `marks ${marks}; ${tips.map((d) => d.getAttribute("data-tip")).join(",")}`);
 }
 
 done("t-tooltips");

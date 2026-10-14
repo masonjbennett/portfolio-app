@@ -4,17 +4,13 @@
   margin: 0 0 var(--space-5);
 }
 
-.corr-kicker {
-  margin: 0 0 var(--space-1);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-teal);
-}
-
 .corr-headline {
   margin: 0;
+}
+
+/* A section gap, not a hairline, between the lead card and the rows (40 px; 28 on a phone, below). */
+#div-heatmap {
+  margin-bottom: 40px;
 }
 
 .corr-readout {
@@ -96,6 +92,10 @@
 
 /* Phone: 760px, tokens.breakpoint.phone. */
 @media (max-width: 760px) {
+  #div-heatmap {
+    margin-bottom: 28px;
+  }
+
   .corr-field {
     flex: 1 1 40%;
   }
