@@ -155,20 +155,6 @@ export const GUIDE_FIRST_SCREEN: readonly GuidePart[] = [
         "The last line says who built the page and links its source code, the method note and this guide.",
     ],
   },
-  {
-    heading: "The what-if panel",
-    body: [
-      `At the end of ${CHAPTER_LABELS.build}, [[What if one expected return were different?]] opens a panel, [[What-if ` +
-        "on these prices]]. Pick an asset, then slide " +
-        "its expected return, the average yearly return the optimizer assumes it earns, [[up to two standard errors either side " +
-        "of its average]]. At each step the highest-Sharpe mix is solved again and the sentence prints its new weight in that " +
-        "asset. The least volatile mix never moves, because it does not use expected returns at all.",
-      "Why do fitted weights swing so much? The optimizer has to estimate, from the prices, each asset's average return, how " +
-        "much it swings and how each pair moves together. The lines under the slider count those estimates, and say how many " +
-        "years of prices it would take to pin one average return down. That is usually far more than the window holds, so each " +
-        "estimate is rough, and a small change in one can move the weights a lot.",
-    ],
-  },
 ];
 
 // ---- the settings -----------------------------------------------------------------------------------------------
@@ -418,49 +404,59 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
         "every other, even the ones you leave alone. The point on the frontier and the five figures under the sliders follow as " +
         "you move one, and [[Reset to equal weights]] appears once you have. Under [[Show the numbers]] are your settings after " +
         "the division, the shares every figure of your mix uses. Your weights travel in the page's link; your mix is a column of " +
-        "the scorecard below and a line on Performance's growth chart.",
+        "the scorecard in the rows below and a line on Performance's growth chart.",
     ],
     sections: [
       {
-        heading: "Three portfolios",
-        body: [
-          "Side by side: [[Equal-Weight Portfolio (1/N)]] (the name's ending means the money divided evenly by the number of " +
-            "assets), [[Global Min Variance]] and [[Max Sharpe (Tangency)]]. Each shows its return, volatility, Sharpe and " +
-            "Sortino ratios, and [[Max DD]], short for maximum drawdown: its deepest fall. The two fitted ones say [[weights " +
-            "chosen on this window]]; [[The walk-forward test]] opens what such weights earned on later years.",
-        ],
-      },
-      {
-        heading: "Portfolio Weights",
-        body: [
-          "How much of the money each mix puts in each asset, as a chart and a table. Under them is [[If the true means were " +
-            "anywhere their own noise allows]]. The means are the assets' average returns; their noise is how far those " +
-            "averages, worked out from a limited stretch of prices, could be off by chance. The page redraws the averages many " +
-            "times within that noise and solves the mix again each time, to show how far its weights could swing. [[Redraw]] " +
-            "draws a fresh set.",
-        ],
-      },
-      {
         heading: "Scorecard",
         body: [
-          "Every portfolio in one table: return, risk, falls, how the portfolio moved with the benchmark, and how fragile its " +
-            "weights are. The buttons above it add other ways of building a mix, such as [[Risk parity]]. [[Show every row]] " +
-            "shows the rows left out at first, and [[What each row means]] explains each one.",
+          "Every portfolio in one table, a column each: [[Equal-Weight]], [[GMV]], [[Tangency]], your mix as [[Custom]], and " +
+            "the benchmark last. Its rows give return, risk, the falls, how the portfolio moved with the benchmark, and how " +
+            "fragile its weights are; the main ones are return, volatility, the Sharpe and Sortino ratios and the maximum " +
+            "drawdown, its deepest fall. The two fitted columns say [[weights chosen on this window]], and under How it is " +
+            "calculated [[The walk-forward test]] opens what such weights earned on later years.",
+          "The buttons above it add other ways of building a mix, such as [[Risk parity]]. [[Show every row]] shows the rows " +
+            "left out at first, and [[What each row means]] explains each one.",
           "Besides the usual downloads, [[Download Excel, with formulas]] gives a workbook that rebuilds most of the scorecard " +
             "as spreadsheet formulas, working from the closing prices. The fitted weights go in as plain numbers, and a few rows " +
             "are left out; the workbook's first sheet names them.",
         ],
       },
       {
-        heading: "Risk Contribution (PRC)",
+        heading: "What each mix holds",
         body: [
-          "Pick a portfolio to compare each asset's share of its money with its share of the return and its share of the risk. " +
-            "A small weight in a volatile asset can carry a large share of the risk.",
+          "How much of the money each mix puts in each asset, as bars. Under [[Show the numbers]] the same weights are a " +
+            "table with your mix beside them and any column added to the scorecard, with both downloads.",
         ],
       },
       {
-        heading: "Summary Comparison",
-        body: ["The portfolios' main figures together in one table."],
+        heading: "If the averages were a little off",
+        body: [
+          "The means are the assets' average returns; their noise is how far those averages, worked out from a limited " +
+            "stretch of prices, could be off by chance. The page redraws the averages many times within that noise and solves " +
+            "the mix again each time, a dot per draw, to show how far its weights could swing. [[Redraw]] draws a fresh set.",
+        ],
+      },
+      {
+        heading: "Risk contribution",
+        body: [
+          "Pick a portfolio to compare each asset's share of its money with its share of the return and its share of the risk. " +
+            "A small weight in a volatile asset can carry a large share of the risk. The table under [[Show the numbers]] sets " +
+            "every portfolio's shares side by side.",
+        ],
+      },
+      {
+        heading: "What if one expected return were different?",
+        body: [
+          "This row opens a panel, [[What-if on these prices]]. Pick an asset, then slide " +
+            "its expected return, the average yearly return the optimizer assumes it earns, [[up to two standard errors either side " +
+            "of its average]]. At each step the highest-Sharpe mix is solved again and the sentence prints its new weight in that " +
+            "asset. The least volatile mix never moves, because it does not use expected returns at all.",
+          "Why do fitted weights swing so much? The optimizer has to estimate, from the prices, each asset's average return, how " +
+            "much it swings and how each pair moves together. The lines under the slider count those estimates, and say how many " +
+            "years of prices it would take to pin one average return down. That is usually far more than the window holds, so each " +
+            "estimate is rough, and a small change in one can move the weights a lot.",
+        ],
       },
     ],
   },

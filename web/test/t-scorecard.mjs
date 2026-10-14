@@ -32,6 +32,17 @@ const { format, DASH, MINUS } = await import("../src/format.ts");
 const { worksheet, csvText } = await import("../src/download.ts");
 const { tipText, isScoreTip } = await import("../src/content/tooltips.ts");
 const { FITTED } = await import("../src/tabs/caption.ts");
+const { openMore } = await import("../src/components/MoreList.tsx");
+const { maxDrawdown } = await import("../src/lib/stats.ts");
+// Build's cards sit in its More rows, drawn the first time a row opens: open the four this suite reads, as a reader
+// would, before the chapter is first drawn (the list remembers them for the run).
+for (const k of ["scorecard", "holdings", "redraws", "prc"]) openMore("build", k);
+// Opens a card's "How it is calculated" fold, whose words are drawn the first time it opens.
+const openHow = (card) => {
+  const b = [...(card?.querySelectorAll(".card-fold-button") ?? [])].find((x) => text(x) === "How it is calculated");
+  if (b && b.getAttribute("aria-expanded") !== "true") act(() => b.click());
+  return card;
+};
 
 const quiet = (fn) => {
   const { error, warn } = console;
@@ -270,15 +281,15 @@ for (const { label, a } of baskets) {
   const r = quiet(() => render(h(Optimization, tabProps(a))));
   // The download row offers the workbook of formulas as a third file, after the CSV and the values Excel,
   // in the same row as those two.
-  const dl = [...r.container.querySelectorAll('section[aria-labelledby="opt-scorecard"] .tbl-dl button')].map(text);
+  const dl = [...r.container.querySelectorAll('#build-scorecard .tbl-dl button')].map(text);
   check(dl.join("|") === `Download CSV|Download Excel|${BOOK_LINK}`, "downloads: on Optimization the scorecard offers the CSV, the values Excel, then the Excel with formulas", dl.join("|"));
-  const dlRows = r.container.querySelectorAll('section[aria-labelledby="opt-scorecard"] .tbl-dl');
+  const dlRows = r.container.querySelectorAll('#build-scorecard .tbl-dl');
   check(dlRows.length === 1 && dlRows[0].querySelectorAll("button").length === 3, "downloads: the three buttons share one row", `${dlRows.length} rows`);
   const strips = () => r.container.querySelector(".opt-strips");
   check(strips() && !strips().dataset.seed && /Solving the draws/.test(text(strips())), "strips: the first render does not solve the draws; it says they are pending");
   // The clipped caption title loses nothing only while the heading above it says the same.
-  check(text(r.container.querySelector("#opt-scorecard")) === text(r.container.querySelector('section[aria-labelledby="opt-scorecard"] caption .tbl-title')),
-    "caption: on Optimization the clipped title is what the section heading prints");
+  check(text(r.container.querySelector("#build-scorecard .more-title")) === text(r.container.querySelector('#build-scorecard caption .tbl-title')),
+    "caption: on Optimization the clipped title is what the row's title prints");
   await settle();
   check(strips().dataset.seed === String(DEFAULT_SEED) && strips().querySelectorAll(".opt-strip[data-ticker]").length === a.tickers.length,
     "strips: after paint, one strip per asset from the fixed seed");
@@ -291,8 +302,8 @@ for (const { label, a } of baskets) {
   await settle();
   check(strips().dataset.seed === String(seedOf(1)) && strips().querySelector(".opt-strip-svg").innerHTML !== firstDots && /Draw set 2, seed/.test(text(strips())),
     "strips: Redraw moves to the next seed and redraws");
-  const words = text(strips());
-  check(/if the true means were anywhere their own noise allows/i.test(words) && /not a forecast/.test(words) && !/out-of-sample|\bbeat|\bwins?\b|outperform|% of draws/i.test(words),
+  const words = text(openHow(r.container.querySelector("#build-redraws")));
+  check(/if the averages were a little off/i.test(words) && /not a forecast/.test(words) && !/out-of-sample|\bbeat|\bwins?\b|outperform|% of draws/i.test(words),
     "strips: worded as a what-if on these prices, never a verdict", words);
   check(!r.container.querySelector(".opt-strips animate, .opt-strips animateTransform") && !/transition|animation/.test(readFileSync(new URL("../src/tabs/optimization/Optimization.css", import.meta.url), "utf8")),
     "strips: static, no animation");
@@ -309,7 +320,7 @@ for (const { label, a } of baskets) {
   const r = quiet(() => render(h(Optimization, props)));
   await settle();
   const scs = [...r.container.querySelectorAll(".tbl.sc")];
-  const sc = r.container.querySelector('section[aria-labelledby="opt-scorecard"] .tbl.sc');
+  const sc = r.container.querySelector('#build-scorecard .tbl.sc');
   check(scs.length === 1 && !!sc && [...sc.querySelectorAll("thead th")].map((th) => th.dataset.col ?? "label").join() === "label,ew,gmv,tangency,custom,bench",
     "custom: the chapter has one scorecard, the mix a column of it", `${scs.length} scorecards`);
   const v = M.customWeights(a, props.weights);
@@ -349,18 +360,33 @@ for (const { label, a } of baskets) {
     /below 0% means the holding earned while its portfolio lost/.test(lossPart) && /lost more than its whole portfolio did/.test(lossPart),
     "return-share: in a portfolio with a negative mean return a share below 0% is a holding that earned, and is said so", note);
 
-  // The Sharpe tiles on the Optimization tab carry the same ± as the scorecard below them.
+  // The three portfolios' plates and the summary comparison are not drawn: the scorecard carries every figure they
+  // printed. Held here figure by figure, as they computed them (summaryRow at the analysis' moments, the benchmark's
+  // own statistics and its drawdown from the amount invested), against the scorecard's full view as it prints them:
+  // return, volatility, Sharpe with its ± standard error, Sortino and maximum drawdown, for Equal-Weight, GMV,
+  // Tangency, Custom and the benchmark.
   const a = exampleAnalysis();
   const r = quiet(() => render(h(Optimization, tabProps(a))));
   await settle();
-  const plateSE = (root) => {
-    const plate = [...(root?.querySelectorAll(".plate") ?? [])].find((p) => text(p.querySelector(".plate-label span")) === "Sharpe");
-    return plate?.querySelector(".plate-se") ? text(plate.querySelector(".plate-se")) : null;
-  };
-  const wOf = { ew: a.ew, gmv: a.gmv.w, tangency: a.tangency.w };
-  const tiles = Object.entries(wOf).map(([id, w]) => [plateSE(r.container.querySelector(`.opt-tile[data-port="${id}"]`)), `± ${format(sharpeSE(portfolioReturns(a.returns, w), a.rf), "num3")} SE`]);
-  check(tiles.every(([got, want]) => got === want) && r.container.querySelectorAll(".opt-tile .plate-se").length === 3,
-    "sharpe-se: each Sharpe tile on the Optimization tab prints its ± standard error, and only the Sharpe plate", JSON.stringify(tiles));
+  act(() => r.container.querySelector(".sc-toggle").click());
+  const cellsOf = (id) => [...(r.container.querySelector(`#build-scorecard tr[data-metric="${id}"]`)?.children ?? [])].slice(1).map(text);
+  const wOf = { ew: a.ew, gmv: a.gmv.w, tangency: a.tangency.w, custom: M.customWeights(a, {}).w };
+  const want = Object.values(wOf).map((w) => ({ ...M.portRow(a, w), se: sharpeSE(portfolioReturns(a.returns, w), a.rf) }));
+  const b = a.benchStats;
+  want.push({ mu: b.mu, sigma: b.sigma, sharpe: b.sharpe, sortino: b.sortino, mdd: maxDrawdown(a.bench), se: sharpeSE(a.bench, a.rf) });
+  const rows = { mean: "mu", vol: "sigma", sortino: "sortino", mdd: "mdd" };
+  const fmt = { mu: "pct2", sigma: "pct2", sortino: "num3", mdd: "pct2" };
+  const lost = [];
+  for (const [id, key] of Object.entries(rows)) {
+    const got = cellsOf(id);
+    want.forEach((x, k) => got[k] !== format(x[key], fmt[key]) && lost.push(`${id}[${k}] ${got[k]} vs ${format(x[key], fmt[key])}`));
+  }
+  const sharpe = cellsOf("sharpe");
+  want.forEach((x, k) => {
+    if (!sharpe[k]?.includes(format(x.sharpe, "num3")) || !sharpe[k]?.includes(`± ${format(x.se, "num3")}`)) lost.push(`sharpe[${k}] ${sharpe[k]}`);
+  });
+  check(lost.length === 0 && sharpe.length === 5 && !r.container.querySelector(".opt-tile, [aria-labelledby='opt-summary']"),
+    "merge: every figure the plates and the summary comparison printed is in the scorecard, and neither is drawn", lost.join(" | "));
 
   // The Custom head says why its column repeats Equal-Weight on a first visit, and nothing once a mix is typed.
   const heads = SC.scoreColumns(a, M.customWeights(a, {}));

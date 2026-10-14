@@ -16,7 +16,8 @@ const { AppView, TAB_LOADERS, TABS: AppTabs } = await import("../src/App.tsx");
 const { default: Boundary } = await import("../src/components/Boundary.tsx");
 const { snapshotPlates, finding, assetsOf, publishedSetOf, standing, nameInSentence, whoseFigures, figuresLine, lede, ledeText, hindsight, whyFacts, endsOf, mixRows, QUESTION } = await import("../src/overview/model.ts");
 const { default: Overview, OPEN_PUBLISHED_TITLE } = await import("../src/overview/Overview.tsx");
-const { default: WhatIfFold, seams: whatIfSeams } = await import("../src/chrome/WhatIfFold.tsx");
+const { default: WhatIfRow, seams: whatIfSeams, loadWhatIf, forgetWhatIf } = await import("../src/chrome/WhatIfRow.tsx");
+const { default: MoreList, forgetMore } = await import("../src/components/MoreList.tsx");
 const A = await import("../src/content/about.tsx");
 const OPT = await import("../src/tabs/optimization/model.ts");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
@@ -67,17 +68,22 @@ function setValue(el, value) {
   });
 }
 const click = (el) => act(() => el.click());
-// The what-if fold fetches its panel's code when the reader reaches for it (src/chrome/WhatIfFold.tsx):
-// opened here as a reader opens it, by its line, then waited on until the panel is in. Returns the fold.
+// The what-if row fetches its panel's code when the reader reaches for it (src/chrome/WhatIfRow.tsx): opened here
+// as a reader opens it, by its button, then waited on until the panel is in. Returns the row.
+const WHATIF_TITLE = "What if one expected return were different?";
+const isOpen = (row) => row?.querySelector(".more-button")?.getAttribute("aria-expanded") === "true";
 async function openWhatIf(root) {
-  const fold = root.querySelector("details.whatif-fold");
-  if (!fold) return null;
-  click(fold.querySelector("summary"));
-  for (let i = 0; i < 400 && !(fold.open && fold.querySelector("section.whatif")); i++) {
+  const row = root.querySelector("#build-whatif");
+  if (!row) return null;
+  if (!isOpen(row)) click(row.querySelector(".more-button"));
+  for (let i = 0; i < 400 && !(isOpen(row) && row.querySelector("section.whatif")); i++) {
     await act(() => new Promise((res) => setTimeout(res, 5)));
   }
-  return fold;
+  return row;
 }
+// The row as Build's More list draws it, alone: a list of one, the panel's code fetched by the row's `before`.
+const whatIfList = () =>
+  h(MoreList, { id: "build", rows: [{ key: "whatif", title: WHATIF_TITLE, finding: "", before: loadWhatIf, children: h(WhatIfRow, { a: EX }) }] });
 // The Overview's answer as a reader sees it: the glossary terms' definitions, shut, left out.
 function readLede(root) {
   const el = root.querySelector(".ov-lede")?.cloneNode(true);
@@ -365,9 +371,10 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
 {
   const t = EX.tangency;
   const plates = snapshotPlates(EX);
-  // The Optimization tab's summary table on the same analysis: every plate is that table's own figure.
-  const table = OPT.summaryTable(EX, OPT.customWeights(EX, {}));
-  const rowSharpe = (name) => (table.status === "ready" ? table.value.rows.find((r) => r.portfolio === name)?.sharpe : undefined);
+  // Build's figures on the same analysis (portRow at the analysis' moments, the benchmark's own statistics, which the
+  // summary comparison printed and the scorecard now carries): every plate is that figure.
+  const sharpeOf = (A, id) => (id === "bench" ? A.benchStats.sharpe : OPT.portRow(A, id === "ew" ? A.ew : A[id].w).sharpe);
+  const rowSharpe = (name) => sharpeOf(EX, { "Equal-Weight": "ew", GMV: "gmv", Tangency: "tangency" }[name] ?? "bench");
   const want = [
     ["Equal-Weight Sharpe", rowSharpe("Equal-Weight"), "num3", "ew_sharpe"],
     ["Tangency Sharpe (in-sample)", t.sharpe, "num3", "best_sharpe"],
@@ -383,10 +390,8 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   // on the sector fixture it does not, so a plate computed that way goes red here.
   const strict = ["sectors", "megacap"].map((name) => {
     const A = fixtureAnalysis(name);
-    const tb = OPT.summaryTable(A, OPT.customWeights(A, {}));
-    const row = (n) => (tb.status === "ready" ? tb.value.rows.find((r) => r.portfolio === n)?.sharpe : undefined);
     const got = snapshotPlates(A).map((p) => p.value);
-    const exp = [row("Equal-Weight"), row("Tangency"), row("GMV"), row(A.benchLabel)];
+    const exp = ["ew", "tangency", "gmv", "bench"].map((id) => sharpeOf(A, id));
     return { name, ok: exp.every(Number.isFinite) && got.every((v, i) => v === exp[i]), got, exp };
   });
   check(strict.every((x) => x.ok), "numbers: on the sector and mega-cap fixtures too, every plate is the Optimization tab's figure to the last bit", JSON.stringify(strict.filter((x) => !x.ok)));
@@ -451,18 +456,15 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   check(JSON.stringify(calls) === JSON.stringify([["0", '"Best Sharpe (Tangency)"'], ["1", '"Tangency Return"'], ["2", 'f"{bench_label_saved} Return"'], ["3", 'f"{bench_label_saved} Volatility"']]),
     "ledger:snapshot-plates the app's Snapshot is the tangency's Sharpe and return and the benchmark's return and volatility", JSON.stringify(calls));
   // The port's side: four Sharpe ratios; the tangency's return and the benchmark's return and volatility are in
-  // the Overview growth chart's numbers and in the Optimization tab's summary table, as percentages.
+  // the Overview growth chart's numbers and in Build's scorecard, as percentages.
   const labels = snapshotPlates(EX).map((p) => p.label);
-  const rows = OPT.summaryTable(EX, OPT.customWeights(EX, {}));
-  const row = (name) => (rows.status === "ready" ? rows.value.rows.find((x) => x.portfolio === name) : undefined);
-  const pct = rows.status === "ready" ? rows.value.columns.filter((c) => c.format === "pct2").map((c) => c.key) : [];
+  const tanRow = OPT.portRow(EX, EX.tangency.w);
   const mixes = mixRows(EX, EX_SETTINGS.amount);
   check(labels.length === 4 && labels.every((l) => / Sharpe( \(in-sample\))?$/.test(l)) &&
-    row("Tangency")?.mu === EX.tangency.mu && row(EX.benchLabel)?.mu === EX.benchStats.mu && row(EX.benchLabel)?.sigma === EX.benchStats.sigma &&
-    pct.includes("mu") && pct.includes("sigma") &&
-    mixes[0].mu === row("Tangency")?.mu && mixes.at(-1).mu === EX.benchStats.mu && mixes.at(-1).sigma === EX.benchStats.sigma,
-    "ledger:snapshot-plates the port's plates are four Sharpe ratios; the tangency return and the benchmark's return and volatility are in the growth chart's numbers and the Optimization tab's summary table",
-    `${labels.join(" | ")} / ${JSON.stringify([row("Tangency"), row(EX.benchLabel)])}`);
+    tanRow.mu === EX.tangency.mu &&
+    mixes[0].mu === tanRow.mu && mixes.at(-1).mu === EX.benchStats.mu && mixes.at(-1).sigma === EX.benchStats.sigma,
+    "ledger:snapshot-plates the port's plates are four Sharpe ratios; the tangency return and the benchmark's return and volatility are in the growth chart's numbers and Build's scorecard",
+    `${labels.join(" | ")} / ${JSON.stringify(tanRow)}`);
 }
 
 // ---- (d2) the published result: quoted, dated, linked once, in the hindsight card ----------------------
@@ -750,6 +752,11 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   click(byLabel(row, CHAPTER_LABELS.holdup));
   check(landed.length === 0, "walk-forward: a landing is taken once; the chapter mounted again by its pill does not land again", where());
   click(byLabel(row, CHAPTER_LABELS.build));
+  // The note sits under the scorecard's How it is calculated, in Build's first More row: opened as a reader opens it.
+  const scRow = panel()?.querySelector("#build-scorecard");
+  if (scRow && !isOpen(scRow)) click(scRow.querySelector(".more-button"));
+  const how = [...(scRow?.querySelectorAll(".card-fold-button") ?? [])].find((b) => text(b) === "How it is calculated");
+  if (how && how.getAttribute("aria-expanded") === "false") click(how);
   const note = panel()?.querySelector('[data-note="in-sample"] button.text-button');
   // The note itself must not link out to the method note; As published, which it opens, carries that link.
   const linksOut = !!panel()?.querySelector(`[data-note="in-sample"] a[href="${P.PUBLISHED_URL}"]`);
@@ -813,10 +820,10 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const ov = render(h(Overview, { analysis: EX, amount: 10000, level: "plain", setTickers() {} }));
   openNumbers(ov.container);
   ov.container.querySelectorAll('.card-fold-button[aria-expanded="false"]').forEach((b) => click(b));
-  const wf = render(h(WhatIfFold, { a: EX }));
+  const wf = render(whatIfList());
   const fold = await openWhatIf(wf.container);
-  check(!!fold?.open && wf.container.querySelectorAll("section.whatif").length === 1,
-    "plain words: the what-if is read with its panel open", fold ? fold.outerHTML.slice(0, 160) : "no fold");
+  check(isOpen(fold) && wf.container.querySelectorAll("section.whatif").length === 1,
+    "plain words: the what-if is read with its panel open", fold ? fold.outerHTML.slice(0, 160) : "no row");
   const shown = [ov, wf, render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false })), render(h(Footer))].map((r) => {
     r.container.querySelectorAll("[aria-label]").forEach((e) => names.push(e.getAttribute("aria-label")));
     const t = text(r.container);
@@ -1095,46 +1102,65 @@ function bar(over = {}) {
     po.container.querySelector("#overview-hindsight .card-fold-button")?.getAttribute("aria-expanded") === "false",
     "phone: the Overview leads with the question and the answer, the numbers folded shut");
   po.unmount();
-  // The what-if panel: it closes Build a portfolio, folded shut, below the chapter's tabs, and is not fetched
-  // until the reader reaches for it (section (g2)). Opened by its line, it holds the one panel.
-  const pb = page({ chapter: "build" });
-  const wFold = pb.container.querySelector("[role=tabpanel] details.whatif-fold");
-  const lastTab = [...pb.container.querySelectorAll("[role=tabpanel] [data-section]")].at(-1);
-  check(!!wFold && !wFold.open && !wFold.querySelector("section.whatif") && !!lastTab && !!(lastTab.compareDocumentPosition(wFold) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&
-    text(wFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
-    "phone: the what-if panel folds behind a closed disclosure at the end of Build a portfolio", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
+  // The what-if panel: the last row of Build a portfolio's More list, shut, and not fetched until the reader reaches
+  // for it (section (g2)). Opened by its button, it holds the one panel.
+  forgetMore();
+  const pb = page({ chapter: "build" }, { ...STAND_TABS, optimization: TABS.optimization });
+  const wFold = pb.container.querySelector("[role=tabpanel] #build-whatif");
+  const lastRow = [...pb.container.querySelectorAll("[role=tabpanel] .more-row")].at(-1);
+  check(!!wFold && wFold === lastRow && !isOpen(wFold) && !wFold.querySelector("section.whatif") &&
+    text(wFold.querySelector(".more-title") ?? {}) === WHATIF_TITLE,
+    "phone: the what-if panel is the last row of Build a portfolio's More list, shut", wFold ? wFold.outerHTML.slice(0, 160) : "no row");
   await openWhatIf(pb.container);
-  check(!!wFold?.open && !!wFold.querySelector("section.whatif input[type=range]") && pb.container.querySelectorAll("section.whatif").length === 1,
-    "phone: opened by its line, the fold holds the what-if panel, once", wFold ? wFold.outerHTML.slice(0, 160) : "no fold");
+  check(isOpen(wFold) && !!wFold.querySelector("section.whatif input[type=range]") && pb.container.querySelectorAll("section.whatif").length === 1,
+    "phone: opened by its button, the row holds the what-if panel, once", wFold ? wFold.outerHTML.slice(0, 160) : "no row");
   const elsewhere = ["overview", "performance", "diversification", "holdup"].filter((c) => {
     const x = page({ chapter: c });
-    const has = !!x.container.querySelector("details.whatif-fold");
+    const has = !!x.container.querySelector("#build-whatif, section.whatif");
     x.unmount();
     return has;
   });
-  check(elsewhere.length === 0, "the what-if fold is in Build a portfolio only", elsewhere.join(" "));
+  check(elsewhere.length === 0, "the what-if row is in Build a portfolio only", elsewhere.join(" "));
   pb.unmount();
   setMedia(() => false);
   const desk = page({});
   check(!desk.container.querySelector("button.chip") && !!desk.container.querySelector(".bar [name=tickers]") && !desk.container.querySelector("aside"),
     "desktop: the basket bar holds the settings, no chip and no side column");
   desk.unmount();
-  const db = page({ chapter: "build" });
-  const dFold = db.container.querySelector("[role=tabpanel] details.whatif-fold");
-  check(!!dFold && !dFold.open && !dFold.querySelector("section.whatif") && text(dFold.querySelector("summary") ?? {}) === "What if one expected return were different?",
-    "desktop: the what-if panel folds behind the same closed disclosure in Build a portfolio", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
+  forgetMore();
+  // Build's own row carries the fetch-ahead: pressed, it asks for the panel's code before any click.
+  {
+    const realSeam = whatIfSeams.whatIf;
+    let asked = 0;
+    whatIfSeams.whatIf = () => {
+      asked++;
+      return realSeam();
+    };
+    act(() => forgetWhatIf());
+    const pr = page({ chapter: "build" }, { ...STAND_TABS, optimization: TABS.optimization });
+    const b = pr.container.querySelector("#build-whatif .more-button");
+    if (b) act(() => b.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })));
+    check(!!b && asked === 1 && !isOpen(pr.container.querySelector("#build-whatif")), "desktop: Build's what-if row asks for the panel's code on a press, still shut", `asked ${asked}`);
+    pr.unmount();
+    whatIfSeams.whatIf = realSeam;
+  }
+  const db = page({ chapter: "build" }, { ...STAND_TABS, optimization: TABS.optimization });
+  const dFold = db.container.querySelector("[role=tabpanel] #build-whatif");
+  check(!!dFold && !isOpen(dFold) && !dFold.querySelector("section.whatif") && text(dFold.querySelector(".more-title") ?? {}) === WHATIF_TITLE,
+    "desktop: the what-if panel is the same shut row in Build a portfolio", dFold ? dFold.outerHTML.slice(0, 160) : "no row");
   await openWhatIf(db.container);
-  check(!!dFold?.open && !!dFold.querySelector("section.whatif input[type=range]") && db.container.querySelectorAll("section.whatif").length === 1,
-    "desktop: opened by its line, the fold holds the what-if panel, once", dFold ? dFold.outerHTML.slice(0, 160) : "no fold");
+  check(isOpen(dFold) && !!dFold.querySelector("section.whatif input[type=range]") && db.container.querySelectorAll("section.whatif").length === 1,
+    "desktop: opened by its button, the row holds the what-if panel, once", dFold ? dFold.outerHTML.slice(0, 160) : "no row");
+  forgetMore();
   db.unmount();
 }
 
-// ---- (g2) the what-if fold fetches its panel when the reader reaches for it ------------------------
+// ---- (g2) the what-if row fetches its panel when the reader reaches for it ------------------------
 // The panel and the solvers it runs are a chunk of their own (t-split.mjs reads that off the real build).
 // Each promise is checked with the fetch held in this suite's hands: nothing is fetched before the reader
-// reaches for the line; a click that lands first is held, the fold shut and marked busy, and the fold then
-// opens on the finished panel in one commit, never open on an empty box; pressing the line fetches ahead
-// of the click, which then opens the fold at once; a chunk that never arrives says so inside the fold.
+// reaches for the row; a click that lands first is held, the row shut and marked busy, and the row then
+// opens on the finished panel in one commit, never open on an empty box; pressing the row fetches ahead
+// of the click, which then opens it at once; a chunk that never arrives says so inside the row.
 {
   const real = whatIfSeams.whatIf;
   const wait = () => act(() => new Promise((res) => setTimeout(res, 5)));
@@ -1142,11 +1168,19 @@ function bar(over = {}) {
     for (let i = 0; i < tries && !cond(); i++) await wait();
     return cond();
   };
-  const panel = () => render(h(WhatIfFold, { a: EX }));
-  const foldOf = (r) => r.container.querySelector("details.whatif-fold");
+  // Each case starts as a fresh visit: no code fetched, no row opened.
+  const panel = () => {
+    act(() => {
+      forgetWhatIf();
+      forgetMore();
+    });
+    return render(whatIfList());
+  };
+  const rowOf = (r) => r.container.querySelector("#build-whatif");
+  const button = (row) => row.querySelector(".more-button");
   let asked = 0;
   try {
-    // Held in flight. Every state the fold is seen in, after each change to it, is kept.
+    // Held in flight. Every state the row is seen in, after each change to it, is kept.
     let release;
     const gate = new Promise((res) => (release = res));
     whatIfSeams.whatIf = () => {
@@ -1154,59 +1188,63 @@ function bar(over = {}) {
       return gate.then(real);
     };
     const r = panel();
-    const fold = foldOf(r);
+    const row = rowOf(r);
     const seen = [];
-    const watch = new window.MutationObserver(() => seen.push({ open: fold.open, panel: !!fold.querySelector("section.whatif") }));
-    watch.observe(fold, { attributes: true, childList: true, subtree: true });
-    check(asked === 0 && !fold.querySelector("section.whatif"), "what-if fold: nothing is fetched before the reader reaches for the line", `asked ${asked}`);
-    click(fold.querySelector("summary"));
+    const watch = new window.MutationObserver(() => seen.push({ open: isOpen(row), panel: !!row.querySelector("section.whatif") }));
+    watch.observe(row, { attributes: true, childList: true, subtree: true });
+    check(asked === 0 && !row.querySelector("section.whatif"), "what-if row: nothing is fetched before the reader reaches for it", `asked ${asked}`);
+    click(button(row));
     await wait();
-    check(asked === 1 && !fold.open && fold.getAttribute("aria-busy") === "true" && !fold.querySelector("section.whatif"),
-      "what-if fold: a click before the panel's code is in is held, the fold shut and marked busy",
-      `asked ${asked} open ${fold.open} busy ${fold.getAttribute("aria-busy")}`);
+    check(asked === 1 && !isOpen(row) && row.getAttribute("aria-busy") === "true" && !row.querySelector("section.whatif"),
+      "what-if row: a click before the panel's code is in is held, the row shut and marked busy",
+      `asked ${asked} open ${isOpen(row)} busy ${row.getAttribute("aria-busy")}`);
     await act(async () => {
       release();
       await gate;
     });
-    await until(() => fold.open && !!fold.querySelector("section.whatif"));
+    await until(() => isOpen(row) && !!row.querySelector("section.whatif"));
     await wait();
     watch.disconnect();
-    check(fold.open && !!fold.querySelector("section.whatif input[type=range]") && !fold.hasAttribute("aria-busy") &&
-      seen.some((s) => s.open) && seen.every((s) => !s.open || s.panel),
-      "what-if fold: it opens on the finished panel in one step, and is never seen open without it", JSON.stringify(seen));
-    click(fold.querySelector("summary"));
-    check(!fold.open && !!fold.querySelector("section.whatif"), "what-if fold: shut again, the panel stays mounted behind its line");
+    check(isOpen(row) && !!row.querySelector("section.whatif input[type=range]") && !row.hasAttribute("aria-busy") &&
+      seen.some((x) => x.open) && seen.every((x) => !x.open || x.panel),
+      "what-if row: it opens on the finished panel in one step, and is never seen open without it", JSON.stringify(seen));
+    click(button(row));
+    check(!isOpen(row) && !!row.querySelector("section.whatif"), "what-if row: shut again, the panel stays mounted behind its button");
     r.unmount();
 
-    // Pressed: the code is asked for on the press, ahead of the click, which then opens the fold at once.
+    // Pressed: the code is asked for on the press, ahead of the click, which then opens the row at once.
     asked = 0;
     whatIfSeams.whatIf = () => {
       asked++;
       return real();
     };
     const p = panel();
-    const pf = foldOf(p);
-    act(() => pf.querySelector("summary").dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })));
-    await until(() => !!pf.querySelector("section.whatif"));
-    check(asked >= 1 && !pf.open && !!pf.querySelector("section.whatif"),
-      "what-if fold: pressing the line fetches the panel ahead of the click, the fold still shut", `asked ${asked} open ${pf.open}`);
-    click(pf.querySelector("summary"));
-    check(pf.open && !pf.hasAttribute("aria-busy") && p.container.querySelectorAll("section.whatif").length === 1,
-      "what-if fold: the click after it opens the fold at once, on the panel");
+    const pf = rowOf(p);
+    act(() => button(pf).dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true })));
+    await wait();
+    check(asked === 1 && !isOpen(pf) && !pf.hasAttribute("aria-busy"),
+      "what-if row: pressing it fetches the panel ahead of the click, the row still shut", `asked ${asked} open ${isOpen(pf)}`);
+    click(button(pf));
+    check(isOpen(pf) && !pf.hasAttribute("aria-busy") && p.container.querySelectorAll("section.whatif").length === 1 && asked === 1,
+      "what-if row: the click after it opens the row at once, on the panel, with no second fetch", `asked ${asked}`);
     p.unmount();
 
     // A chunk that never arrives (a deploy that no longer serves it, a dropped connection).
     whatIfSeams.whatIf = () => Promise.reject(new Error("chunk 404"));
     const f = panel();
-    const ff = foldOf(f);
-    click(ff.querySelector("summary"));
-    await until(() => ff.open);
-    check(ff.open && text(ff.querySelector("[role=alert]") ?? {}) === "The what-if could not be loaded. Reload the page to try again." &&
+    const ff = rowOf(f);
+    click(button(ff));
+    await until(() => isOpen(ff));
+    check(isOpen(ff) && text(ff.querySelector("[role=alert]") ?? {}) === "The what-if could not be loaded. Reload the page to try again." &&
       !ff.querySelector("section.whatif") && !ff.hasAttribute("aria-busy"),
-      "what-if fold: a chunk that never arrives says so inside the fold, never an empty box", ff.outerHTML.slice(0, 200));
+      "what-if row: a chunk that never arrives says so inside the row, never an empty box", ff.outerHTML.slice(0, 200));
     f.unmount();
   } finally {
     whatIfSeams.whatIf = real;
+    act(() => {
+      forgetWhatIf();
+      forgetMore();
+    });
   }
 }
 
@@ -1333,9 +1371,10 @@ function bar(over = {}) {
   } finally {
     Object.assign(console, { error, warn });
   }
+  // The what-if is a row of the chapter's own More list, so it goes with the chapter's chunk.
   check(text(r.container.querySelector(".boundary") ?? {}) === `${TAB_LABELS.optimization} could not be shown.` &&
-    /What if one/.test(text(panel(r) ?? {})) && !!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector("header"),
-    "lazy: a chunk that fails to load names its tab, and the chapter's what-if, the chapter row and masthead stay", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
+    !!r.container.querySelector(".app-tabs [role=tablist]") && !!r.container.querySelector("header"),
+    "lazy: a chunk that fails to load names its tab, and the chapter row and masthead stay", text(r.container.querySelector(".app-main") ?? {}).slice(0, 120));
   r.unmount();
 
   // The shipped map: every tab is a lazy component, and App's own default reaches the real finding.

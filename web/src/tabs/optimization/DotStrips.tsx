@@ -83,19 +83,25 @@ export interface DotStripsProps {
   onRedraw: () => void;
 }
 
+/** How the strips are drawn: the card's "How it is calculated", which names the draw count once the draws are in. */
+export function StripsHow({ redraws }: { redraws: RedrawState }) {
+  const ready = redraws.status === "ready" ? redraws.value : null;
+  return (
+    <p className="opt-note">
+      Each bronze dot is the tangency weight re-solved on one of {ready ? ready.count : "the"} sets of expected returns drawn around
+      this window's estimates, each asset's spread set by its own volatility and the window's length, with the covariance held at its
+      in-sample estimate. The black tick is this window's own tangency weight. GMV reads no expected returns, so every draw puts it on
+      the one teal dot. A what-if on these prices, not a forecast.
+    </p>
+  );
+}
+
 export default function DotStrips({ a, redraws, set, seed, onRedraw }: DotStripsProps) {
   const domain = stripDomain(a.allowShort);
   const ready = redraws.status === "ready" ? redraws.value : null;
   const rows = ready ? stripRows(a, ready) : null;
   return (
     <div className="opt-strips" data-seed={ready ? ready.seed : undefined}>
-      <h3 className="opt-strips-title">If the true means were anywhere their own noise allows</h3>
-      <p className="opt-note">
-        Each bronze dot is the tangency weight re-solved on one of {ready ? ready.count : "the"} sets of expected returns drawn around
-        this window's estimates, each asset's spread set by its own volatility and the window's length, with the covariance held at its
-        in-sample estimate. The black tick is this window's own tangency weight. GMV reads no expected returns, so every draw puts it on
-        the one teal dot. A what-if on these prices, not a forecast.
-      </p>
       <div className="opt-strips-bar">
         <button type="button" className="opt-redraw" onClick={onRedraw} disabled={redraws.status === "pending"}>
           Redraw

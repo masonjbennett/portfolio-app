@@ -1,8 +1,10 @@
 // Build a portfolio: the Portfolio Optimization tab (portfolio_app.py 1467-1703) with the app's Custom Portfolio
 // tab (1708-1837) folded into it. A headline that states what the maximum-Sharpe solve found; then the lead, the
 // efficient frontier with all four mixes on it and, beside it, the Your mix panel (./custom/YourMix.tsx), whose
-// sliders move the mix's point on the frontier; then the three portfolios' figures, their weights (with the
-// redraw dot strips under them), the scorecard, the money, return and risk shares, and the summary comparison.
+// sliders move the mix's point on the frontier; then a More list (./build.ts): the scorecard, what each mix holds,
+// the redraw dot strips, the money, return and risk shares, and the what-if (../chrome/WhatIfRow.tsx).
+// The three portfolios' plates and the summary comparison are not drawn: every figure they printed is a row of the
+// scorecard, and the Your mix panel carries the reader's own five.
 // The arithmetic lives in ./optimization/model.ts, ./optimization/scorecard.ts and ./custom/model.ts; this file
 // lays it out.
 //
@@ -20,7 +22,7 @@
 // Each section sits inside its own Boundary, so a section that fails leaves one line naming it and the
 // rest of the tab keeps rendering. In the app a failed solve calls st.stop() (1481-1483, 1492-1494),
 // which ends the script run: this tab, and tabs 5 and 6 after it, stop there.
-import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import Frontier, { frontierCaption, frontierData } from "../charts/Frontier.tsx";
 import { usePhone } from "../chrome/usePhone.ts";
 import AddColumns from "../components/AddColumns.tsx";
@@ -28,23 +30,25 @@ import Boundary from "../components/Boundary.tsx";
 import Card from "../components/Card.tsx";
 import ChartFrame from "../components/ChartFrame.tsx";
 import FormulaLine from "../components/FormulaLine.tsx";
-import Plate from "../components/Plate.tsx";
+import MoreList, { type MoreRow } from "../components/MoreList.tsx";
 import Scorecard from "../components/Scorecard.tsx";
 import SegControl from "../components/SegControl.tsx";
-import Slug from "../components/Slug.tsx";
 import Table from "../components/Table.tsx";
+import WhatIfRow, { loadWhatIf } from "../chrome/WhatIfRow.tsx";
 import { format, MINUS } from "../format.ts";
 import { ADDED_IDS, unavailable, type AddedId } from "../lib/constructions.ts";
 import type { Vec } from "../lib/num.ts";
 import type { Custom } from "../lib/portfolio.ts";
 import type { Analysis, Level, LoadState, TabProps } from "../types.ts";
-import { FITTED, fittedSubs, tableSpan } from "./caption.ts";
+import { BUILD_HEADING, BUILD_LIST, BUILD_ROWS, holdingsFinding, prcFinding, redrawsFinding, scorecardFinding, WHATIF_FINDING } from "./build.ts";
+import { fittedSubs, tableSpan } from "./caption.ts";
 import { customView, frontierTitle as mixFrontierLine, type CustomView } from "./custom/model.ts";
 import YourMix from "./custom/YourMix.tsx";
 import FittedNote from "./FittedNote.tsx";
 import { optimizationFormula } from "./formula.ts";
+import { said } from "./performance.ts";
 import Bars from "./optimization/Bars.tsx";
-import DotStrips from "./optimization/DotStrips.tsx";
+import DotStrips, { StripsHow } from "./optimization/DotStrips.tsx";
 import { seedOf, useAddedStrips, useRedraws } from "./optimization/redraws.ts";
 import { scorecard, type AddedDraws, type RedrawState } from "./optimization/scorecard.ts";
 import {
@@ -57,7 +61,6 @@ import {
   fittedHeads,
   frontierTitle,
   headline,
-  METRICS,
   portRow,
   prcTable,
   SHARE_LABEL,
@@ -68,8 +71,6 @@ import {
   shareWeights,
   type SharePort,
   shownAdded,
-  summaryTable,
-  tiles,
   unavailableNote,
   weightBars,
   weightsTitle,
@@ -77,11 +78,6 @@ import {
   type TableData,
 } from "./optimization/model.ts";
 import "./optimization/Optimization.css";
-
-interface SectionProps {
-  a: Analysis;
-  level: Level;
-}
 
 // A table, or its own named error line in the table's place. Its GMV and Tangency heads say the weights
 // were chosen on this window, and an added construction's head says what its own window was; its caption
@@ -177,87 +173,43 @@ const FrontierCard = memo(function FrontierCard({ a, v, custom, added }: { a: An
   );
 });
 
-// The three portfolios' figures (1504-1530): a row of five plates each, so a figure lines up with the
-// same figure of the other two.
-const Tiles = memo(function Tiles({ a, level }: SectionProps) {
-  const list = useMemo(() => tiles(a), [a]);
-  return (
-    <section className="opt-section" aria-labelledby="opt-tiles">
-      <Slug id="opt-tiles">Three portfolios</Slug>
-      {list.map((t) => (
-        <div key={t.id} className="opt-tile" data-port={t.id}>
-          <h3 className="opt-tile-title">
-            {t.title}
-            {t.id !== "ew" && !t.failed ? <span className="opt-tile-sub">{FITTED}</span> : null}
-          </h3>
-          {t.failed ? (
-            <p className="opt-note opt-note--failed" role="status">
-              {t.failed}
-            </p>
-          ) : null}
-          <div className="opt-plates">
-            {METRICS.map((m) => (
-              <Plate
-                key={m.key}
-                label={m.label}
-                value={t.row ? t.row[m.key] : null}
-                format={m.format}
-                tip={m.tip}
-                level={level}
-                allowShort={a.allowShort}
-                se={m.key === "sharpe" ? t.se : null}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-      <p className="opt-note">
-        Annual figures at the {format(a.rf, "pct2")} risk-free rate this analysis used. Each portfolio holds its weights fixed,
-        rebalanced daily. Max DD is measured from the amount invested.
-      </p>
-      <FittedNote className="opt-note" />
-    </section>
-  );
-});
-
-// The weights chart: the three portfolios the tab always solves. A column added to the table below does
-// not reach it, so adding one leaves the chart undrawn.
-const WeightChart = memo(function WeightChart({ a, height }: { a: Analysis; height: number }) {
+// The weights (1534-1551), "What each mix holds": the bars of the three portfolios the chapter always solves,
+// then under "Show the numbers" the same numbers as a table with both downloads, with the reader's mix and a
+// column per added construction. An added column does not reach the chart, so adding one leaves it undrawn.
+const Holdings = memo(function Holdings({ a, c, height, added }: { a: Analysis; c: Custom; height: number; added: readonly AddedId[] }) {
   const bars = useMemo(() => weightBars(a), [a]);
-  return (
-    <ChartFrame
-      title={weightsTitle(a)}
-      subtitle="Each asset's weight in the minimum-variance (GMV), maximum-Sharpe (Tangency) and equal-weight portfolios."
-      state={bars}
-      height={height}
-    >
-      {(v) => <Bars data={v} height={height} />}
-    </ChartFrame>
-  );
-});
-
-// The weights (1534-1551): the bars, then the same numbers as a table with both downloads, with a column
-// per added construction, then the dot strips of the redrawn tangency weights.
-const Weights = memo(function Weights({ a, height, strips, added }: { a: Analysis; height: number; strips: ReactNode; added: readonly AddedId[] }) {
-  const table = useMemo(() => weightTable(a, added), [a, added]);
+  const table = useMemo(() => weightTable(a, added, c), [a, added, c]);
   const subs = useMemo(() => addedSubs(a, added), [a, added]);
-  return (
-    <section className="opt-section" aria-labelledby="opt-weights">
-      <Slug id="opt-weights">Portfolio Weights</Slug>
-      <WeightChart a={a} height={height} />
-      <Failures a={a} />
+  const title = weightsTitle(a);
+  const numbers = (
+    <>
       <TableState state={table} title="Portfolio weights" filename="portfolio_weights" span={spanOf(a)} subs={subs} />
       {a.allowShort ? <p className="opt-note">{shortNote}</p> : null}
-      {strips}
-    </section>
+    </>
+  );
+  const how = (
+    <p className="opt-note">
+      Each asset{"’"}s weight in the minimum-variance (GMV), maximum-Sharpe (Tangency) and equal-weight portfolios. The table under
+      Show the numbers adds your mix (Custom), scaled to sum to 100%, and any column added to the scorecard.
+    </p>
+  );
+  return (
+    <Card label={BUILD_ROWS.holdings} numbers={numbers} how={how}>
+      <Failures a={a} />
+      <ChartFrame title={title} state={bars} height={height} bare>
+        {(v) => <Bars data={v} height={height} />}
+      </ChartFrame>
+    </Card>
   );
 });
 
-// The scorecard: every portfolio across, the benchmark last, below the weights. Under its heading, the
-// row of constructions the reader can add, each a column between Custom and the benchmark. It is handed
-// what the workbook of formulas needs (the analysis, the amount invested, why a typed mix was refused),
-// so its download row offers that book beside the values.
-const ScorecardSection = memo(function ScorecardSection({
+// The scorecard: every portfolio across, the benchmark last. Above it, the row of constructions the reader can
+// add, each a column between Custom and the benchmark. It is handed what the workbook of formulas needs (the
+// analysis, the amount invested, why a typed mix was refused), so its download row offers that book beside the
+// values. It carries every figure the three portfolios' plates and the summary comparison printed (their return,
+// volatility, Sharpe with its standard error, Sortino and maximum drawdown are its rows; test/t-scorecard.mjs holds
+// them figure by figure), so their notes are under its "How it is calculated".
+const ScorecardCard = memo(function ScorecardCard({
   a,
   c,
   redraws,
@@ -287,12 +239,24 @@ const ScorecardSection = memo(function ScorecardSection({
     [a, chosen],
   );
   const note = useMemo(() => unavailableNote(a), [a]);
+  const mixNote = customNote(a, c);
+  const how = (
+    <>
+      <p className="opt-note">
+        Annual figures at the {format(a.rf, "pct2")} risk-free rate this analysis used. Each portfolio holds its weights fixed,
+        rebalanced daily. Max drawdown is measured from the amount invested. The {a.benchLabel} column is the benchmark{"’"}s own daily
+        returns.
+      </p>
+      {mixNote ? <p className="opt-note">{mixNote}</p> : null}
+      <FittedNote className="opt-note" />
+    </>
+  );
   return (
-    <section className="opt-section" aria-labelledby="opt-scorecard">
-      <Slug id="opt-scorecard">Scorecard</Slug>
+    <Card label={BUILD_ROWS.scorecard} how={how}>
       <AddColumns options={options} onToggle={onToggle} note={note} />
+      <Failures a={a} />
       <Scorecard model={model} redraws={redraws} level={level} allowShort={a.allowShort} filename="scorecard" book={book} />
-    </section>
+    </Card>
   );
 });
 
@@ -310,15 +274,27 @@ const RiskContribution = memo(function RiskContribution({ a, c, height }: { a: A
   const bars = useMemo(() => shareBars(a, barsCustom, shown), [a, barsCustom, shown]);
   const table = useMemo(() => prcTable(a, c), [a, c]);
   const note = useMemo(() => shareNote(a, c), [a, c]);
+  const numbers = (
+    <>
+      <TableState state={table} title="Weight, return and risk contribution" filename="risk_contribution" span={spanOf(a)} />
+      {note ? (
+        <p className="opt-note" data-note="share-range">
+          {note}
+        </p>
+      ) : null}
+    </>
+  );
+  const how = (
+    <p className="opt-note">
+      An asset{"’"}s percentage risk contribution (PRC) is its share of the portfolio{"’"}s variance: its weight times its covariance
+      with the portfolio, over the portfolio{"’"}s variance. The shares sum to 100%. An asset whose PRC is well above its weight is a
+      disproportionate source of volatility. Its return share is its weight times its mean return, over the portfolio{"’"}s mean
+      return; those sum to 100% too, and can fall below 0% or pass 100%. The table under Show the numbers sets weight, return and
+      risk side by side for every portfolio.
+    </p>
+  );
   return (
-    <section className="opt-section" aria-labelledby="opt-prc">
-      <Slug id="opt-prc">Risk Contribution (PRC)</Slug>
-      <p className="opt-note">
-        An asset's percentage risk contribution (PRC) is its share of the portfolio's variance: its weight times its covariance
-        with the portfolio, over the portfolio's variance. The shares sum to 100%. An asset whose PRC is well above its weight is
-        a disproportionate source of volatility. Its return share is its weight times its mean return, over the portfolio's mean
-        return; those sum to 100% too, and can fall below 0% or pass 100%. The table sets weight, return and risk side by side.
-      </p>
+    <Card label={BUILD_ROWS.prc} numbers={numbers} how={how}>
       <div className="opt-share-pills">
         <SegControl options={SHARE_OPTIONS} value={shown} onChange={setPick} ariaLabel="Portfolio" />
       </div>
@@ -330,30 +306,7 @@ const RiskContribution = memo(function RiskContribution({ a, c, height }: { a: A
       >
         {(v) => <Bars data={v} height={height} />}
       </ChartFrame>
-      <TableState state={table} title="Weight, return and risk contribution" filename="risk_contribution" span={spanOf(a)} />
-      {note ? (
-        <p className="opt-note" data-note="share-range">
-          {note}
-        </p>
-      ) : null}
-    </section>
-  );
-});
-
-// The summary comparison (1678-1703).
-const Summary = memo(function Summary({ a, c }: { a: Analysis; c: Custom }) {
-  const table = useMemo(() => summaryTable(a, c), [a, c]);
-  const note = customNote(a, c);
-  return (
-    <section className="opt-section" aria-labelledby="opt-summary">
-      <Slug id="opt-summary">Summary Comparison</Slug>
-      <TableState state={table} title="Summary comparison" filename="portfolio_comparison" span={spanOf(a)} headed />
-      <Failures a={a} />
-      {note ? <p className="opt-note">{note}</p> : null}
-      <p className="opt-note">
-        Annual figures at the {format(a.rf, "pct2")} risk-free rate. The {a.benchLabel} row is the benchmark's own daily returns.
-      </p>
-    </section>
+    </Card>
   );
 });
 
@@ -393,18 +346,76 @@ export default function Optimization({ analysis: a, settings, level, weights, se
     });
     return out.length ? out : NO_MARKS;
   }, [a, shown]);
-  const weightsKey = useMemo(() => [a, shown], [a, shown]);
+  const weightsKey = useMemo(() => [a, c, shown], [a, c, shown]);
   const scoreKey = useMemo(() => [c, redraws, shown, addedDraws], [c, redraws, shown, addedDraws]);
-  // Each card is memo'd, so one whose own inputs did not change is skipped when the tab renders again: an
-  // explanation level reaches the tooltips, an amount the scorecard's workbook.
-  const strips = useMemo(
-    () => (
-      <Boundary name="Redraw dot strips" resetKey={redraws}>
-        <DotStrips a={a} redraws={redraws} set={k} seed={seed} onRedraw={() => setDraws({ a, k: k + 1 })} />
-      </Boundary>
-    ),
-    [a, redraws, k, seed],
-  );
+  // Each card is memo'd, so one whose own inputs did not change is skipped when the chapter renders again: an
+  // explanation level reaches the tooltips, an amount the scorecard's workbook. A row draws nothing until it
+  // first opens (MoreList); the findings beside the rows are computed from the same models the cards draw.
+  const rows: MoreRow[] = [
+    {
+      key: "scorecard",
+      title: BUILD_ROWS.scorecard,
+      finding: said(BUILD_ROWS.scorecard, () => scorecardFinding(a, c)),
+      children: (
+        <Boundary name="Scorecard" resetKey={scoreKey}>
+          <ScorecardCard
+            a={a}
+            c={c}
+            redraws={redraws}
+            level={level}
+            amount={settings.amount}
+            chosen={chosen}
+            shown={shown}
+            draws={addedDraws}
+            onToggle={onToggle}
+          />
+        </Boundary>
+      ),
+    },
+    {
+      key: "holdings",
+      title: BUILD_ROWS.holdings,
+      finding: said(BUILD_ROWS.holdings, () => holdingsFinding(a)),
+      children: (
+        <Boundary name="Portfolio weights" resetKey={weightsKey}>
+          <Holdings a={a} c={c} height={barHeight} added={shown} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "redraws",
+      title: BUILD_ROWS.redraws,
+      finding: said(BUILD_ROWS.redraws, () => redrawsFinding(a, redraws)),
+      children: (
+        <Boundary name="Redraw dot strips" resetKey={redraws}>
+          <Card label={BUILD_ROWS.redraws} how={<StripsHow redraws={redraws} />}>
+            <DotStrips a={a} redraws={redraws} set={k} seed={seed} onRedraw={() => setDraws({ a, k: k + 1 })} />
+          </Card>
+        </Boundary>
+      ),
+    },
+    {
+      key: "prc",
+      title: BUILD_ROWS.prc,
+      finding: said(BUILD_ROWS.prc, () => prcFinding(a)),
+      children: (
+        <Boundary name="Risk contribution" resetKey={c}>
+          <RiskContribution a={a} c={c} height={barHeight} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "whatif",
+      title: BUILD_ROWS.whatif,
+      finding: WHATIF_FINDING,
+      before: loadWhatIf,
+      children: (
+        <Boundary name="What-if" resetKey={a}>
+          <WhatIfRow a={a} />
+        </Boundary>
+      ),
+    },
+  ];
   return (
     <div className="opt" data-tab="optimization">
       <Boundary name="The headline" resetKey={a}>
@@ -420,31 +431,7 @@ export default function Optimization({ analysis: a, settings, level, weights, se
           <YourMix a={a} v={v} weights={weights} setWeights={setWeights} level={level} />
         </Boundary>
       </div>
-      <Boundary name="The three portfolios" resetKey={a}>
-        <Tiles a={a} level={level} />
-      </Boundary>
-      <Boundary name="Portfolio weights" resetKey={weightsKey}>
-        <Weights a={a} height={barHeight} strips={strips} added={shown} />
-      </Boundary>
-      <Boundary name="Scorecard" resetKey={scoreKey}>
-        <ScorecardSection
-          a={a}
-          c={c}
-          redraws={redraws}
-          level={level}
-          amount={settings.amount}
-          chosen={chosen}
-          shown={shown}
-          draws={addedDraws}
-          onToggle={onToggle}
-        />
-      </Boundary>
-      <Boundary name="Risk contribution" resetKey={c}>
-        <RiskContribution a={a} c={c} height={barHeight} />
-      </Boundary>
-      <Boundary name="Summary comparison" resetKey={c}>
-        <Summary a={a} c={c} />
-      </Boundary>
+      <MoreList id={BUILD_LIST} rows={rows} heading={BUILD_HEADING} />
     </div>
   );
 }

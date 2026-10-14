@@ -114,8 +114,13 @@ const pulledBy = (id) => (infoOf(id)?.importers ?? []).map(rel).filter((i) => fi
     early.map((id) => `${id}${firstSet.has(id) ? "" : " (not bundled there yet)"}, imported by ${pulledBy(id).join(", ") || "the entry"}`).join("; ") ||
       `${graph.size} modules in the graph`);
   const home = chunks.filter((c) => c.moduleIds.map(rel).includes("web/src/chrome/WhatIf.tsx"));
-  const lazy = home.length === 1 && !first.has(home[0]) && [...first].some((c) => c.dynamicImports.includes(home[0].fileName));
-  check(lazy, "split: the what-if panel is its own chunk, fetched on demand from the first chunk", home.map((c) => c.fileName).join());
+  // Its row sits in Build a portfolio's More list, so the chunk that asks for it is whichever draws that chapter: the
+  // first, or a chapter chunk of its own. Either way it asks on demand, and nothing imports the panel statically.
+  const asker = chunks.find((c) => c.moduleIds.map(rel).includes("web/src/chrome/WhatIfRow.tsx"));
+  const lazy = home.length === 1 && !!asker && home[0] !== asker && !first.has(home[0]) && asker.dynamicImports.includes(home[0].fileName) &&
+    !chunks.some((c) => c.imports.includes(home[0].fileName));
+  check(lazy, "split: the what-if panel is its own chunk, fetched on demand by its row's chunk, never imported statically",
+    `${home.map((c) => c.fileName).join()} asked by ${asker?.fileName ?? "none"}`);
 }
 // The first screen does solve the minimum-variance and tangency mixes and the frontier (state/analyze.ts, the
 // band's plates read them), so lib/optimize.ts, and quadprog under it, are first-chunk code; analyze.ts is

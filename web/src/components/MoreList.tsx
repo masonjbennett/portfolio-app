@@ -19,6 +19,13 @@ export interface MoreRow {
   children: ReactNode;
   /** A line under the row's button, shown open or closed (the formula behind the finding, at the Formula level). */
   note?: ReactNode;
+  /**
+   * For a row whose card is fetched on demand: asks for its code. Called when the reader points at, presses or
+   * focuses the row, and on the click that opens it. Null when the code is already here; otherwise a promise that
+   * settles once it has arrived or failed, and the row stays shut, marked busy, until then, so it opens on the
+   * finished card in one step, never on an empty box that fills a moment later.
+   */
+  before?: () => Promise<void> | null;
 }
 
 export interface MoreListProps {
@@ -72,6 +79,23 @@ function toggle(list: string, key: string) {
   emit();
 }
 
+// "<list id>/<row key>" of each row whose opening click waits on its code.
+const held = new Set<string>();
+
+function press(list: string, row: MoreRow) {
+  const k = `${list}/${row.key}`;
+  if (held.has(k)) return;
+  const wait = !isMoreOpen(list, row.key) && row.before ? row.before() : null;
+  if (!wait) return toggle(list, row.key);
+  held.add(k);
+  emit();
+  void wait.then(() => {
+    held.delete(k);
+    opened.set(k, true);
+    emit();
+  });
+}
+
 export default function MoreList({ id, rows, heading = "More" }: MoreListProps) {
   useSyncExternalStore(subscribe, getVersion, getVersion);
   const uid = useId();
@@ -85,14 +109,18 @@ export default function MoreList({ id, rows, heading = "More" }: MoreListProps) 
         const open = isMoreOpen(id, row.key);
         const drawn = opened.has(`${id}/${row.key}`);
         const bodyId = `${uid}-${row.key}`;
+        const warm = row.before ? () => void row.before?.() : undefined;
         return (
-          <div className="more-row" id={`${id}-${row.key}`} key={row.key} data-open={open ? "" : undefined}>
+          <div className="more-row" id={`${id}-${row.key}`} key={row.key} data-open={open ? "" : undefined} aria-busy={held.has(`${id}/${row.key}`) || undefined}>
             <button
               type="button"
               className="more-button"
               aria-expanded={open}
               aria-controls={bodyId}
-              onClick={() => toggle(id, row.key)}
+              onClick={() => press(id, row)}
+              onPointerEnter={warm}
+              onPointerDown={warm}
+              onFocus={warm}
             >
               <span className="more-title">{row.title}</span>
               <span className="more-finding">{row.finding}</span>

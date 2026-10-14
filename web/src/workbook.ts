@@ -242,7 +242,7 @@ function subLine(col: ScoreColumn, a: Analysis, reason: string | null): string {
   if (col.id === "bench") return "the benchmark";
   if (!col.ok) return missingReason(col, a, reason);
   if (col.id === "ew") return "1/n each, as formulas";
-  if (col.id === "custom") return col.sub ? `typed on the Custom tab, as values: ${col.sub}` : "typed on the Custom tab, as values";
+  if (col.id === "custom") return col.sub ? `typed in the Your mix panel, as values: ${col.sub}` : "typed in the Your mix panel, as values";
   return `${col.sub ?? FITTED}, as values`;
 }
 
@@ -500,7 +500,7 @@ export function bookNotes(a: Analysis, model: ScoreModel, reason: string | null)
     ["Shorting", shorting],
     [
       "Weights",
-      `Equal-Weight is =1/n. ${solved.length ? `${solved.join(" and ")} ${solved.length > 1 ? "are" : "is"} the page's solution on this window (${FITTED}), entered as values: ` : "Solved weights would be the page's solution on this window, entered as values: "}the book does not re-optimise.${added.length ? ` The columns added on the page are solved by it too and entered as values: ${added.join("; ")}.` : ""} Change the risk-free rate and every figure moves; the weights do not. Custom is the mix typed on the Custom tab, also as values.`,
+      `Equal-Weight is =1/n. ${solved.length ? `${solved.join(" and ")} ${solved.length > 1 ? "are" : "is"} the page's solution on this window (${FITTED}), entered as values: ` : "Solved weights would be the page's solution on this window, entered as values: "}the book does not re-optimise.${added.length ? ` The columns added on the page are solved by it too and entered as values: ${added.join("; ")}.` : ""} Change the risk-free rate and every figure moves; the weights do not. Custom is the mix typed in the Your mix panel, also as values.`,
     ],
     [
       "In-sample",

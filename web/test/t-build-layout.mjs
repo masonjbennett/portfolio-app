@@ -8,7 +8,7 @@
 //     parts, so every narrower width stacks in markup order; the panel's desktop and phone rules for the editor
 //     and the figures are the ones they were.
 // (b) The markup: the frontier card then the panel, the lead's only two parts, right after the headline and
-//     before the tiles; no tabindex reorders the keyboard; the frontier keeps the chart's own height.
+//     before the chapter's More list; no tabindex reorders the keyboard; the frontier keeps the chart's own height.
 // (c) A native range moved: the frontier's Custom point lands at the risk and return customWeights() gives
 //     for the new mix, read on the chart's own axes through the GMV and Tangency points.
 import { readFileSync } from "node:fs";
@@ -134,8 +134,8 @@ function centre(root, role) {
   const lead = root.querySelector(".build-lead");
   const parts = [...(lead?.children ?? [])].map((el) => el.id || el.className);
   check(parts.join() === "build-frontier,section-custom" && lead.previousElementSibling?.matches(".formula-line, .opt-headline") &&
-    root.querySelector(".build-lead + section[aria-labelledby='opt-tiles']") !== null,
-    "order: the frontier card, then the Your mix panel, after the headline and before the tiles", parts.join());
+    root.querySelector(".build-lead + section.more") !== null,
+    "order: the frontier card, then the Your mix panel, after the headline and before the More list", parts.join());
   const fig = root.querySelector("#build-frontier figure");
   const inputs = [...root.querySelectorAll(".build-mix input")];
   check(!!fig && inputs.length === 2 * a.tickers.length && inputs.every((x) => fig.compareDocumentPosition(x) & window.Node.DOCUMENT_POSITION_FOLLOWING) &&

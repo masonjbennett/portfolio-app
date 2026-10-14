@@ -1,0 +1,11 @@
+/* The what-if row's body while its code is fetched, or when it could not be. */
+.whatif-failed,
+.whatif-loading {
+  margin: var(--space-3) 0 0;
+  font-size: var(--type-1);
+  color: var(--color-claret);
+}
+
+.whatif-loading {
+  color: var(--color-ink2);
+}

@@ -98,8 +98,18 @@ function tabElement(name, a, level, extra = {}) {
 async function mountTab(name, a, level, extra = {}) {
   const r = await quietly(() => render(tabElement(name, a, level, extra)));
   await quietly(flush);
+  if (name === "optimization") await openBuild(r.container);
   seen.renders += 1;
   return r;
+}
+
+// Build's figures beyond the lead are in its More rows, the scorecard's in its full view: opened here as a reader
+// opens them (the what-if row aside, which holds no figure of the line's), so "printed" is what the chapter can show.
+async function openBuild(root) {
+  for (const b of root.querySelectorAll('.more-row:not(#build-whatif) > .more-button[aria-expanded="false"]')) act(() => b.click());
+  await quietly(flush);
+  const all = [...root.querySelectorAll("button")].find((b) => text(b) === "Show every row");
+  if (all) act(() => all.click());
 }
 
 // The finding each tab's line sits under.

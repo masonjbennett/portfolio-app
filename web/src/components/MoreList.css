@@ -1,6 +1,9 @@
 /* A More list: rows between hairlines, each a title, its finding and a plus that turns to a minus. */
+/* One track that may shrink below its content: a wide table in an open row scrolls inside its own frame and never
+   widens the page. */
 .more {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .more-head {
@@ -84,4 +87,9 @@
     grid-column: 2;
     grid-row: 1;
   }
+}
+
+/* A row whose opening click waits on its card's code: it stays as it is, and only the pointer says it is working. */
+.more-row[aria-busy="true"] .more-button {
+  cursor: progress;
 }

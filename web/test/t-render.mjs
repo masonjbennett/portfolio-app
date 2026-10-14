@@ -319,8 +319,8 @@ for (const tab of TAB_IDS) {
   };
   const panel = () => host.querySelector('.app-chapter[role="tabpanel"]');
   const shortingNote = () => /shorting is on/.test(text(host.querySelector(".build-mix") ?? host));
-  // The what-if fold closes the same chapter and dims with it, as the band above the chapters once did.
-  const bandBusy = () => !!host.querySelector(".whatif-fold--settling");
+  // The what-if row closes the same chapter's More list, inside the panel, so it dims with it.
+  const bandBusy = () => !!host.querySelector('.app-chapter[role="tabpanel"][aria-busy="true"] #build-whatif');
   // Drawn, and the price request answered (it fails here), so nothing but the switch can mark the page busy.
   const drawn = await until(() => shortSwitch() && host.querySelector(".build-mix .cust-row") && panel() && !bandBusy());
   check(drawn, "switch: the page draws the Your mix panel from the example, with no request out");
@@ -332,22 +332,22 @@ for (const tab of TAB_IDS) {
     // the new figures. The first state that shows the rebuilt analysis must still carry the mark.
     const seen = [];
     const watch = new window.MutationObserver(() => {
-      seen.push({ rebuilt: shortingNote(), busy: panel()?.getAttribute("aria-busy") ?? null, band: !!host.querySelector(".whatif-fold--settling") });
+      seen.push({ rebuilt: shortingNote(), busy: panel()?.getAttribute("aria-busy") ?? null, band: bandBusy() });
     });
     watch.observe(host, { subtree: true, childList: true, attributes: true, characterData: true });
     shortSwitch().click();
     await Promise.resolve();
     const flipped = shortSwitch().checked;
     const busy = panel().getAttribute("aria-busy");
-    const band = host.querySelector(".whatif-fold");
+    const band = host.querySelector("#build-whatif");
     const stale = !shortingNote();
     check(flipped, "switch: its checked state updates at once");
     check(stale, "switch: at that moment the tab still shows the analysis without shorting (it has not been rebuilt yet)");
     check(busy === "true", "switch: meanwhile the tab says so, aria-busy on the panel (the dim)", `aria-busy ${busy}`);
-    check(!!band && band.classList.contains("whatif-fold--settling"), "switch: and so does the what-if fold below it", band?.className);
+    check(!!band && bandBusy(), "switch: and so does the what-if row inside it", band?.outerHTML.slice(0, 120));
     const landed = await until(() => shortingNote() && panel().getAttribute("aria-busy") === null);
     check(landed, "switch: the rebuilt analysis lands, and the tab is no longer marked busy");
-    check(!!host.querySelector(".whatif-fold") && !host.querySelector(".whatif-fold--settling"), "switch: the what-if fold's mark clears with it");
+    check(!!host.querySelector("#build-whatif") && !bandBusy(), "switch: the what-if row's mark clears with it");
     watch.disconnect();
     const firstRebuilt = seen.find((s) => s.rebuilt);
     check(!!firstRebuilt && firstRebuilt.busy === "true" && firstRebuilt.band,

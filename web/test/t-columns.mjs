@@ -22,6 +22,10 @@ const { DASH, format, MINUS } = await import("../src/format.ts");
 const { SCORE_TIPS, tipText } = await import("../src/content/tooltips.ts");
 const { ADD_COLUMN } = await import("../src/components/AddColumns.tsx");
 const Optimization = (await import("../src/tabs/Optimization.tsx")).default;
+const { openMore } = await import("../src/components/MoreList.tsx");
+// Build's scorecard and weights sit in its More rows, drawn the first time a row opens: open them as a reader would,
+// before the chapter is first drawn (the list remembers them for the run).
+for (const k of ["scorecard", "holdings"]) openMore("build", k);
 
 const READY = { status: "ready", value: null };
 const ids = C.ADDED_IDS;
@@ -204,7 +208,7 @@ function frontierAdded(root) {
   const buttons = () => [...root.querySelectorAll(".addcol-btn")];
   const heads = () => [...root.querySelectorAll(".sc thead th[data-col]")].map((x) => x.getAttribute("data-col"));
   const labelId = group?.getAttribute("aria-labelledby");
-  check(group && document.getElementById(labelId)?.textContent === ADD_COLUMN && group.closest('[aria-labelledby="opt-scorecard"]') &&
+  check(group && document.getElementById(labelId)?.textContent === ADD_COLUMN && group.closest("#build-scorecard") &&
     group.compareDocumentPosition(root.querySelector(".sc table")) & Node.DOCUMENT_POSITION_FOLLOWING,
     "row: a group labelled Add a column sits in the scorecard section, above the table");
   check(join(buttons().map((b) => text(b))) === join(ids.map((id) => M.ADDED_LABEL[id])) && buttons().every((b) => b.getAttribute("aria-pressed") === "false" && !b.disabled && b.getAttribute("role") === null) &&
@@ -229,13 +233,22 @@ function frontierAdded(root) {
     "frontier: it is handed each shown construction's id, head and weights", JSON.stringify(marks?.map((m) => m.id)));
 
   // The weights table has the same columns, its heads saying how the weights were chosen.
-  const wtable = root.querySelector('[aria-labelledby="opt-weights"] table');
+  const numbersButton = [...root.querySelectorAll("#build-holdings .card-fold-button")].find((b) => text(b) === "Show the numbers");
+  if (numbersButton?.getAttribute("aria-expanded") === "false") act(() => numbersButton.click());
+  const wtable = root.querySelector("#build-holdings table");
   const whead = [...wtable.querySelectorAll("thead th")].map((x) => text(x));
   const w1y = M.addedFit(a, "tan.1y").sol.w;
   const rowsText = [...wtable.querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((x) => text(x)));
   check(whead.some((x) => x.startsWith(M.ADDED_LABEL["tan.1y"]) && x.includes(M.LAST_YEAR)) && whead.some((x) => x.startsWith(M.ADDED_LABEL.rp) && x.includes(FITTED)) &&
     rowsText.every((cells, i) => cells.includes(format(w1y[i], "pct2"))),
     "weights table: the added columns appear with their sub-lines and the page's weights", whead.join(" | "));
+  // Your mix is a column of it too, after Equal-Weight and before the added ones, holding the weights the scorecard's
+  // Custom column scores (the panel's settings scaled to sum to 100%; equal on a first visit).
+  const cw = M.customWeights(a, {}).w;
+  const at = whead.findIndex((x) => x === "Custom");
+  check(at === whead.findIndex((x) => x.startsWith("Equal-Weight")) + 1 && at < whead.findIndex((x) => x.startsWith(M.ADDED_LABEL["tan.1y"])) &&
+    rowsText.every((cells, i) => cells[at] === format(cw[i], "pct2")),
+    "weights table: your mix is a column, after Equal-Weight and before the added ones, at the weights the scorecard scores", whead.join(" | "));
 
   // Their draw rows fill in once their redraws are solved; heads carry their own explanation.
   // The draw row is in the full view.
@@ -353,7 +366,7 @@ function frontierAdded(root) {
   const props = tabProps(short);
   const r = render(h(Optimization, { ...props, settings: { ...props.settings, cols: [...ids] } }));
   await flush();
-  const lines = [...r.container.querySelectorAll('[aria-labelledby="opt-scorecard"] [data-note="added-missing"]')].map((x) => text(x));
+  const lines = [...r.container.querySelectorAll('#build-scorecard [data-note="added-missing"]')].map((x) => text(x));
   const want = SC.scorecard(short, customWeights(short, {}), READY, ids).addedMissing;
   const pressed = [...r.container.querySelectorAll(".addcol-btn")].filter((b) => b.getAttribute("aria-pressed") === "true" && !b.disabled).length;
   check(lines.length === 3 && join(lines) === join(want) && pressed === 4,

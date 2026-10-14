@@ -31,7 +31,6 @@ const { tipName } = await import("../src/content/tooltips.ts");
 const A = await import("../src/content/about.tsx");
 const { decodeShare } = await import("../src/state/url.ts");
 const { default: Overview } = await import("../src/overview/Overview.tsx");
-const { default: WhatIfFold } = await import("../src/chrome/WhatIfFold.tsx");
 const { default: WhatIf } = await import("../src/chrome/WhatIf.tsx");
 const { default: Masthead } = await import("../src/chrome/Masthead.tsx");
 const { default: BasketBar, SettingsSheetBody } = await import("../src/chrome/BasketBar.tsx");
@@ -101,9 +100,6 @@ for (const phone of [false, true]) {
 }
 setMedia(() => false);
 {
-  const fold = render(h(WhatIfFold, { a: EX }));
-  take("band", fold.container);
-  fold.unmount();
   const r = await quietly(() => render(h(WhatIf, { a: EX })));
   await quietly(flush);
   take("band", r.container);

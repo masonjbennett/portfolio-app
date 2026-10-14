@@ -33,7 +33,6 @@ import {
   type Analysis, type ChapterId, type PartId, type TabContextValue, type TabId, type TabProps, type WalkView, type Workbench,
 } from "./types.ts";
 import Status from "./chrome/Status.tsx";
-import WhatIfFold from "./chrome/WhatIfFold.tsx";
 import Overview, { Question } from "./overview/Overview.tsx";
 import "./App.css";
 
@@ -300,11 +299,6 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
                         );
                       })
                     )}
-                    {wb.chapter === "build" ? (
-                      <Boundary name="What-if" resetKey={ready}>
-                        <WhatIfFold a={ready} settling={settling} />
-                      </Boundary>
-                    ) : null}
                     <Land focus={focus} />
                   </section>
                 </Suspense>

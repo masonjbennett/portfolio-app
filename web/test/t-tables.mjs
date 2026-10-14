@@ -345,9 +345,10 @@ check(!rawTable('import Table from "../components/Table.tsx";\n// never a raw <t
   // no other title is: one with a chart between still separates the table from that chart.
   const same = (f) => f.head !== null && f.head.toLowerCase() === f.title.toLowerCase();
   const wrong = found.filter((f) => f.clipped !== (same(f) && !f.chartBetween));
-  // Six clip: the Custom tab's Normalized Weights, the seventh, sat under a heading of its own name; in the Your mix
-  // panel no heading repeats it, so its title shows (and the rule above holds it to that).
-  check(wrong.length === 0 && found.filter((f) => f.clipped).length >= 6 && found.some((f) => f.title === "Normalized Weights" && !f.clipped),
+  // Five clip: the Custom tab's Normalized Weights, the seventh, sat under a heading of its own name; in the Your mix
+  // panel no heading repeats it, so its title shows (and the rule above holds it to that). The sixth was the summary
+  // comparison's, a table the scorecard now carries figure by figure (t-scorecard), so it is not drawn.
+  check(wrong.length === 0 && found.filter((f) => f.clipped).length >= 5 && found.some((f) => f.title === "Normalized Weights" && !f.clipped),
     "headed: a table title that repeats the section heading right above it is clipped from the screen, and no other title is",
     `${found.filter((f) => f.clipped).length} clipped; wrong: ${wrong.map((f) => `${f.tab}/${f.title} (heading ${f.head ?? "none"}${f.chartBetween ? ", chart between" : ""}, ${f.clipped ? "clipped" : "shown"})`).join(" | ")}`);
   const sheet = readFileSync(new URL("../src/components/Table.css", import.meta.url), "utf8");

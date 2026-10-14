@@ -31,6 +31,12 @@ const { contrastRatio, TEXT_AA } = await import("../src/charts/contrast.ts");
 const { csvText, cellFor } = await import("../src/download.ts");
 const { tipText } = await import("../src/content/tooltips.ts");
 const { riskContribution } = await import("../src/lib/portfolio.ts");
+const SC = await import("../src/tabs/optimization/scorecard.ts");
+const { maxDrawdown } = await import("../src/lib/stats.ts");
+const { openMore } = await import("../src/components/MoreList.tsx");
+// Build's figures beyond the lead sit in its More rows, drawn the first time a row opens: open the four with figures,
+// as a reader would, before the chapter is first drawn (the list remembers them for the run).
+for (const k of ["scorecard", "holdings", "redraws", "prc"]) openMore("build", k);
 
 const ORACLE = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8").split(/\r?\n/);
 // The oracle's lines first..last (1-based, inclusive), joined.
@@ -66,27 +72,23 @@ for (const set of ["cross", "megacap"]) {
 
     // T0: every figure, fed the app's own weights.
     const ao = withOracleWeights(a, E.shipping);
-    const t0 = M.tiles(ao);
-    check(JSON.stringify(t0.map((t) => t.title)) === JSON.stringify(["Equal-Weight Portfolio (1/N)", "Global Min Variance", "Max Sharpe (Tangency)"]),
-      tag("tiles in the app's order, under its headings (1505, 1517, 1524)"));
-    [["ew", 0], ["gmv", 1], ["tan", 2]].forEach(([k, i]) => {
-      for (const f of FIELDS) near(tag(`tile ${k} ${f} (oracle weights)`), t0[i].row[f], E.perf[k][f], REL);
+    // The scorecard prints these five figures for each mix (t-scorecard holds its cells to portRow, figure by figure),
+    // in the app's summary order, the benchmark last under its display name.
+    const cols = SC.scoreColumns(ao, M.customWeights(ao, {}));
+    check(JSON.stringify(cols.map((c) => c.label)) === JSON.stringify(["Equal-Weight", "GMV", "Tangency", "Custom", o.benchLabel]),
+      tag("scorecard columns in the app's summary order, the benchmark last under its display name (1681, 1689)"), cols.map((c) => c.label).join());
+    [["ew", ao.ew], ["gmv", E.shipping.gmv.x], ["tan", E.shipping.tan.x]].forEach(([k, w]) => {
+      const row = M.portRow(ao, w);
+      for (const f of FIELDS) near(tag(`${k} ${f} (oracle weights)`), row[f], E.perf[k][f], REL);
     });
     // The app's Max DD path starts a day in (904-908); the port's at the amount invested. On these sets
     // no portfolio's worst fall starts on day one, so the two agree, and the model reaches the app's too.
     near(tag("GMV Max DD, the app's path reproduced"), M.portRow(ao, E.shipping.gmv.x, false).mdd, E.perf.gmv.mdd, REL);
-
-    const sum = ready(M.summaryTable(ao, M.customWeights(ao, {})), tag("summary"));
-    check(JSON.stringify(sum.rows.map((r) => r.portfolio)) === JSON.stringify(["Equal-Weight", "GMV", "Tangency", "Custom", o.benchLabel]),
-      tag("summary rows in the app's order, the benchmark last under its display name (1681, 1689)"), sum.rows.map((r) => r.portfolio).join());
-    check(JSON.stringify(sum.columns.map((c) => c.label)) === JSON.stringify(["Portfolio", "Ann. Return", "Ann. Volatility", "Sharpe", "Sortino", "Max DD"]),
-      tag("summary columns in the app's order (1687-1688)"));
-    [["ew", 0], ["gmv", 1], ["tan", 2]].forEach(([k, i]) => {
-      for (const f of FIELDS) near(tag(`summary ${k} ${f}`), sum.rows[i][f], E.perf[k][f], REL);
-    });
     // Before tab 5 is touched, Custom is 1/n (1581): the dump's default custom row.
-    for (const f of FIELDS) near(tag(`summary default Custom ${f}`), sum.rows[3][f], E.custom.default.perf[f], 1e-11);
-    for (const f of FIELDS) near(tag(`summary benchmark ${f}`), sum.rows[4][f], o.bench[f], REL);
+    const cd = M.portRow(ao, M.customWeights(ao, {}).w);
+    for (const f of FIELDS) near(tag(`default Custom ${f}`), cd[f], E.custom.default.perf[f], 1e-11);
+    const bs = { ...ao.benchStats, mdd: maxDrawdown(ao.bench) };
+    for (const f of FIELDS) near(tag(`benchmark ${f}`), bs[f], o.bench[f], REL);
 
     const prc = ready(M.prcTable(ao), tag("risk contribution table"));
     nearAll(tag("GMV PRC (oracle weights)"), prc.rows.map((r) => r.gmvPrc), E.prc.gmv, REL, 1e-15);
@@ -106,11 +108,12 @@ for (const set of ["cross", "megacap"]) {
       tag("the ends are the ones the shared growth chart draws"));
 
     // T1 / T2: the port's own exact solves, at t-parity.mjs's tiers.
-    const t = M.tiles(a);
+    const gRow = M.portRow(a, a.gmv.w);
+    const tRow = M.portRow(a, a.tangency.w);
     const oVol = E.shipping.gmv.fun;
-    check(t[1].row.sigma <= oVol * (1 + 1e-9) && t[1].row.sigma >= oVol * (1 - 2e-4), tag("GMV tile volatility: no worse than the app's, within 2e-4"), `${t[1].row.sigma} vs ${oVol}`);
+    check(gRow.sigma <= oVol * (1 + 1e-9) && gRow.sigma >= oVol * (1 - 2e-4), tag("GMV volatility: no worse than the app's, within 2e-4"), `${gRow.sigma} vs ${oVol}`);
     const oSh = -E.shipping.tan.fun;
-    check(t[2].row.sharpe >= oSh - 1e-9 && t[2].row.sharpe <= oSh + 5e-6, tag("Tangency tile Sharpe: no worse than the app's, within 5e-6"), `${t[2].row.sharpe} vs ${oSh}`);
+    check(tRow.sharpe >= oSh - 1e-9 && tRow.sharpe <= oSh + 5e-6, tag("Tangency Sharpe: no worse than the app's, within 5e-6"), `${tRow.sharpe} vs ${oSh}`);
     const wt = ready(M.weightTable(a), tag("weights table"));
     check(JSON.stringify(wt.columns.map((c) => c.label)) === JSON.stringify(["Asset", "GMV", "Tangency", "Equal-Weight"]), tag("weights columns in the app's order (1535)"));
     check(wt.rows.map((r) => r.asset).join() === a.tickers.join(), tag("a weights row per ticker, in the entered order"));
@@ -137,17 +140,17 @@ for (const set of ["cross", "megacap"]) {
   const byTicker = (raw) => Object.fromEntries(aL.tickers.map((t, i) => [t, raw[i]]));
   const cu = M.customWeights(aL, byTicker(cU.raw));
   nearAll(`${set}: uneven custom weights normalise as the app's`, cu.w, cU.w, REL, 1e-15);
-  const su = ready(M.summaryTable(aL, cu), `${set}: summary with uneven custom`);
-  for (const f of FIELDS) near(`${set}: uneven Custom ${f}`, su.rows[3][f], cU.perf[f], 1e-11);
+  const su = M.portRow(aL, cu.w);
+  for (const f of FIELDS) near(`${set}: uneven Custom ${f}`, su[f], cU.perf[f], 1e-11);
   const aS = fixtureAnalysis(set, { allowShort: true });
   for (const k of ["negTotal", "tinyTotal"]) {
     const e = o.modes.short.custom[k];
     const c = M.customWeights(aS, Object.fromEntries(aS.tickers.map((t, i) => [t, e.raw[i]])));
     check(e.w.some((x, i) => Math.abs(x) > 1 || Math.sign(x) !== Math.sign(e.raw[i])),
       `${set}: the app's ${k} custom weights flip sign or leave the [-1, 1] box (1582-1584)`, JSON.stringify(e.w));
-    const s = ready(M.summaryTable(aS, c), `${set}: summary with ${k} custom`);
-    check(!c.ok && s.rows[3].portfolio === "Custom (not shown)" && FIELDS.every((f) => s.rows[3][f] === null),
-      `${set}: the port refuses the ${k} custom weights and prints no figures for them`, JSON.stringify(s.rows[3]));
+    const col = SC.scoreColumns(aS, c)[3];
+    check(!c.ok && col.label === "Custom (not shown)" && col.weights === null && SC.columnFigures(aS, c, null)[3].row === null,
+      `${set}: the port refuses the ${k} custom weights and the scorecard prints no figures for them`, JSON.stringify(col));
     check(!c.ok && M.customNote(aS, c) === M.CUSTOM_REFUSAL[c.reason], `${set}: the ${k} refusal is said, by reason`);
   }
 }
@@ -187,14 +190,15 @@ for (const set of ["cross", "megacap"]) {
   const moved = M.customWeights(a, { VTI: 0.5 });
   check(moved.ok && !M.customIsEqual(a, moved) && !/still equal/.test(M.customNote(a, moved)), "custom note: moved weights are not called equal");
 
-  // Max DD from the amount invested, as the tiles' note says: a 30% fall on the first day counts. The
+  // Max DD from the amount invested, as the scorecard's note says: a 60% fall on the first day counts. The
   // app's path starts at 1 + r1 (904-908) and does not see it.
   const dayOne = { ...a, returns: a.returns.map((r) => [-0.6, ...r.slice(1)]), bench: [-0.6, ...a.bench.slice(1)] };
-  const tileDD = M.tiles(dayOne)[0].row.mdd;
-  check(tileDD <= -0.6 + 1e-12 && M.portRow(dayOne, dayOne.ew, false).mdd > -0.6, "tiles: Max DD counts a 60% fall on the first day; the app's path would not",
-    `${tileDD} vs ${M.portRow(dayOne, dayOne.ew, false).mdd}`);
-  const benchDD = ready(M.summaryTable(dayOne, M.customWeights(dayOne, {})), "summary, a first-day fall").rows[4].mdd;
-  check(benchDD <= -0.6 + 1e-12, "summary: the benchmark's Max DD counts its first-day fall too", String(benchDD));
+  const dayFigs = SC.columnFigures(dayOne, M.customWeights(dayOne, {}), null);
+  const ewDD = dayFigs[0].row.maxDrawdown;
+  check(ewDD <= -0.6 + 1e-12 && M.portRow(dayOne, dayOne.ew).mdd <= -0.6 + 1e-12 && M.portRow(dayOne, dayOne.ew, false).mdd > -0.6,
+    "scorecard: Max drawdown counts a 60% fall on the first day; the app's path would not", `${ewDD} vs ${M.portRow(dayOne, dayOne.ew, false).mdd}`);
+  const benchDD = dayFigs.at(-1).row.maxDrawdown;
+  check(benchDD <= -0.6 + 1e-12, "scorecard: the benchmark's Max drawdown counts its first-day fall too", String(benchDD));
 
   // A NaN figure fails its table closed and named.
   const broke = { ...a, gmv: { ...a.gmv, w: a.gmv.w.map((x, i) => (i === 0 ? NaN : x)) } };
@@ -214,7 +218,18 @@ const rect = HTMLElement.prototype.getBoundingClientRect;
 HTMLElement.prototype.getBoundingClientRect = function () {
   return { x: 0, y: 0, top: 0, left: 0, right: 720, bottom: 360, width: 720, height: 360, toJSON() {} };
 };
-const sectionOf = (r, id) => r.container.querySelector(`section[aria-labelledby="${id}"]`);
+// A Build row's card, by its key (`#build-<key>`), with its folds opened: Show the numbers and How it is calculated draw
+// their contents the first time they open.
+const sectionOf = (r, key) => {
+  const row = r.container.querySelector(`#build-${key}`);
+  for (const b of row?.querySelectorAll(".card-fold-button[aria-expanded='false']") ?? []) act(() => b.click());
+  return row;
+};
+const openAll = (r) => {
+  ["scorecard", "holdings", "redraws", "prc"].forEach((k) => sectionOf(r, k));
+  for (const b of r.container.querySelectorAll(".build-mix .card-fold-button[aria-expanded='false']")) act(() => b.click());
+};
+const scoreCells = (r, metric) => [...(r.container.querySelector(`#build-scorecard tr[data-metric="${metric}"]`)?.children ?? [])].slice(1).map(text);
 // The lead's frontier card, its "How it is calculated" fold opened (where the chart's caption now sits).
 const frontierOf = (r) => {
   const card = r.container.querySelector("#build-frontier");
@@ -233,24 +248,22 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     "ledger:failed-tangency the app's tab 4 errors and stops the script at a failed tangency: no tiles, weights or summary (1492-1494)");
   const a = fixtureAnalysis("cross", { allowShort: true, rf: 0.5 });
   const ew = M.portRow(a, a.ew);
-  const t = M.tiles(a)[2];
-  check(t.row === null && t.failed === M.FAILED.tangency, "ledger:failed-tangency the port's Tangency tile holds no figure and says it failed");
+  const col = SC.scoreColumns(a, M.customWeights(a, {}))[2];
+  check(col.label === "Tangency (failed)" && col.weights === null && SC.columnFigures(a, M.customWeights(a, {}), null)[2].row === null,
+    "ledger:failed-tangency the port's Tangency column holds no figure and says it failed");
   const r = quiet(() => render(h(Optimization, tabProps(a))));
-  const tiles = sectionOf(r, "opt-tiles");
-  const tanTile = tiles?.querySelector('[data-port="tangency"]');
-  check(tanTile && text(tanTile).includes("Tangency failed") && tanTile.querySelectorAll(".plate-na").length === 5,
-    "ledger:failed-tangency the tiles say Tangency failed, five plates not available", tanTile ? text(tanTile) : "none");
-  check(tanTile && !text(tanTile).includes(format(ew.mu, "pct2")) && !text(tanTile).includes(format(ew.sharpe, "num3")), "ledger:failed-tangency no equal-weight stand-in under the Tangency heading");
-  const weights = sectionOf(r, "opt-weights");
+  openAll(r);
+  const score = sectionOf(r, "scorecard");
+  const tanHead = score?.querySelector('.tbl.sc thead th[data-col="tangency"]');
+  const tanCells = ["annual", "vol", "sharpe", "sortino", "mdd"].map((m) => scoreCells(r, m)[2]);
+  check(score && text(score).includes("Tangency failed") && tanHead && text(tanHead).startsWith("Tangency (failed)") && tanCells.every((c) => c === DASH),
+    "ledger:failed-tangency the scorecard says Tangency failed, its column all dashes", tanCells.join(" "));
+  check(!tanCells.some((c) => c === format(ew.mu, "pct2") || c === format(ew.sharpe, "num3")), "ledger:failed-tangency no equal-weight stand-in under the Tangency heading");
+  const weights = sectionOf(r, "holdings");
   const wtbl = weights?.querySelector(".tbl");
   check(weights && text(weights).includes("Tangency failed") && wtbl && [...wtbl.querySelectorAll("thead th")].map(text).includes("Tangency (failed)"),
     "ledger:failed-tangency the weights say Tangency failed, its column labelled failed");
   check(wtbl && rowCells(wtbl, 0)[2] === DASH, "ledger:failed-tangency the failed column prints a dash, no weight", wtbl ? rowCells(wtbl, 0).join(" ") : "");
-  const summary = sectionOf(r, "opt-summary");
-  const stbl = summary?.querySelector(".tbl");
-  const tanRow = stbl ? rowCells(stbl, 2) : [];
-  check(summary && text(summary).includes("Tangency failed") && tanRow[0] === "Tangency (failed)" && tanRow.slice(1).every((c) => c === DASH),
-    "ledger:failed-tangency the summary says Tangency failed, its row all dashes", tanRow.join(" "));
   check(!/NaN|undefined|Infinity/.test(text(r.container)), "failed tangency: no NaN, undefined or Infinity on the tab");
   check(r.container.querySelectorAll(".recharts-surface").length === 3, "failed tangency: the three charts still draw, without a tangency", `${r.container.querySelectorAll(".recharts-surface").length}`);
   check(text(frontierOf(r)).includes("Tangency failed"), "failed tangency: the frontier's caption says so too");
@@ -273,17 +286,20 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   if (r) {
     const fallback = [...r.container.querySelectorAll(".boundary")].map(text);
     check(JSON.stringify(fallback) === JSON.stringify(["Efficient frontier could not be shown."]), "ledger:boundary the failed section is one line naming it", fallback.join(" | "));
+    openAll(r);
     check(!!r.container.querySelector(".opt-headline") && r.container.querySelectorAll(".recharts-surface").length === 2 && tablesOf(r).length === 4 &&
       r.container.querySelectorAll(".build-mix .cust-row").length === a.tickers.length,
-      "ledger:boundary the headline, the Your mix panel, the other two charts and all four tables still render");
+      "ledger:boundary the headline, the Your mix panel, the other two charts and all four tables (the panel's own among them) still render");
     r.unmount();
   }
   // A failed GMV: said in every place its figures would be, and the tab still renders.
   const g = { ...a, gmv: null, frontier: [] };
   const rg = quiet(() => render(h(Optimization, tabProps(g))));
-  const gt = sectionOf(rg, "opt-tiles")?.querySelector('[data-port="gmv"]');
-  check(gt && text(gt).includes("GMV failed") && gt.querySelectorAll(".plate-na").length === 5 && text(sectionOf(rg, "opt-summary")).includes("GMV failed"),
-    "a failed GMV is said in the tiles and the summary, with no figures");
+  openAll(rg);
+  const gHead = rg.container.querySelector('#build-scorecard .tbl.sc thead th[data-col="gmv"]');
+  check(text(sectionOf(rg, "scorecard")).includes("GMV failed") && gHead && text(gHead).startsWith("GMV (failed)") &&
+    ["annual", "vol", "sharpe", "sortino", "mdd"].every((m) => scoreCells(rg, m)[1] === DASH),
+    "a failed GMV is said in the scorecard, its column with no figures");
   check(!/NaN|undefined|Infinity/.test(text(rg.container)) && rg.container.querySelectorAll(".boundary").length === 0, "a failed GMV breaks no section");
   rg.unmount();
 }
@@ -294,14 +310,14 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(/"Ann\. Return": f"\{mu_p:\.2%\}"/.test(src) && /"Sharpe": f"\{sh_p:\.3f\}"/.test(src) && /comp_df = pd\.DataFrame\(comp_data\)\.T/.test(src),
     "ledger:numeric-downloads the app's summary cells are formatted strings, so its CSV and Excel hold text (1686-1695)");
   const a = fixtureAnalysis("cross");
-  const s = ready(M.summaryTable(a, M.customWeights(a, {})), "summary");
+  // The port's summary figures download from the scorecard (t-scorecard holds its CSV and Excel); here, the weights.
+  const s = ready(M.weightTable(a, [], M.customWeights(a, {})), "weights");
   const csv = csvText(s.columns, s.rows).split("\n");
-  check(csv[0] === "Portfolio,Ann. Return,Ann. Volatility,Sharpe,Sortino,Max DD" && csv[1] === `Equal-Weight,${s.rows[0].mu},${s.rows[0].sigma},${s.rows[0].sharpe},${s.rows[0].sortino},${s.rows[0].mdd}` && String(s.rows[0].mu).length > 8,
-    "ledger:numeric-downloads the port's summary CSV holds the full numbers", csv[1]);
-  const cell = cellFor(s.rows[0].mu, s.columns[1]);
-  const sh = cellFor(s.rows[0].sharpe, s.columns[3]);
-  check(cell?.t === "n" && cell.v === s.rows[0].mu && cell.z === "0.00%" && sh?.t === "n" && sh.z === "0.000",
-    "ledger:numeric-downloads the port's Excel cells are numbers, formatted 0.00% and 0.000", `${JSON.stringify(cell)} ${JSON.stringify(sh)}`);
+  check(csv[0] === "Asset,GMV,Tangency,Equal-Weight,Custom" && csv[1] === `${a.tickers[0]},${s.rows[0].gmv},${s.rows[0].tangency},${s.rows[0].ew},${s.rows[0].custom}` && String(s.rows[0].gmv).length > 8,
+    "ledger:numeric-downloads the port's weights CSV holds the full numbers, your mix's column too", csv[1]);
+  const cell = cellFor(s.rows[0].gmv, s.columns[1]);
+  check(cell?.t === "n" && cell.v === s.rows[0].gmv && cell.z === "0.00%",
+    "ledger:numeric-downloads the port's Excel cells are numbers, formatted 0.00%", JSON.stringify(cell));
   const p = ready(M.prcTable(a), "PRC");
   const pc = cellFor(p.rows[0].gmvPrc, p.columns[2]);
   check(pc?.t === "n" && pc.v === p.rows[0].gmvPrc && pc.z === "0.00%", "ledger:numeric-downloads the risk contribution downloads as numbers", JSON.stringify(pc));
@@ -316,12 +332,12 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const r = quiet(() => render(h(Optimization, props)));
   const b = fixtureAnalysis("cross", { rf: 0.05 });
   quiet(() => r.rerender(h(Optimization, { ...props, analysis: b })));
-  const sum = sectionOf(r, "opt-summary").querySelector(".tbl");
   const ewSharpe = M.portRow(b, b.ew).sharpe;
-  check(rowCells(sum, 0)[3] === format(ewSharpe, "num3") && format(ewSharpe, "num3") !== format(M.portRow(a, a.ew).sharpe, "num3"),
-    "ledger:rf-live the summary's Sharpe follows a new rate at once", rowCells(sum, 0).join(" "));
-  check(text(frontierOf(r)).includes("from the 5.00% risk-free rate") && text(sectionOf(r, "opt-tiles")).includes("5.00% risk-free rate"),
-    "ledger:rf-live the frontier's line and the tiles use the new rate");
+  const ewCell = scoreCells(r, "sharpe")[0] ?? "";
+  check(ewCell.startsWith(format(ewSharpe, "num3")) && format(ewSharpe, "num3") !== format(M.portRow(a, a.ew).sharpe, "num3"),
+    "ledger:rf-live the scorecard's Sharpe follows a new rate at once", ewCell);
+  check(text(frontierOf(r)).includes("from the 5.00% risk-free rate") && text(sectionOf(r, "scorecard")).includes("5.00% risk-free rate"),
+    "ledger:rf-live the frontier's line and the scorecard's note use the new rate");
   check(text(r.container.querySelector(".opt-headline")) === M.headline(b) && M.headline(b) !== M.headline(a), "ledger:rf-live the headline is recomputed at the new rate");
   r.unmount();
 }
@@ -332,15 +348,17 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const a = fixtureAnalysis("cross");
   const props = tabProps(a);
   const r = quiet(() => render(h(Optimization, props)));
+  openAll(r);
+  act(() => r.container.querySelector(".sc-toggle").click());
   const all = text(r.container);
   check(!/NaN|undefined|Infinity|\bnan\b/.test(all), "tab: no NaN, undefined or Infinity anywhere on it");
   const head = r.container.querySelector(".opt-headline");
   check(head && text(head) === M.headline(a) && text(head).startsWith("With hindsight, the maximum-Sharpe portfolio holds 54.2% GLD"), "tab: the headline is on it, literal", head ? text(head) : "none");
   // The lead comes right after the headline: the frontier, then the Your mix panel beside it.
-  const order = [...r.container.querySelectorAll(".opt-headline, #build-frontier, .build-mix, section[aria-labelledby^='opt-']")]
-    .map((e) => (e.classList.contains("opt-headline") ? "headline" : (e.getAttribute("aria-labelledby") ?? "").startsWith("opt-") ? e.getAttribute("aria-labelledby") : e.id));
-  check(JSON.stringify(order) === JSON.stringify(["headline", "build-frontier", "section-custom", "opt-tiles", "opt-weights", "opt-scorecard", "opt-prc", "opt-summary"]),
-    "tab: headline, the frontier and Your mix, then the figures, weights, scorecard, risk contribution and summary", order.join(" "));
+  const order = [...r.container.querySelectorAll(".opt-headline, #build-frontier, .build-mix, .more-row")].map((e) => (e.classList.contains("opt-headline") ? "headline" : e.id));
+  check(JSON.stringify(order) === JSON.stringify(["headline", "build-frontier", "section-custom", "build-scorecard", "build-holdings", "build-redraws", "build-prc", "build-whatif"]),
+    "tab: headline, the frontier and Your mix, then the rows: scorecard, what each mix holds, the redraws, risk contribution, the what-if", order.join(" "));
+  check(!r.container.querySelector(".opt-tile, .plate-na") && !/Summary comparison/i.test(all), "tab: neither the three portfolios' plates nor the summary comparison is drawn: the scorecard carries their figures");
   check(!!r.container.querySelector(".build-lead > #build-frontier:first-child") && !!r.container.querySelector(".build-lead > .build-mix:last-child"),
     "tab: the frontier card and the Your mix panel are the lead's two parts, the frontier first");
   check(r.container.querySelectorAll(".recharts-surface").length === 3, "tab: all three charts are drawn", `${r.container.querySelectorAll(".recharts-surface").length}`);
@@ -348,38 +366,38 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(r.container.querySelectorAll(".recharts-legend-wrapper").length === 0, "tab: no legend, the series are named in the charts");
 
   // Every table, and each carries both downloads (downloads-everywhere, the tab half).
-  const tables = tablesOf(r);
+  const tables = tablesOf(r).filter((t) => !t.closest(".build-mix"));
   const captions = tables.map((t) => text(t.querySelector("caption .tbl-title")));
-  check(JSON.stringify(captions) === JSON.stringify(["Portfolio weights", "Scorecard", "Weight, return and risk contribution", "Summary comparison"]), "tab: its four tables", captions.join(" | "));
-  check(tables.length === 4 && tables.every((t) => {
+  check(JSON.stringify(captions) === JSON.stringify(["Scorecard", "Portfolio weights", "Weight, return and risk contribution"]), "tab: its three tables beyond the Your mix panel's", captions.join(" | "));
+  check(tables.length === 3 && tables.every((t) => {
     const b = [...t.querySelectorAll("button")].map(text);
     return b.includes("Download CSV") && b.includes("Download Excel");
   }), "ledger:downloads-everywhere every table on the tab has a CSV and an Excel download");
   check(!/download_button/.test(lines(1553, 1573)) && (lines(1543, 1551).match(/download_button/g) ?? []).length === 2 && (lines(1697, 1703).match(/download_button/g) ?? []).length === 2,
     "ledger:downloads-everywhere the app gives the weights and the summary two downloads each (1548-1551, 1700-1703) and the risk contribution none (1555-1572)");
-  const prcSec = sectionOf(r, "opt-prc");
+  const prcSec = sectionOf(r, "prc");
   check(prcSec && [...prcSec.querySelectorAll(".tbl button")].map(text).join() === "Download CSV,Download Excel", "ledger:downloads-everywhere the port's risk contribution table has both");
-  check(r.container.querySelectorAll("table").length === 4 && r.container.querySelectorAll(".tbl.sc table").length === 1,
+  check(r.container.querySelectorAll("table").length === tablesOf(r).length && r.container.querySelectorAll(".tbl.sc table").length === 1,
     "tab: no table outside the Table and Scorecard components");
 
-  // Printed cells: the summary's Equal-Weight row at the app's formats, from the oracle's own figures.
-  const sumCells = rowCells(tables[3], 0);
+  // Printed cells: the scorecard's Equal-Weight column, the old summary row's five figures, at the app's formats and
+  // from the oracle's own figures.
   const e = o.modes.long.perf.ew;
-  check(JSON.stringify(sumCells) === JSON.stringify(["Equal-Weight", format(e.mu, "pct2"), format(e.sigma, "pct2"), format(e.sharpe, "num3"), format(e.sortino, "num3"), format(e.mdd, "pct2")]),
-    "tab: the Equal-Weight summary row prints the oracle's figures at the app's formats", sumCells.join(" "));
-  check(rowCells(tables[3], 4)[0] === "S&P 500" && rowCells(tables[3], 4)[3] === format(o.bench.sharpe, "num3"), "tab: the benchmark row, under its display name");
-  const ewPlates = [...sectionOf(r, "opt-tiles").querySelector('[data-port="ew"]').querySelectorAll(".plate-value")].map(text);
-  check(JSON.stringify(ewPlates) === JSON.stringify([format(e.mu, "pct2"), format(e.sigma, "pct2"), format(e.sharpe, "num3"), format(e.sortino, "num3"), format(e.mdd, "pct2")]),
-    "tab: the Equal-Weight plates print the oracle's figures", ewPlates.join(" "));
+  const ewCol = ["mean", "vol", "sharpe", "sortino", "mdd"].map((m) => scoreCells(r, m)[0] ?? "");
+  const wantEw = [format(e.mu, "pct2"), format(e.sigma, "pct2"), format(e.sharpe, "num3"), format(e.sortino, "num3"), format(e.mdd, "pct2")];
+  check(ewCol.every((c, i) => (i === 2 ? c.startsWith(wantEw[i]) : c === wantEw[i])),
+    "tab: the scorecard's Equal-Weight column prints the oracle's figures at the app's formats", `${ewCol.join(" ")} / ${wantEw.join(" ")}`);
+  const benchHead = r.container.querySelector('#build-scorecard .tbl.sc thead th[data-col="bench"]');
+  check(text(benchHead ?? {}).startsWith("S&P 500") && (scoreCells(r, "sharpe")[4] ?? "").startsWith(format(o.bench.sharpe, "num3")), "tab: the benchmark column, under its display name");
 
   // Series named in the charts.
   const svgText = (id) => text(sectionOf(r, id).querySelector(".recharts-surface"));
-  check(["GMV", "Tangency", "Equal-Weight"].every((s) => svgText("opt-weights").includes(s)), "tab: the weights chart names its three series on the bars", svgText("opt-weights"));
-  check(["Weight", "Return share", "Risk share"].every((s) => svgText("opt-prc").includes(s)), "tab: the share chart names its three series on the bars", svgText("opt-prc"));
+  check(["GMV", "Tangency", "Equal-Weight"].every((s) => svgText("holdings").includes(s)), "tab: the weights chart names its three series on the bars", svgText("holdings"));
+  check(["Weight", "Return share", "Risk share"].every((s) => svgText("prc").includes(s)), "tab: the share chart names its three series on the bars", svgText("prc"));
   // Bronze text measures 3.6:1 on paper, under WCAG AA's 4.5:1: Tangency's bars stay bronze, their name is ink2.
-  const bn = ["opt-weights", "opt-prc"].flatMap((id) => [...sectionOf(r, id).querySelectorAll(".opt-bar-name")].map((n) => ({ text: n.textContent, fill: n.getAttribute("fill") })));
+  const bn = ["holdings", "prc"].flatMap((id) => [...sectionOf(r, id).querySelectorAll(".opt-bar-name")].map((n) => ({ text: n.textContent, fill: n.getAttribute("fill") })));
   const nameFill = (s) => bn.find((n) => n.text === s)?.fill;
-  const tanBars = [...sectionOf(r, "opt-weights").querySelectorAll(".recharts-bar-rectangle path")].filter((p) => p.getAttribute("fill") === ROLE.tangency);
+  const tanBars = [...sectionOf(r, "holdings").querySelectorAll(".recharts-bar-rectangle path")].filter((p) => p.getAttribute("fill") === ROLE.tangency);
   check(bn.length === 6 && nameFill("Tangency") === tokens.color.ink2 && nameFill("Risk share") === tokens.color.ink2 && nameFill("GMV") === ROLE.gmv &&
     nameFill("Equal-Weight") === ROLE.ew && bn.every((n) => contrastRatio(n.fill, tokens.color.paper) >= TEXT_AA) && tanBars.length > 0,
     "tab: every series name on the bars reads on paper at 4.5:1; Tangency's is ink2 while its bars stay bronze", JSON.stringify(bn));
@@ -391,15 +409,15 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     const rows = [...sectionOf(r, id).querySelectorAll(".recharts-tooltip-item")];
     return rows.map((li) => `${text(li.querySelector(".recharts-tooltip-item-name"))}=${li.style.color}`).join(" ");
   };
-  const tanRow = rowColour("opt-weights", ROLE.tangency);
-  const gmvRow = rowColour("opt-weights", ROLE.gmv);
-  const retRow = rowColour("opt-prc", ROLE.frontier);
+  const tanRow = rowColour("holdings", ROLE.tangency);
+  const gmvRow = rowColour("holdings", ROLE.gmv);
+  const retRow = rowColour("prc", ROLE.frontier);
   check(tanRow === `Tangency=${rgb(tokens.color.ink2)}` && gmvRow === `GMV=${rgb(ROLE.gmv)}` && retRow === `Return share=${rgb(ROLE.frontier)}`,
     "tab: hovering a bar names it alone, Tangency in ink2, GMV in its teal and a return share in navy", `${tanRow} | ${gmvRow} | ${retRow}`);
   const frSvg = text(r.container.querySelector("#build-frontier .recharts-surface"));
   check([...a.tickers, "GMV", "Tangency", "Equal-Weight", "Custom", "S&P 500"].every((s) => frSvg.includes(s)), "tab: the frontier names every asset and all four mixes in the chart", frSvg);
   check(text(r.container.querySelector("#build-frontier .card-title")) === M.frontierTitle(a), "tab: the frontier card's title is where Tangency and GMV sit");
-  check(/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: untouched custom weights are said to repeat Equal-Weight");
+  check(/still equal weights/.test(text(sectionOf(r, "scorecard"))), "tab: untouched custom weights are said to repeat Equal-Weight, under the scorecard");
 
   // The tab hands the shared charts what their suites hold them to. The frontier's caption is its card's
   // "How it is calculated"; the chart keeps its title for a screen reader and prints no caption of its own.
@@ -410,7 +428,8 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   check(/rebalanced daily/.test(wealthCaption(props.settings.amount, a.prices.dates[0], a.asOf)),
     "ledger:daily-rebalanced-label the growth chart that carries these portfolios says each is rebalanced daily");
   check(!/rebalanc/i.test(lines(1660, 1674)), "ledger:daily-rebalanced-label the app's wealth chart does not say so (1660-1674)");
-  check(/rebalanced daily/.test(text(sectionOf(r, "opt-tiles"))), "ledger:daily-rebalanced-label the tiles say the weights are held fixed, rebalanced daily");
+  check(/holds its weights fixed, rebalanced daily/.test(text(sectionOf(r, "scorecard"))), "ledger:daily-rebalanced-label the scorecard says the weights are held fixed, rebalanced daily");
+  check(/Max drawdown is measured from the amount invested/.test(text(sectionOf(r, "scorecard"))), "tab: the scorecard says its maximum drawdown counts from the amount invested, as the plates' note did");
   check(!/\[\u22121, 1\]|\u2212100%/.test(all), "ledger:short-bounds-copy long-only, the tab says nothing about [-1, 1] bounds");
 
   // The level switch changes the tooltip text.
@@ -425,11 +444,18 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   // Custom weights from the Your mix panel reach the frontier and the summary (1581).
   const raw = o.modes.long.custom.uneven.raw;
   quiet(() => r.rerender(h(Optimization, { ...props, weights: Object.fromEntries(a.tickers.map((t, i) => [t, raw[i]])) })));
-  const cust = rowCells(tablesOf(r)[3], 3);
   const cp = o.modes.long.custom.uneven.perf;
-  check(cust[0] === "Custom" && cust[1] === format(cp.mu, "pct2") && cust[3] === format(cp.sharpe, "num3"), "tab: the custom weights score in the summary", cust.join(" "));
-  check(!/still equal weights/.test(text(sectionOf(r, "opt-summary"))), "tab: moved custom weights are not called equal");
-  const cm = M.portRow(a, M.customWeights(a, Object.fromEntries(a.tickers.map((t, i) => [t, raw[i]]))).w);
+  const custMean = scoreCells(r, "mean")[3] ?? "";
+  const custSharpe = scoreCells(r, "sharpe")[3] ?? "";
+  check(custMean === format(cp.mu, "pct2") && custSharpe.startsWith(format(cp.sharpe, "num3")), "tab: the custom weights score in the scorecard", `${custMean} ${custSharpe}`);
+  check(!/still equal weights/.test(text(sectionOf(r, "scorecard"))), "tab: moved custom weights are not called equal");
+  const cw = M.customWeights(a, Object.fromEntries(a.tickers.map((t, i) => [t, raw[i]]))).w;
+  const cm = M.portRow(a, cw);
+  const wtbl = sectionOf(r, "holdings").querySelector(".tbl");
+  const at = [...wtbl.querySelectorAll("thead th")].map(text).indexOf("Custom");
+  const wcells = [...wtbl.querySelectorAll("tbody tr")].map((tr) => text(tr.children[at]));
+  check(at > 0 && wcells.join() === cw.map((x) => format(x, "pct2")).join() && wcells.join() !== a.ew.map((x) => format(x, "pct2")).join(),
+    "tab: a typed mix's weights, scaled to 100%, are the weights table's Custom column", wcells.join(" "));
   check(text(r.container.querySelector("#build-frontier .card-sub")).includes(format(cm.mu, "pct2")), "tab: moved custom weights, and the frontier's sub-line reads the new mix");
   r.unmount();
 }
@@ -441,10 +467,52 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const r = quiet(() => render(h(Optimization, tabProps(a))));
   const fr = text(frontierOf(r));
   check(fr.includes(frontierCaption(true, a.rf, frontierData(a).cal)) && fr.includes("[\u22121, 1]"), "ledger:short-bounds-copy with shorting on, the tab's frontier caption bounds each weight to [-1, 1]", fr);
-  check(text(sectionOf(r, "opt-weights")).includes("bounded to [\u2212100%, 100%]") && !/unconstrained/i.test(text(r.container)),
+  check(text(sectionOf(r, "holdings")).includes("bounded to [\u2212100%, 100%]") && !/unconstrained/i.test(text(r.container)),
     "ledger:short-bounds-copy the weights state the bounds and nothing says unconstrained");
   check(text(r.container.querySelector(".opt-headline")).includes("with 3 short positions"), "short: the headline counts the tangency's shorts");
   check(!/NaN|undefined|Infinity/.test(text(r.container)) && r.container.querySelectorAll(".recharts-surface").length === 3, "short: the tab renders whole");
+  r.unmount();
+}
+
+// ---- (d2) the rows' findings: each names figures its card then prints ----------------------------------------
+// A finding is computed from the models its card draws, so every figure in it is printed in that card: the scorecard's
+// Sharpe row, the weights table, the redraw strips' 10th-to-90th ranges, the risk contribution table. The scorecard's
+// names the mix with the highest Sharpe ratio, which no other mix beats.
+{
+  const { scorecardFinding, holdingsFinding, redrawsFinding, prcFinding } = await import("../src/tabs/build.ts");
+  const { solveRedraws, seedOf } = await import("../src/tabs/optimization/redraws.ts");
+  const a = fixtureAnalysis("cross");
+  const r = quiet(() => render(h(Optimization, tabProps(a))));
+  openAll(r);
+  await act(async () => void (await new Promise((res) => setTimeout(res, 30))));
+  const finding = (key) => text(r.container.querySelector(`#build-${key} .more-finding`));
+  const figs = (s) => s.match(/\d+\.\d+%?/g) ?? [];
+  // Whole figures, never a substring of a longer one ("0.603" is not in "10.6031").
+  const inCard = (key, s) => {
+    const card = new Set(figs(text(sectionOf(r, key))));
+    return figs(s).filter((f) => !card.has(f));
+  };
+  const c = M.customWeights(a, {});
+  const rows = { scorecard: scorecardFinding(a, c), holdings: holdingsFinding(a), redraws: redrawsFinding(a, solveRedraws(a, seedOf(0))), prc: prcFinding(a) };
+  for (const [key, want] of Object.entries(rows)) {
+    const got = finding(key);
+    const lost = inCard(key, got);
+    check(got === want && figs(got).length >= 2 && lost.length === 0, `findings: the ${key} row's finding is its model's, and its card prints every figure in it`,
+      `${got} | missing: ${lost.join(", ")}`);
+  }
+  // Your mix's and the benchmark's figures are their own columns' Sharpe cells, not merely somewhere on the card.
+  const mine = /Your mix (\d+\.\d+)/.exec(finding("scorecard"))?.[1];
+  const bench = new RegExp(String.raw`${a.benchLabel} (\d+\.\d+)`).exec(finding("scorecard"))?.[1];
+  const sc = scoreCells(r, "sharpe");
+  check(!!mine && !!bench && sc[3]?.startsWith(mine) && sc[4]?.startsWith(bench), "findings: the scorecard's Your mix and benchmark figures are those columns' Sharpe ratios",
+    `${mine} ${bench} | ${sc.join(" | ")}`);
+  const sharpes = [a.ew, a.gmv.w, a.tangency.w].map((w) => M.portRow(a, w).sharpe);
+  const top = Number(/Highest Sharpe: [^,]+, (\d+\.\d+)/.exec(finding("scorecard"))?.[1]);
+  check(Number.isFinite(top) && sharpes.every((x) => x <= top + 5e-4), "findings: the scorecard's names the highest Sharpe ratio among the mixes", `${top} vs ${sharpes.join(", ")}`);
+  const range = /spans (\d+\.\d+%) to (\d+\.\d+%)/.exec(finding("redraws"));
+  const widths = [...r.container.querySelectorAll(".opt-strip-range")].map((x) => text(x).match(/(\d+\.\d+)%/g)).filter((m) => m?.length === 2).map((m) => parseFloat(m[1]) - parseFloat(m[0]));
+  check(!!range && widths.length === a.tickers.length && parseFloat(range[2]) - parseFloat(range[1]) >= Math.max(...widths) - 1e-9,
+    "findings: the redraws' names the widest 10th-to-90th range of any asset", `${finding("redraws")} | ${widths.join(", ")}`);
   r.unmount();
 }
 
@@ -456,6 +524,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const calls = [];
   const props = tabProps(a, { requestSettings: (p) => calls.push(p) });
   const r = quiet(() => render(h(Optimization, props)));
+  openAll(r);
   const head = M.headline(a);
   check(head.startsWith("With hindsight, ") && head.includes(", for an in-sample Sharpe of ") && head.endsWith(`; ${M.SENSITIVITY_POINTER}.`) &&
     text(r.container.querySelector(".opt-headline")) === head,
@@ -466,12 +535,15 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const heads = [...r.container.querySelectorAll(".tbl thead th, .tbl tbody th")].map((th) => ({ own: own(th), sub: th.querySelector(".tbl-sub") ? text(th.querySelector(".tbl-sub")) : null }));
   const fitted = heads.filter((x) => /^(GMV|Tangency)\b/.test(x.own));
   const plain = heads.filter((x) => /^(Equal-Weight|Custom|S&P 500)/.test(x.own));
-  check(fitted.length === 12 && fitted.every((x) => x.sub === FITTED) && plain.length >= 3 && plain.every((x) => x.sub === null || (x.own === "Custom" && x.sub !== FITTED)),
+  // Ten: the scorecard's two heads, the weights table's two and the risk contribution table's six. The summary
+  // comparison's two rows went with it; the scorecard carries its figures.
+  check(fitted.length === 10 && fitted.every((x) => x.sub === FITTED) && plain.length >= 3 && plain.every((x) => x.sub === null || (x.own === "Custom" && x.sub !== FITTED)),
     "fitted-heads: every GMV and Tangency head in the tab's tables says weights chosen on this window, and no Equal-Weight head does",
     heads.map((x) => `${x.own}=${x.sub}`).join(" | "));
-  const tiles = [...r.container.querySelectorAll(".opt-tile")].map((t) => [t.dataset.port, t.querySelector(".opt-tile-sub") ? text(t.querySelector(".opt-tile-sub")) : null]);
-  check(JSON.stringify(tiles) === JSON.stringify([["ew", null], ["gmv", FITTED], ["tangency", FITTED]]),
-    "fitted-heads: the GMV and Tangency plate rows carry it, and the Equal-Weight row does not", JSON.stringify(tiles));
+  const scHeads = [...r.container.querySelectorAll("#build-scorecard .tbl.sc thead th[data-col]")].slice(0, 3)
+    .map((th) => [th.getAttribute("data-col"), th.querySelector(".tbl-sub, .sc-sub") ? text(th.querySelector(".tbl-sub, .sc-sub")) : null]);
+  check(JSON.stringify(scHeads) === JSON.stringify([["ew", null], ["gmv", FITTED], ["tangency", FITTED]]),
+    "fitted-heads: the scorecard's GMV and Tangency heads carry it, and its Equal-Weight head does not", JSON.stringify(scHeads));
   const notes = r.container.querySelectorAll('[data-note="in-sample"]');
   const link = notes[0]?.querySelector("a");
   check(notes.length === 1 && link && link.getAttribute("href") === PUBLISHED_URL && PUBLISHED_URL === "https://masonjbennett.com/projects#portfolio-method" &&
@@ -483,6 +555,7 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
     const went = [];
     const ctx = { view: "basket", setTab: (t, v) => went.push(`${t}:${v}`), rfHistory: { basis: "window", series: null, loading: false } };
     const inPage = quiet(() => render(h(TabContext.Provider, { value: ctx }, h(Optimization, props))));
+    openAll(inPage);
     const note = inPage.container.querySelector('[data-note="in-sample"]');
     const open = note?.querySelector("button.text-button");
     if (open) open.click();
@@ -495,12 +568,13 @@ const rowCells = (tbl, k) => [...([...tbl.querySelectorAll("tbody tr")][k]?.chil
   const wt = M.weightTable(a).value;
   check(csvText(wt.columns, wt.rows).split("\n")[0] === "Asset,GMV,Tangency,Equal-Weight",
     "fitted-heads: the weights CSV keeps the app's plain header; the note is the page's", csvText(wt.columns, wt.rows).split("\n")[0]);
-  check(JSON.stringify(M.fittedHeads(M.summaryTable({ ...a, gmv: null }, M.customWeights(a, {})).value)) === JSON.stringify(["Tangency"]),
-    "fitted-heads: a failed GMV row chose nothing and carries nothing");
+  check(JSON.stringify(M.fittedHeads(M.weightTable({ ...a, gmv: null }).value)) === JSON.stringify(["Tangency"]),
+    "fitted-heads: a failed GMV column chose nothing and carries nothing");
 
   // Every table says which window and which frequency.
-  const spans = tablesOf(r).map((t) => text(t.querySelector(".tbl-span")));
-  check(spans.length === 4 && spans.every((s) => s === `Daily returns, ${a.dates[0]} to ${a.asOf}`),
+  // The Your mix panel's typed weights claim no window (t-tables); the chapter's three tables each do.
+  const spans = tablesOf(r).filter((t) => !t.closest(".build-mix")).map((t) => text(t.querySelector(".tbl-span")));
+  check(spans.length === 3 && spans.every((s) => s === `Daily returns, ${a.dates[0]} to ${a.asOf}`),
     "spans: every table's caption states its window and that the returns are daily", spans.join(" | "));
 
   // The starting amount is not edited here any more (Performance's growth card has the field); it still reaches

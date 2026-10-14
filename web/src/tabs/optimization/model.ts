@@ -36,9 +36,9 @@ import {
 } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
 import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, windowMoments, windows, type Custom, type Row } from "../../lib/portfolio.ts";
-import { maxDrawdown, returnShare, sharpeSE, TRADING_DAYS, wealth } from "../../lib/stats.ts";
+import { returnShare, sharpeSE, TRADING_DAYS, wealth } from "../../lib/stats.ts";
 import type { Role } from "../../charts/theme.ts";
-import type { Analysis, Column, CustomWeights, FormatId, LoadState, TableRow, TipKey } from "../../types.ts";
+import type { Analysis, Column, CustomWeights, LoadState, TableRow } from "../../types.ts";
 import { FITTED } from "../caption.ts";
 
 // ---- the three portfolios (1470-1502) --------------------------------------------------------------
@@ -49,13 +49,6 @@ export const PORT_IDS: readonly PortId[] = ["ew", "gmv", "tangency"];
 
 /** Short names, as the app's charts and tables use them (1535, 1683). */
 export const PORT_LABEL: Readonly<Record<PortId, string>> = { ew: "Equal-Weight", gmv: "GMV", tangency: "Tangency" };
-
-/** The tile headings (1505, 1517, 1524). */
-export const TILE_TITLE: Readonly<Record<PortId, string>> = {
-  ew: "Equal-Weight Portfolio (1/N)",
-  gmv: "Global Min Variance",
-  tangency: "Max Sharpe (Tangency)",
-};
 
 /** What the page says where a solve failed. The Frontier's caption says the same of its tangency point. */
 export const FAILED: Readonly<Record<"gmv" | "tangency", string>> = {
@@ -270,48 +263,6 @@ export function addedSubs(a: Analysis, shown: readonly AddedId[]): Record<string
   return Object.fromEntries(shown.filter((id) => addedFit(a, id).sol).map((id) => [ADDED_LABEL[id], addedSub(id, a.allowShort)]));
 }
 
-// ---- the tiles (1504-1530) --------------------------------------------------------------------------
-
-/** One tile's figure: the app's st.metric label, format and tooltip (1507-1511). */
-export interface Metric {
-  key: "mu" | "sigma" | "sharpe" | "sortino" | "mdd";
-  label: string;
-  format: FormatId;
-  tip: TipKey;
-}
-
-export const METRICS: readonly Metric[] = [
-  { key: "mu", label: "Return", format: "pct2", tip: "return" },
-  { key: "sigma", label: "Volatility", format: "pct2", tip: "volatility" },
-  { key: "sharpe", label: "Sharpe", format: "num3", tip: "sharpe" },
-  { key: "sortino", label: "Sortino", format: "num3", tip: "sortino" },
-  { key: "mdd", label: "Max DD", format: "pct2", tip: "max_dd" },
-];
-
-export interface Tile {
-  id: PortId;
-  title: string;
-  /** The figures, or null when the solve failed (the plates then print a dash and "not available"). */
-  row: Row | null;
-  /** The failure sentence, or null. */
-  failed: string | null;
-  /** The Sharpe ratio's standard error on this portfolio's own daily returns (finiteSE), or null. */
-  se: number | null;
-}
-
-export function tiles(a: Analysis): Tile[] {
-  return PORT_IDS.map((id) => {
-    const w = weightsOf(a, id);
-    return {
-      id,
-      title: TILE_TITLE[id],
-      row: w ? portRow(a, w) : null,
-      failed: w ? null : FAILED[id as "gmv" | "tangency"],
-      se: w ? finiteSE(a, w) : null,
-    };
-  });
-}
-
 // ---- the custom portfolio (1579-1588) ---------------------------------------------------------------
 
 /** The raw custom weights in ticker order, 1/n where none was set (1581), normalised by the shared rule. */
@@ -383,21 +334,25 @@ function tableState(t: TableData, name: string): LoadState<TableData> {
 
 /**
  * The weights table (1535): a row per ticker in the entered order, columns GMV, Tangency, Equal-Weight
- * in the app's order, then each added construction the page shows, in the fixed order. A failed
- * portfolio keeps its column, labelled failed, with no figures; an added one with no weights is labelled so.
+ * in the app's order, then the reader's mix (Custom) when the chapter passes it, as the scorecard has it
+ * (normalised; a refused mix keeps its column, "not shown", with no figures), then each added
+ * construction the page shows, in the fixed order. A failed portfolio keeps its column, labelled failed,
+ * with no figures; an added one with no weights is labelled so.
  */
-export function weightTable(a: Analysis, added: readonly AddedId[] = []): LoadState<TableData> {
+export function weightTable(a: Analysis, added: readonly AddedId[] = [], c: Custom | null = null): LoadState<TableData> {
   const order: PortId[] = ["gmv", "tangency", "ew"];
   const ws = order.map((id) => weightsOf(a, id));
   const extra = ADDED_IDS.filter((id) => added.includes(id)).map((id) => ({ id, w: addedFit(a, id).sol?.w ?? null }));
   const columns: Column[] = [
     { key: "asset", label: "Asset", format: "text", first: true },
     ...order.map((id, k): Column => ({ key: id, label: ws[k] ? PORT_LABEL[id] : failedLabel(id), format: "pct2" })),
+    ...(c ? [{ key: "custom", label: c.ok ? "Custom" : "Custom (not shown)", format: "pct2" } as Column] : []),
     ...extra.map(({ id, w }): Column => ({ key: id, label: w ? ADDED_LABEL[id] : addedMissingLabel(id), format: "pct2" })),
   ];
   const rows = a.tickers.map((t, i) => {
     const row: TableRow = { asset: t };
     order.forEach((id, k) => (row[id] = ws[k] ? (ws[k] as Vec)[i] : null));
+    if (c) row.custom = c.ok ? c.w[i] : null;
     for (const { id, w } of extra) row[id] = w ? w[i] : null;
     return row;
   });
@@ -510,39 +465,6 @@ export function shareNote(a: Analysis, c: Custom | null): string | null {
   }
   if (none.length) parts.push(`${listing(none)} averaged a zero return over this window, so no return share is defined for ${none.length === 1 ? "it" : "them"}.`);
   return parts.length ? parts.join(" ") : null;
-}
-
-export const SUMMARY_COLUMNS: Column[] = [
-  { key: "portfolio", label: "Portfolio", format: "text", first: true },
-  { key: "mu", label: "Ann. Return", format: "pct2" },
-  { key: "sigma", label: "Ann. Volatility", format: "pct2" },
-  { key: "sharpe", label: "Sharpe", format: "num3" },
-  { key: "sortino", label: "Sortino", format: "num3" },
-  { key: "mdd", label: "Max DD", format: "pct2" },
-];
-
-const EMPTY = { mu: null, sigma: null, sharpe: null, sortino: null, mdd: null };
-
-/**
- * The summary comparison (1678-1695): Equal-Weight, GMV, Tangency, Custom, then the benchmark under its
- * display name, as numbers. A failed solve or a refused Custom keeps its row, labelled, with no figures.
- */
-export function summaryTable(a: Analysis, c: Custom): LoadState<TableData> {
-  const rows: TableRow[] = PORT_IDS.map((id) => {
-    const w = weightsOf(a, id);
-    if (!w) return { portfolio: failedLabel(id), ...EMPTY };
-    const r = portRow(a, w);
-    return { portfolio: PORT_LABEL[id], mu: r.mu, sigma: r.sigma, sharpe: r.sharpe, sortino: r.sortino, mdd: r.mdd };
-  });
-  if (c.ok) {
-    const r = portRow(a, c.w);
-    rows.push({ portfolio: "Custom", mu: r.mu, sigma: r.sigma, sharpe: r.sharpe, sortino: r.sortino, mdd: r.mdd });
-  } else {
-    rows.push({ portfolio: "Custom (not shown)", ...EMPTY });
-  }
-  const b = a.benchStats;
-  rows.push({ portfolio: a.benchLabel, mu: b.mu, sigma: b.sigma, sharpe: b.sharpe, sortino: b.sortino, mdd: maxDrawdown(a.bench) });
-  return tableState({ columns: SUMMARY_COLUMNS, rows }, "the summary comparison");
 }
 
 // ---- the two bar charts (1534-1572) ----------------------------------------------------------------

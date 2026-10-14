@@ -336,6 +336,10 @@ check(revealLeft(400, 90, 0, 200) === 314 && revealLeft(0, 90, 314, 200) === 0 &
   check([...fresh.container.querySelectorAll(".more-button")].every((b) => b.getAttribute("aria-expanded") === "false"),
     "more: forgetMore (a reload) starts every row closed");
   fresh.unmount();
+  // jsdom lays nothing out, so the rule is read as text: the list's one grid track may shrink below its content, or a
+  // wide table in an open row (Build's scorecard) widens the list, and the page with it, past the screen.
+  check(/\.more \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/.test(css("MoreList.css")),
+    "more: the list's track may shrink below its content, so an open row's wide table never widens the page");
   check(!/localStorage|sessionStorage/.test(readFileSync(new URL("../src/components/MoreList.tsx", import.meta.url), "utf8")),
     "more: the open rows live in memory for the visit, never in storage");
 }

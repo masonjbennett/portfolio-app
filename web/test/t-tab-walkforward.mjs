@@ -29,7 +29,7 @@ const { parseRfSeries } = await import("../src/state/rfwindow.ts");
 const { analyze } = await import("../src/state/analyze.ts");
 const { ADDED_IDS, CAP_MIN_ASSETS } = await import("../src/lib/constructions.ts");
 const { columnFigures } = await import("../src/tabs/optimization/scorecard.ts");
-const { customWeights, tiles } = await import("../src/tabs/optimization/model.ts");
+const { customWeights, portRow, weightsOf } = await import("../src/tabs/optimization/model.ts");
 const { WALK_TIPS } = await import("../src/tabs/walkforward/tips.ts");
 const { exampleAnalysis, examplePayload, fixtureAnalysis, settingsFor, ORACLE_RF } = await import("./_analysis.mjs");
 
@@ -375,11 +375,15 @@ for (const [name, a] of [
 // ---- 4. the in-sample column against the Optimization tab -------------------------------------------------------
 
 {
-  const tl = tiles(EX);
+  // Build's Sharpe ratio for each mix, as its scorecard prints it (portRow, the figure the three plates printed).
+  const sharpeOf = (id) => {
+    const w = weightsOf(EX, id);
+    return w ? portRow(EX, w).sharpe : null;
+  };
   const { w } = expected(EX, NONE, W.DEFAULT_WALK, false);
   const rows = L.liveRows(EX, w);
   const byPort = { ew: "ew", gmv: "gmv", tan: "tangency" };
-  const bad = rows.filter((r) => byPort[r.key]).filter((r) => format(r.inSample, "num3") !== format(tl.find((t) => t.id === byPort[r.key]).row?.sharpe ?? null, "num3"));
+  const bad = rows.filter((r) => byPort[r.key]).filter((r) => format(r.inSample, "num3") !== format(sharpeOf(byPort[r.key]), "num3"));
   check(bad.length === 0, "in-sample: at a flat rate the column prints the Optimization tab's Sharpe ratio for equal weight, GMV and tangency", bad.map((r) => r.key).join());
   check(format(rows.find((r) => r.key === "bench").inSample, "num3") === format(EX.benchStats.sharpe, "num3"), "in-sample: the benchmark's is the band's benchmark Sharpe ratio");
   const per = expected(EX, SERIES, W.DEFAULT_WALK, true).w;
