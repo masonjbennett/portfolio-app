@@ -17,7 +17,7 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-weight: 400;
-  font-size: 16px;
+  font-size: var(--type-3);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }

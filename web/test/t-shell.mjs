@@ -59,7 +59,11 @@ check(JSON.stringify(tokens.color) === JSON.stringify({
   paper: "#faf3ea", ink: "#262421", ink2: "#33302c", teal: "#0d6d56", navy: "#1f5a9e", plum: "#6d549e",
   claret: "#990f3d", bronze: "#b0741e", red: "#b2342b", hairline: "#ddcfb8", hairline2: "#e9ddc9",
   up: "#0d6d56", down: "#b2342b",
-}), "tokens: the brand palette, exactly");
+  fund1: "#3d3832", fund2: "#5a534a", fund3: "#756d61", fund4: "#877e71", fund5: "#94897a",
+  card: "#fffdf9", cardline: "#e3d5bf",
+}), "tokens: the brand palette, the funds' ink ramp and the card, exactly");
+check(JSON.stringify(Object.values(tokens.type)) === JSON.stringify(["12px", "14px", "16px", "20px", "30px", "44px"]),
+  "tokens: one type scale, 12 / 14 / 16 / 20 / 30 / 44", JSON.stringify(tokens.type));
 const base = read("src/styles/base.css");
 const undefinedVars = [...base.matchAll(/var\((--[a-z0-9-]+)/g)].map((m) => m[1]).filter((v) => !cssVars.has(v));
 check(!undefinedVars.length, "base.css: every var() it reads is a token", undefinedVars.join(" "));

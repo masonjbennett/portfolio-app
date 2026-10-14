@@ -8,12 +8,13 @@ import { tokens } from "../styles/tokens.ts";
 
 const c = tokens.color;
 
-// Assets by position in the ticker list, the app's CHART_COLORS[i % 10] (47-50) in its hue order:
-// blue #2E86AB -> navy, orange #F18F01 -> bronze, red #E74C3C -> claret, green #2ECC71 -> teal,
-// purple #9B59B6 -> plum. Five chromatic tokens, so the sixth asset takes the first colour again;
-// charts label assets directly, so a repeat is never the only way to tell two apart. Red is kept
-// for market down and ink for the benchmark, so neither is ever an asset.
-export const SERIES: readonly string[] = [c.navy, c.bronze, c.claret, c.teal, c.plum];
+// Assets by position in the ticker list, in the funds' ink ramp, darkest first. The app draws assets
+// in its CHART_COLORS (47-50), the same hues it gives the portfolios, so a fund and a mix could share a
+// colour (the second asset and the tangency mix were both orange). Here colour means a mix and a fund
+// is a warm grey: five greys, so the sixth asset takes the first again, and since charts label assets
+// directly, a grey is never the only way to tell two apart. Red is kept for market down and ink for
+// the benchmark, so neither is ever an asset.
+export const SERIES: readonly string[] = [c.fund1, c.fund2, c.fund3, c.fund4, c.fund5];
 
 // The colour of the i-th series, cycling; a negative index cycles backwards instead of failing.
 export function seriesColor(i: number): string {

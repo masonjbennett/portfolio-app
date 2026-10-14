@@ -19,6 +19,17 @@
   --color-up: #0d6d56;
   --color-down: #b2342b;
 
+  /* The funds' ink ramp, darkest first: colour on a chart means a mix, never a fund. */
+  --color-fund1: #3d3832;
+  --color-fund2: #5a534a;
+  --color-fund3: #756d61;
+  --color-fund4: #877e71;
+  --color-fund5: #94897a;
+
+  /* A card: flat paper a shade lighter than the page, inside one hairline. */
+  --color-card: #fffdf9;
+  --color-cardline: #e3d5bf;
+
   /* Instrument Serif for headlines, Space Grotesk for body, JetBrains Mono for numbers. */
   --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
   --font-sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -33,6 +44,21 @@
   --space-6: 32px;
   --space-7: 48px;
   --space-8: 64px;
+
+  /* Type scale: 6 is the page's one serif question, 5 a chapter's serif finding (and the question on
+     a phone), 3 body and a card's title, 2 secondary text, 1 the smallest. */
+  --type-1: 12px;
+  --type-2: 14px;
+  --type-3: 16px;
+  --type-4: 20px;
+  --type-5: 30px;
+  --type-6: 44px;
+
+  /* The gap between sections, in place of hairline dividers; a phone's is tighter. */
+  --gap-section: 40px;
+  --gap-phone: 28px;
+
+  --radius-card: 4px;
 
   /* Rule widths: a hairline, and the teal bar a section Slug sits on it with. */
   --line-hair: 1px;

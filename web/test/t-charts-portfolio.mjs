@@ -13,7 +13,8 @@
 //     app's path a day in, every line named at its end; ledger:daily-rebalanced-label. Two lines that end
 //     together (Custom at equal weights on Equal-Weight) keep the app's order whichever way rounding tips
 //     them, ends apart are never drawn as one, and the caption says Custom covers Equal-Weight exactly then.
-// (h) every name drawn reads on paper at WCAG AA (4.5:1): bronze names are set in ink2 (src/charts/contrast.ts).
+// (h) every name drawn reads on paper at WCAG AA (4.5:1): bronze names and the two lightest fund greys
+//     are set in ink2 (src/charts/contrast.ts).
 import { render, text, act } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import { check, near, nearAll, done } from "./_assert.mjs";
@@ -166,8 +167,8 @@ for (const [name, a] of [["long-only", long], ["shorting", short]]) {
     fillOf("Equal-Weight") === ROLE.ew && fillOf("Custom") === ROLE.custom && fillOf(a.benchLabel) === ROLE.bench &&
     fillOf("Efficient frontier") === ROLE.frontier && fillOf("Capital allocation line") === ROLE.cal,
     `frontier ${name}: each name is in its point's colour, where that colour reads as text`);
-  check(colors[a.tickers[1]] === tokens.color.bronze && fillOf(a.tickers[1]) === tokens.color.ink2 && fillOf("Tangency") === tokens.color.ink2 && readable(ls),
-    `frontier ${name}: every name reads on paper at 4.5:1; the bronze ones (${a.tickers[1]}, Tangency) are set in ink2`, JSON.stringify(ls.map((l) => [l.text, l.fill])));
+  check(!Object.values(colors).includes(tokens.color.bronze) && fillOf("Tangency") === tokens.color.ink2 && readable(ls),
+    `frontier ${name}: every name reads on paper at 4.5:1; Tangency's bronze is set in ink2, and no asset is bronze`, JSON.stringify(ls.map((l) => [l.text, l.fill])));
   const markFill = (role) => root.querySelector(`.frontier-mark--${role} .recharts-symbols`)?.getAttribute("fill");
   check(["gmv", "tangency", "ew", "custom"].every((role) => markFill(role) === ROLE[role]), `frontier ${name}: each marker in its role's colour`,
     ["gmv", "tangency", "ew", "custom"].map(markFill).join(" "));
@@ -377,9 +378,14 @@ const W0 = o.w0;
   check(Math.abs(contrastRatio(tokens.color.bronze, paper) - 3.56) < 0.005 && Math.abs(contrastRatio(tokens.color.ink2, paper) - 11.92) < 0.005 &&
     contrastRatio(paper, tokens.color.bronze) === contrastRatio(tokens.color.bronze, paper),
     "contrast: bronze on paper is 3.56:1 and ink2 11.92:1, either way round", `${contrastRatio(tokens.color.bronze, paper)} ${contrastRatio(tokens.color.ink2, paper)}`);
-  check(TEXT_AA === 4.5 && SERIES.every((s) => (s === tokens.color.bronze ? labelFill(s) === tokens.color.ink2 : labelFill(s) === s)) &&
-    Object.values(ROLE).every((s) => contrastRatio(labelFill(s), paper) >= TEXT_AA),
-    "contrast: every series and role colour names its own label, except bronze, which is set in ink2", SERIES.map(labelFill).join(" "));
+  check(TEXT_AA === 4.5 && Object.values(ROLE).every((s) => (s === tokens.color.bronze ? labelFill(s) === tokens.color.ink2 : labelFill(s) === s)) &&
+    [...SERIES, ...Object.values(ROLE)].every((s) => contrastRatio(labelFill(s), paper) >= TEXT_AA),
+    "contrast: every role colour names its own label, except bronze, which is set in ink2; every label reads", Object.values(ROLE).map(labelFill).join(" "));
+  // The funds' ramp: every grey clears 3:1, what WCAG asks of a line a reader needs (1.4.11); the
+  // three darkest name their own labels and the two lightest label in ink2.
+  check(SERIES.every((s) => contrastRatio(s, paper) >= 3) &&
+    JSON.stringify(SERIES.map(labelFill)) === JSON.stringify([...SERIES.slice(0, 3), tokens.color.ink2, tokens.color.ink2]),
+    "contrast: every fund grey clears 3:1 on paper; the two lightest label in ink2", SERIES.map((s) => contrastRatio(s, paper).toFixed(2)).join(" "));
   // The wealth chart's hover box: each line's value in the line's colour, the same rule.
   const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
   const r = render(h(W.DateTip, { active: true, label: long.dates[0], payload: [

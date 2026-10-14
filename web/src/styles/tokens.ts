@@ -17,6 +17,17 @@ export const tokens = {
     hairline2: "#e9ddc9",
     up: "#0d6d56",
     down: "#b2342b",
+    // The funds' ink ramp, darkest first: assets are drawn in warm greys so that colour means a mix
+    // (GMV teal, tangency bronze, equal weight plum, custom claret) and never a fund as well. Each
+    // clears 3:1 on paper, what WCAG asks of a line a reader needs; fund4 and fund5 label in ink2.
+    fund1: "#3d3832",
+    fund2: "#5a534a",
+    fund3: "#756d61",
+    fund4: "#877e71",
+    fund5: "#94897a",
+    // A card: flat paper a shade lighter than the page, inside one hairline (the site's card).
+    card: "#fffdf9",
+    cardline: "#e3d5bf",
   },
   font: {
     serif: '"Instrument Serif", Georgia, "Times New Roman", serif',
@@ -32,6 +43,24 @@ export const tokens = {
     6: "32px",
     7: "48px",
     8: "64px",
+  },
+  // The type scale. 6 is the page's one serif question, 5 a chapter's serif finding (and the question
+  // on a phone), 3 body and a card's title, 2 secondary text, 1 the smallest.
+  type: {
+    1: "12px",
+    2: "14px",
+    3: "16px",
+    4: "20px",
+    5: "30px",
+    6: "44px",
+  },
+  // The gap between sections, which replaces the hairline dividers; a phone's is tighter.
+  gap: {
+    section: "40px",
+    phone: "28px",
+  },
+  radius: {
+    card: "4px",
   },
   line: {
     hair: "1px",

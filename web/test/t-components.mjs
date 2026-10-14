@@ -1,5 +1,5 @@
-// The shared components that are not tables: the error boundary, the pill row, and the formats every
-// printed number goes through. Boundaries only work in a CLIENT render (server rendering never runs
+// The shared components that are not tables: the error boundary, the pill row, the card, the More
+// list, the glossary term, and the formats every printed number goes through. Boundaries only work in a CLIENT render (server rendering never runs
 // one), so this suite renders through test/_dom.mjs's jsdom window.
 import { render, text, act, expectUncaught } from "./_dom.mjs";
 import { readFileSync } from "node:fs";
@@ -11,6 +11,12 @@ const Plate = (await import("../src/components/Plate.tsx")).default;
 const SegModule = await import("../src/components/SegControl.tsx");
 const SegControl = SegModule.default;
 const { revealLeft } = SegModule;
+const CardModule = await import("../src/components/Card.tsx");
+const Card = CardModule.default;
+const MoreModule = await import("../src/components/MoreList.tsx");
+const MoreList = MoreModule.default;
+const Term = (await import("../src/components/Term.tsx")).default;
+const { GLOSSARY } = await import("../src/content/glossary.ts");
 const F = await import("../src/format.ts");
 const { format, DASH, MINUS, EXCEL_FORMATS, FORMATS, excelSerial } = F;
 
@@ -239,6 +245,133 @@ check(revealLeft(400, 90, 0, 200) === 314 && revealLeft(0, 90, 314, 200) === 0 &
       else delete P[k];
     }
   }
+}
+
+// ---- Card -------------------------------------------------------------------------------------
+
+{
+  let drew = 0;
+  const Numbers = () => {
+    drew++;
+    return h("table", { className: "probe-numbers" });
+  };
+  const r = render(h(Card, {
+    title: "The best-tradeoff mix led", sub: "One line under the title.", id: "probe-card",
+    numbers: h(Numbers), how: h("p", null, "In plain words."), downloads: h("a", { href: "#" }, "CSV"),
+  }, h("svg", { className: "probe-chart" })));
+  const card = r.container.querySelector("section.card");
+  const title = card?.querySelector("h3.card-title");
+  check(card?.id === "probe-card" && card.getAttribute("aria-labelledby") === title?.id && text(title) === "The best-tradeoff mix led",
+    "card: a section named by its title, with the anchor id it was given");
+  check(text(card.querySelector(".card-sub")) === "One line under the title." && !!card.querySelector(".card-body svg.probe-chart") &&
+    text(card.querySelector(".card-downloads")) === "CSV", "card: the sub-line, the chart slot and the download row");
+  const buttons = [...card.querySelectorAll(".card-fold-button")];
+  check(buttons.map(text).join("|") === "Show the numbers|How it is calculated" &&
+    CardModule.FOLD_LABELS.numbers === "Show the numbers" && CardModule.FOLD_LABELS.how === "How it is calculated",
+    "card: two folds, \"Show the numbers\" then \"How it is calculated\"", buttons.map(text).join("|"));
+  const bodies = buttons.map((b) => document.getElementById(b.getAttribute("aria-controls")));
+  check(buttons.every((b) => b.getAttribute("aria-expanded") === "false") && bodies.every((d) => d?.hidden) && drew === 0,
+    "card: both folds start closed, and a closed fold's contents are not drawn", `drew ${drew}`);
+  act(() => buttons[0].click());
+  check(buttons[0].getAttribute("aria-expanded") === "true" && !bodies[0].hidden && bodies[1].hidden && drew === 1 &&
+    !!bodies[0].querySelector("table.probe-numbers"), "card: opening one fold draws it and leaves the other closed");
+  act(() => buttons[0].click());
+  check(buttons[0].getAttribute("aria-expanded") === "false" && bodies[0].hidden && !!bodies[0].querySelector("table.probe-numbers") && drew === 1,
+    "card: a closed fold keeps what it drew, hidden, and does not draw it again", `drew ${drew}`);
+  r.unmount();
+
+  const bare = render(h(Card, { title: "Only a title" }));
+  check(!bare.container.querySelector(".card-folds, .card-body, .card-sub, .card-downloads"), "card: what is not given is not drawn");
+  bare.unmount();
+  const cardCss = css("Card.css");
+  check(/border: var\(--line-hair\) solid var\(--color-cardline\)/.test(block(cardCss, ".card")) && !/box-shadow/.test(cardCss) &&
+    /var\(--color-card\)/.test(block(cardCss, ".card")) && /font-family: var\(--font-sans\)/.test(block(cardCss, ".card-title")),
+    "card: flat paper in one hairline, no shadow, the title in Space Grotesk");
+}
+
+// ---- MoreList ---------------------------------------------------------------------------------
+
+{
+  MoreModule.forgetMore();
+  const drew = { a: 0, b: 0 };
+  const Probe = ({ k }) => {
+    drew[k]++;
+    return h("div", { className: `probe-${k}` });
+  };
+  const rows = [
+    { key: "years", title: "Calendar years", finding: "Best and worst year side by side.", children: h(Probe, { k: "a" }) },
+    { key: "falls", title: "How deep the falls went", finding: "The worst fall.", children: h(Probe, { k: "b" }) },
+  ];
+  const el = () => h(MoreList, { id: "perf", rows });
+  const r = render(el());
+  const list = r.container.querySelector("section.more");
+  const heading = list?.querySelector(".more-head");
+  check(list?.getAttribute("aria-labelledby") === heading?.id && text(heading) === "More", "more: a section named by its heading, \"More\" by default");
+  const btn = () => [...r.container.querySelectorAll(".more-button")];
+  check(btn().map((b) => text(b.querySelector(".more-title")) + "/" + text(b.querySelector(".more-finding"))).join("|") ===
+    "Calendar years/Best and worst year side by side.|How deep the falls went/The worst fall.",
+    "more: each row shows its title and its finding", btn().map(text).join("|"));
+  check(btn().every((b) => b.getAttribute("aria-expanded") === "false" && document.getElementById(b.getAttribute("aria-controls"))?.hidden) &&
+    drew.a === 0 && drew.b === 0, "more: every row starts closed, and nothing inside a closed row is drawn");
+  check([...r.container.querySelectorAll(".more-row")].map((d) => d.id).join() === "perf-years,perf-falls", "more: each row is anchored as <list>-<key>");
+  act(() => btn()[1].click());
+  check(btn()[1].getAttribute("aria-expanded") === "true" && !!r.container.querySelector(".probe-b") && drew.a === 0 &&
+    MoreModule.isMoreOpen("perf", "falls") && text(btn()[1].querySelector(".more-chev")) === "−",
+    "more: a row opens in place, draws its card, and its plus turns to a minus");
+  r.unmount();
+  // Left and come back to (a chapter switch unmounts the list): the open row is still open.
+  const back = render(el());
+  const again = [...back.container.querySelectorAll(".more-button")];
+  check(again[1].getAttribute("aria-expanded") === "true" && again[0].getAttribute("aria-expanded") === "false" &&
+    !!back.container.querySelector(".probe-b"), "more: an open row is remembered for the visit, across an unmount");
+  act(() => MoreModule.openMore("perf", "years"));
+  check(again[0].getAttribute("aria-expanded") === "true" && !!back.container.querySelector(".probe-a"),
+    "more: openMore opens a row from outside, on a list already drawn");
+  act(() => again[1].click());
+  check(again[1].getAttribute("aria-expanded") === "false" && document.getElementById(again[1].getAttribute("aria-controls")).hidden &&
+    !!back.container.querySelector(".probe-b"), "more: closing a row hides it and keeps its card drawn");
+  back.unmount();
+  MoreModule.forgetMore();
+  const fresh = render(el());
+  check([...fresh.container.querySelectorAll(".more-button")].every((b) => b.getAttribute("aria-expanded") === "false"),
+    "more: forgetMore (a reload) starts every row closed");
+  fresh.unmount();
+  check(!/localStorage|sessionStorage/.test(readFileSync(new URL("../src/components/MoreList.tsx", import.meta.url), "utf8")),
+    "more: the open rows live in memory for the visit, never in storage");
+}
+
+// ---- Term and the glossary ----------------------------------------------------------------------
+
+{
+  // A definition carries no figure; the one exception is the ends of a correlation's scale, -1 and 1.
+  const figure = (t) => /\d/.test(t.replace(/−1|\b1\b/g, ""));
+  const entries = Object.entries(GLOSSARY);
+  check(entries.length >= 7 && entries.every(([, e]) => e.name && e.text && !figure(e.text)),
+    "glossary: every entry has a name and a text, and no text carries a figure", entries.filter(([, e]) => figure(e.text)).map(([k]) => k).join(" "));
+  const r = render(h("div", null, h("p", null, "The ", h(Term, { k: "sharpe" }), " and ", h(Term, { k: "hindsight" }, "with hindsight"), "."),
+    h("button", { className: "elsewhere" }, "x")));
+  const marks = [...r.container.querySelectorAll(".term-mark")];
+  check(marks.map(text).join("|") === "Sharpe ratio|with hindsight" && marks.every((m) => m.tagName === "BUTTON" && m.type === "button"),
+    "term: the sentence's own words (the entry's name when none are given), as a button Tab reaches", marks.map(text).join("|"));
+  const pop = (m) => document.getElementById(m.getAttribute("aria-controls"));
+  check(marks.every((m) => m.getAttribute("aria-expanded") === "false" && pop(m)?.hidden), "term: definitions start closed");
+  act(() => marks[1].click());
+  const g = GLOSSARY.hindsight;
+  check(marks[1].getAttribute("aria-expanded") === "true" && !pop(marks[1]).hidden &&
+    text(pop(marks[1]).querySelector(".term-name")) === `${g.name} (${g.technical})` &&
+    text(pop(marks[1])).endsWith(g.text),
+    "term: a click opens the plain name, the technical name beside it, and the definition", text(pop(marks[1])));
+  marks[1].focus();
+  act(() => document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  check(marks[1].getAttribute("aria-expanded") === "false" && pop(marks[1]).hidden && document.activeElement === marks[1],
+    "term: Escape closes it and keeps focus on the term");
+  act(() => marks[0].click());
+  act(() => r.container.querySelector(".elsewhere").dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true })));
+  check(marks[0].getAttribute("aria-expanded") === "false" && pop(marks[0]).hidden, "term: a tap elsewhere closes it");
+  act(() => marks[0].click());
+  act(() => marks[0].click());
+  check(marks[0].getAttribute("aria-expanded") === "false", "term: a second tap closes it");
+  r.unmount();
 }
 
 // ---- format -----------------------------------------------------------------------------------

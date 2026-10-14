@@ -1,0 +1,87 @@
+/* A More list: rows between hairlines, each a title, its finding and a plus that turns to a minus. */
+.more {
+  display: grid;
+}
+
+.more-head {
+  margin: 0 0 6px;
+  color: var(--color-fund2);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--type-1);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.more-row {
+  border-top: var(--line-hair) solid var(--color-hairline);
+}
+
+.more-row:last-child {
+  border-bottom: var(--line-hair) solid var(--color-hairline);
+}
+
+.more-button {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 24px;
+  gap: var(--space-4);
+  align-items: baseline;
+  width: 100%;
+  min-height: 44px;
+  padding: 13px var(--space-1);
+  border: 0;
+  background: none;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.more-button:hover .more-title,
+.more-row[data-open] .more-title {
+  color: var(--color-teal);
+}
+
+.more-title {
+  font-weight: 600;
+  font-size: var(--type-2);
+}
+
+.more-finding {
+  color: var(--color-ink2);
+  font-size: var(--type-2);
+}
+
+.more-chev {
+  color: var(--color-teal);
+  font-size: 18px;
+  line-height: 1;
+  text-align: right;
+}
+
+.more-body {
+  padding: var(--space-1) 0 var(--space-5);
+}
+
+.more-body[hidden] {
+  display: none;
+}
+
+/* Phone: 760px, tokens.breakpoint.phone. The finding goes under the title. */
+@media (max-width: 760px) {
+  .more-button {
+    grid-template-columns: minmax(0, 1fr) 24px;
+    gap: var(--space-1) var(--space-3);
+  }
+
+  .more-finding {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .more-chev {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}

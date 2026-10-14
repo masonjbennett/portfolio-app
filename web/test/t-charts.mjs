@@ -55,8 +55,10 @@ check(borders.length > 0 && borders.every((v) => TOKEN_COLORS.has(v)), "charts: 
 
 const { SERIES, seriesColor, assetColors, ROLE } = theme;
 check(SERIES.length === 5 && new Set(SERIES).size === SERIES.length, "charts: five distinct asset colours", SERIES.join(" "));
-check(JSON.stringify(SERIES) === JSON.stringify([c.navy, c.bronze, c.claret, c.teal, c.plum]),
-  "charts: assets follow the app's CHART_COLORS hue order (blue, orange, red, green, purple -> navy, bronze, claret, teal, plum)", SERIES.join(" "));
+check(JSON.stringify(SERIES) === JSON.stringify([c.fund1, c.fund2, c.fund3, c.fund4, c.fund5]),
+  "charts: assets are the funds' ink ramp, darkest first", SERIES.join(" "));
+check(Object.values(ROLE).every((r) => !SERIES.includes(r)),
+  "charts: no asset shares a colour with a mix, the benchmark, the frontier or the CAL", SERIES.join(" "));
 check(!SERIES.includes(c.red) && !SERIES.includes(c.ink) && !SERIES.includes(c.ink2) && !SERIES.includes(c.paper) && !SERIES.includes(c.hairline),
   "charts: no asset is drawn in market-down red, the benchmark's ink, or the paper and hairlines");
 let cycles = true;

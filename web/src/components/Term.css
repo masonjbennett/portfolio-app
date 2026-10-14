@@ -1,0 +1,74 @@
+/* A glossary term: the sentence's own words with a dotted underline; the definition in an ink box. */
+.term {
+  position: relative;
+}
+
+.term-mark {
+  appearance: none;
+  display: inline;
+  padding: 0;
+  border: 0;
+  border-bottom: var(--line-hair) dotted var(--color-fund2);
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: help;
+}
+
+.term-mark:hover,
+.term[data-open] .term-mark {
+  border-bottom-color: var(--color-teal);
+  color: var(--color-teal);
+}
+
+.term-text {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: 18rem;
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+}
+
+.term-text[hidden] {
+  display: none;
+}
+
+.term-name {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.term-tech {
+  font-weight: 400;
+}
+
+/* Phone (760px, tokens.breakpoint.phone): along the bottom of the screen, full width, as the info
+   marks do, where no edge can clip it. */
+@media (max-width: 760px) {
+  .term-text {
+    position: fixed;
+    top: auto;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    left: var(--space-4);
+    width: auto;
+    max-width: none;
+  }
+}

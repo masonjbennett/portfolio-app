@@ -1,0 +1,85 @@
+/* A card: flat paper inside one hairline, no shadow (the site's own card). The title is Space Grotesk:
+   the serif is kept for the one headline a screen. */
+.card {
+  min-width: 0;
+  padding: var(--space-5);
+  border: var(--line-hair) solid var(--color-cardline);
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+}
+
+.card-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--type-3);
+  line-height: 1.35;
+}
+
+.card-sub {
+  margin: var(--space-1) 0 0;
+  color: var(--color-ink2);
+  font-size: var(--type-2);
+  line-height: 1.45;
+}
+
+.card-body {
+  margin-top: var(--space-4);
+}
+
+.card-folds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) 18px;
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: var(--line-hair) solid var(--color-hairline2);
+}
+
+.card-fold-button {
+  appearance: none;
+  min-height: 32px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--color-teal);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.card-fold-button::before {
+  content: "+ ";
+}
+
+.card-fold-button[aria-expanded="true"]::before {
+  content: "\2212  ";
+}
+
+.card-fold-body {
+  padding: 6px 0 var(--space-1);
+  color: var(--color-ink2);
+  font-size: var(--type-2);
+}
+
+.card-fold-body[hidden] {
+  display: none;
+}
+
+.card-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: var(--space-2);
+}
+
+/* Phone: 760px, tokens.breakpoint.phone. A tighter card, and folds a thumb can hit. */
+@media (max-width: 760px) {
+  .card {
+    padding: var(--space-4);
+  }
+
+  .card-fold-button {
+    min-height: 44px;
+  }
+}
