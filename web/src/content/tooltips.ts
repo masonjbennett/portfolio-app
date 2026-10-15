@@ -118,6 +118,18 @@ export const PLAIN_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Lev
 // Lines added after a tip's text, whatever the shorting toggle says. The ± on the tangency Sharpe plate is
 // sharpeSE in lib/stats.ts, and it treats the weights as if they had been fixed before the window began.
 // They were not: they were solved on the same prices, so each level says the true spread is wider.
+// A fifth (METHOD_OVERRIDES): texts that describe the app's arithmetic where the page computes differently.
+// Alpha's formula names the daily intercept; the page regresses monthly returns over 36 full months or more
+// (FDA2 Week 5, 5.4.6) and gives the intercept a Newey-West error (5.4.4). t-ledger's "monthly-capm".
+export const METHOD_OVERRIDES: Readonly<Partial<Record<TipKey, Partial<Record<Level, WordOverride>>>>> = {
+  alpha: {
+    formula: {
+      was: "Jensen's α (annualized): α_annual = â × 252, where â is the daily OLS intercept from rᵢ − rf = α + β(rₘ − rf) + ε. Significance depends on sample size and residual structure.",
+      now: "Jensen's α (annualized): α_annual = â × 12, where â is the OLS intercept from rᵢ − rf = α + β(rₘ − rf) + ε on monthly excess returns (rf / 12), over the window's full months; under 36 of them, â × 252 on daily ones. Its t-stat uses a Newey-West standard error, L = ⌊4 (T/100)^(2/9)⌋ lags.",
+    },
+  },
+};
+
 export const NOTES: Readonly<Partial<Record<TipKey, Partial<Record<Level, string>>>>> = {
   best_sharpe: {
     plain:
@@ -163,6 +175,7 @@ export type ScoreTipKey =
   | "calmar"
   | "correlation"
   | "r_squared"
+  | "alpha_t"
   | "tracking_error"
   | "information_ratio"
   | "capture"
@@ -229,9 +242,14 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     formula: "ρ = cov(r, b) / (σᵣ σ_b), over the window's daily returns.",
   },
   r_squared: {
-    plain: "How much of the portfolio's daily movement the benchmark explains, from 0% to 100%.",
-    finance: "R² of the single-index regression on the benchmark: the share of the portfolio's variance the benchmark explains.",
-    formula: "R² = ρ², the squared correlation of daily returns.",
+    plain: "How much of the portfolio's movement the benchmark explains, from 0% to 100%, over the same months (or days) as the beta.",
+    finance: "R² of the single-index regression the beta comes from: the share of the portfolio's variance the benchmark explains. Monthly excess returns over 36 full months or more, daily ones under.",
+    formula: "R² = ρ² of the regression's own returns: monthly when the beta is monthly, so not always the square of the daily Correlation row.",
+  },
+  alpha_t: {
+    plain: "How many times its own margin of error the alpha is. Between −2 and 2, it cannot be told apart from zero over this window.",
+    finance: "Alpha over its Newey-West standard error, which allows for returns whose noise changes size and runs on from month to month. It describes this window; it is not evidence of a lasting skill.",
+    formula: "t = α̂ / SE_NW(α̂), SE from (X′X)⁻¹ S (X′X)⁻¹ with Bartlett weights 1 − l/(L+1), L = ⌊4 (T/100)^(2/9)⌋, T the months (or days) regressed.",
   },
   tracking_error: {
     plain: "How much the portfolio's day-to-day returns differ from the benchmark's, scaled to a year.",
@@ -331,6 +349,7 @@ export const SCORE_TIP_NAMES: Readonly<Record<ScoreTipKey, string>> = {
   calmar: "Calmar ratio",
   correlation: "correlation",
   r_squared: "R squared",
+  alpha_t: "alpha t-stat",
   tracking_error: "tracking error",
   information_ratio: "information ratio",
   capture: "up and down capture",
@@ -362,7 +381,7 @@ export function tipName(key: TipKey | ScoreTipKey): string {
 // say nothing about the bounds and so do not follow the toggle.
 export function tipText(key: TipKey | ScoreTipKey, level: Level, allowShort = false): string {
   if (isScoreTip(key)) return SCORE_TIPS[key][level];
-  const base = PLAIN_OVERRIDES[key]?.[level]?.now ?? WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
+  const base = METHOD_OVERRIDES[key]?.[level]?.now ?? PLAIN_OVERRIDES[key]?.[level]?.now ?? WORD_OVERRIDES[key]?.[level]?.now ?? ORACLE_TIPS[key]?.[level] ?? "";
   const text = allowShort ? (SHORT_OVERRIDES[key]?.[level]?.short ?? base) : base;
   const note = NOTES[key]?.[level];
   return text && note ? `${text} ${note}` : text;

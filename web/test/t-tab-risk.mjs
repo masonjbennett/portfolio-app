@@ -22,7 +22,7 @@ const { BETA_ABOVE, BETA_BELOW } = RC;
 const { format } = await import("../src/format.ts");
 const { csvText, cellFor } = await import("../src/download.ts");
 const { tipText } = await import("../src/content/tooltips.ts");
-const { drawdowns, annualizedStats } = await import("../src/lib/stats.ts");
+const { drawdowns, annualizedStats, capm, capmFit, fullMonths, alphaReading } = await import("../src/lib/stats.ts");
 const { monthYear } = await import("../src/chrome/when.ts");
 const { tokens } = await import("../src/styles/tokens.ts");
 
@@ -75,14 +75,28 @@ for (const set of ["cross", "megacap"]) {
   near(tag("benchmark Sharpe"), rr.at(-1).sharpe, o.bench.sharpe, REL);
   near(tag("benchmark Sortino"), rr.at(-1).sortino, o.bench.sortino, REL);
 
-  // CAPM (1377-1392), at t-parity's tiers; tickers only.
+  // CAPM (1377-1392); tickers only. The rows are capmFit's, the scorecard's own (ledger:monthly-capm): monthly at
+  // 36 full months, where the app's daily figures are held by the daily capm at t-parity's tiers; under 36, the
+  // app's daily figures themselves.
   const cr = M.capmRows(a);
   check(cr.length === a.tickers.length, tag("CAPM: tickers only, no benchmark row"));
-  cr.forEach((c) => {
-    near(tag(`${c.name} beta`), c.beta, o.capm[c.name].beta, 1e-11);
-    near(tag(`${c.name} alpha`), c.alphaAnn, o.capm[c.name].alphaAnn, 1e-9, 1e-13);
-    near(tag(`${c.name} R2`), c.r2, o.capm[c.name].r2, 1e-11);
+  cr.forEach((c, j) => {
+    const f = capmFit(a.returns[j], a.bench, a.dates, a.rf);
+    check(c.beta === f.beta && c.alphaAnn === f.alphaAnn && c.r2 === f.r2 && c.alphaT === f.alphaT && c.basis === f.basis,
+      tag(`ledger:monthly-capm ${c.name}: the table's row is the scorecard's capmFit`));
+    const d = c.basis === "daily" ? c : capm(a.returns[j], a.bench, a.rf);
+    near(tag(`${c.name} beta`), d.beta, o.capm[c.name].beta, 1e-11);
+    near(tag(`${c.name} alpha`), d.alphaAnn, o.capm[c.name].alphaAnn, 1e-9, 1e-13);
+    near(tag(`${c.name} R2`), d.r2, o.capm[c.name].r2, 1e-11);
   });
+  const nfull = fullMonths(a.dates);
+  check(cr.every((c) => c.basis === (nfull >= 36 ? "monthly" : "daily") && c.obs === (nfull >= 36 ? nfull : a.dates.length)),
+    tag(`ledger:monthly-capm the basis follows the window's ${nfull} full months`));
+  const how = M.capmMethod(cr, a.benchLabel);
+  check(nfull >= 36 ? how.includes(`over the window's ${nfull} full calendar months`) && how.includes("times 12") : how.includes("too few for a monthly beta") && how.includes("times 252"),
+    tag("ledger:monthly-capm the card's note says which returns it regressed"), how);
+  check(/t = [-−]?\d+\.\d\d\), is (not distinguishable from zero|above zero, beyond its noise|below zero, beyond its noise)/.test(how),
+    tag("ledger:monthly-capm the note's alpha carries its t and its reading, never bare"), how);
 
   // Drawdowns. The app's path (911-914, no start) reproduced against the dump; the port's path has
   // one more point, the start, and agrees with the app's wherever the high it falls from is a close
@@ -265,7 +279,7 @@ const o = oracle("cross");
   const cell = cellFor(rows[0].sharpe, M.RISK_COLUMNS[1]);
   check(cell?.t === "n" && cell.v === rows[0].sharpe && cell.z === "0.000", "ledger:numeric-downloads the port's Excel cell is a number with a 0.000 format", JSON.stringify(cell));
   const cap = M.capmTableRows(M.capmRows(a));
-  const alpha = cellFor(cap[0].alpha, M.CAPM_COLUMNS[2]);
+  const alpha = cellFor(cap[0].alpha, M.CAPM_COLUMNS.find((c) => c.key === "alpha"));
   check(alpha?.t === "n" && alpha.z === "0.00%" && alpha.v === cap[0].alpha, "ledger:numeric-downloads the CAPM alpha downloads as a number formatted 0.00%", JSON.stringify(alpha));
   const ddRows = M.drawdownRows(a);
   const low = cellFor(ddRows[0].low, M.DRAWDOWN_COLUMNS[3]);
@@ -328,8 +342,10 @@ const sectionOf = (r, id) => r.container.querySelector(`#perf-risk-${ROW_OF[id]}
     "tab: VTI's Sharpe and Sortino print at the app's 3 decimals", cells.join(" "));
   const capmCells = [...capmTable.querySelectorAll("tbody tr")][0];
   const cc = capmCells ? [...capmCells.children].map(text) : [];
-  check(JSON.stringify(cc) === JSON.stringify(["VTI", format(o.capm.VTI.beta, "num3"), format(o.capm.VTI.alphaAnn, "pct2"), format(o.capm.VTI.r2, "num3")]),
-    "tab: VTI's CAPM row prints the oracle's figures", cc.join(" "));
+  // The row prints capmFit's figures (ledger:monthly-capm, held to the oracle above where the basis is daily).
+  const vti = M.capmRows(a).find((c) => c.name === "VTI");
+  check(JSON.stringify(cc) === JSON.stringify(["VTI", format(vti.beta, "num3"), format(vti.betaSE, "num3"), format(vti.alphaAnn, "pct2"), format(vti.alphaT, "num2"), alphaReading(vti.alphaT), format(vti.r2, "num3")]),
+    "tab: VTI's CAPM row prints beta, its SE, alpha, its t and reading, and R²", cc.join(" "));
 
   // In-chart labels: the drawdown's low, every beta on its bar, every volatility line's name.
   const dd = sectionOf(r, "risk-drawdown");

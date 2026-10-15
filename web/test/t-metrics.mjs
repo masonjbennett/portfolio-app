@@ -14,7 +14,7 @@ import { monthlyReturns, monthStats, captureRatios } from "../src/lib/monthly.ts
 import {
   TRADING_DAYS, annualizedStats, maxDrawdown, capm, downsideDeviation, cumulativeReturn, annualReturn,
   longestDrawdown, calmar, correlation, trackingError, informationRatio, historicalTail, sharpeSE,
-  returnShare, SHARE_EPS, estimationLoad, loadVerdict, TN_WARN, TN_REFUSE, scorecardRow,
+  returnShare, SHARE_EPS, estimationLoad, loadVerdict, TN_WARN, TN_REFUSE, scorecardRow, capmFit, fullMonths, CAPM_MIN_MONTHS,
 } from "../src/lib/stats.ts";
 
 const REL = 1e-12;
@@ -102,23 +102,33 @@ for (const name of SETS) {
     near(`${L}: 95% one-day VaR`, t.var, x.var, REL);
     near(`${L}: 95% expected shortfall`, t.es, x.es, REL);
 
-    // The row builder: the oracle's figures, and exactly what the functions above return.
+    // The row builder: the oracle's figures, and exactly what the functions above return. Beta, alpha and R²
+    // are capmFit's (t-capm.mjs): monthly at 36 full months or more, which the oracle's daily figures are not;
+    // under that they are the daily capm, and so the oracle's.
     const row = scorecardRow(r, b, dates, start, o.rf);
-    near(`${L}: row r-squared`, row.r2, x.r2, REL);
-    near(`${L}: row beta`, row.beta, x.beta, REL);
-    near(`${L}: row alpha`, row.alphaAnn, x.alphaAnn, REL, FLOOR);
+    const cf = capmFit(r, b, dates, o.rf);
+    check(cf.basis === (fullMonths(dates) >= CAPM_MIN_MONTHS ? "monthly" : "daily"), `${L}: the CAPM basis follows the full months`);
+    if (cf.basis === "daily") {
+      near(`${L}: row r-squared`, row.r2, x.r2, REL);
+      near(`${L}: row beta`, row.beta, x.beta, REL);
+      near(`${L}: row alpha`, row.alphaAnn, x.alphaAnn, REL, FLOOR);
+    }
+    const dfit = capm(r, b, o.rf);
+    near(`${L}: the daily beta is the oracle's`, dfit.beta, x.beta, REL);
+    near(`${L}: the daily alpha is the oracle's`, dfit.alphaAnn, x.alphaAnn, REL, FLOOR);
     near(`${L}: row mu`, row.mu, x.mu, REL);
     near(`${L}: row volatility`, row.volatility, x.sigma, REL);
     near(`${L}: row Sharpe`, row.sharpe, x.sharpe, REL);
     near(`${L}: row Sortino`, row.sortino, x.sortino, REL);
     const s = annualizedStats(r, o.rf);
-    const fit = capm(r, b, o.rf);
+    const fit = cf;
     const direct = {
       annualReturn: annualReturn(r), cumulative: cumulativeReturn(r), mu: s.mu, bestMonth: ms.best,
       worstMonth: ms.worst, positiveMonths: ms.positive, completeMonths: ms.months, volatility: s.sigma,
       downside: downsideDeviation(r, o.rf), maxDrawdown: maxDrawdown(r, true), sharpe: s.sharpe,
       sharpeSE: sharpeSE(r, o.rf), sortino: s.sortino, calmar: calmar(r, true), beta: fit.beta,
-      alphaAnn: fit.alphaAnn, correlation: correlation(r, b), trackingError: trackingError(r, b),
+      betaSE: fit.betaSE, alphaAnn: fit.alphaAnn, alphaSE: fit.alphaSE, alphaT: fit.alphaT, capmBasis: fit.basis,
+      capmObs: fit.obs, r2: fit.r2, correlation: correlation(r, b), trackingError: trackingError(r, b),
       informationRatio: informationRatio(r, b), upCapture: cap.up, downCapture: cap.down,
       upMonths: cap.upMonths, downMonths: cap.downMonths, var95: t.var, es95: t.es,
     };

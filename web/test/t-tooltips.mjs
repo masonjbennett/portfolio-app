@@ -20,7 +20,7 @@ const read = (rel) => readFileSync(new URL(rel, web), "utf8");
 const app = readFileSync(new URL("../../portfolio_app.py", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const committed = read("src/content/tooltips.json");
 const TIPS = JSON.parse(committed);
-const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, PLAIN_OVERRIDES, TIP_NAMES, NOTES } = await import("../src/content/tooltips.ts");
+const { tipText, SHORT_OVERRIDES, WORD_OVERRIDES, PLAIN_OVERRIDES, METHOD_OVERRIDES, TIP_NAMES, NOTES } = await import("../src/content/tooltips.ts");
 const { LEVELS } = await import("../src/types.ts");
 const Tip = (await import("../src/components/Tip.tsx")).default;
 const { LEVEL_HEADS } = await import("../src/components/HowTips.tsx");
@@ -70,12 +70,12 @@ check(same(Object.keys(TIP_NAMES), keys), "tooltips: every key has an accessible
 // ---- (c) the app's text with shorting off ----------------------------------------------------------
 let mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
-  if (!WORD_OVERRIDES[key]?.[level] && !PLAIN_OVERRIDES[key]?.[level] && tipText(key, level) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
+  if (!WORD_OVERRIDES[key]?.[level] && !PLAIN_OVERRIDES[key]?.[level] && !METHOD_OVERRIDES[key]?.[level] && tipText(key, level) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
 }
 check(mismatches.length === 0, "tooltips: tipText is the app's text at every key and level with shorting off, bar the word overrides and closing lines", mismatches.join(" "));
 mismatches = [];
 for (const key of keys) for (const level of LEVEL_IDS) {
-  if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && !PLAIN_OVERRIDES[key]?.[level] && tipText(key, level, true) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
+  if (!SHORT_OVERRIDES[key]?.[level] && !WORD_OVERRIDES[key]?.[level] && !PLAIN_OVERRIDES[key]?.[level] && !METHOD_OVERRIDES[key]?.[level] && tipText(key, level, true) !== withNote(key, level, TIPS[key][level])) mismatches.push(`${key}/${level}`);
 }
 check(mismatches.length === 0, "tooltips: with shorting on, every text not overridden is still the app's", mismatches.join(" "));
 check(tipText("no_such_key", "plain") === "" && tipText("no_such_key", "formula", true) === "",
@@ -159,6 +159,22 @@ check(/\[-1, 1\] with shorting/.test(read("src/lib/optimize.ts")) && app.include
         `ledger:plain-tip-readings ${at} shows the replacement at both shorting settings, with no figure typed and without the misreading`, `${off} | ${on}`);
     }
   }
+}
+
+// ---- (d2c) ledger:monthly-capm -----------------------------------------------------------------------
+// The page regresses monthly returns where the app regresses daily ones, so the one app text that names the
+// daily intercept (alpha's formula) is replaced: exactly that one, read against the app's current words, at
+// both shorting settings, and no longer saying "daily" or "× 252" alone.
+{
+  const replaced = Object.entries(METHOD_OVERRIDES).flatMap(([k, byLevel]) => Object.keys(byLevel).map((l) => `${k}/${l}`));
+  check(same(replaced, ["alpha/formula"]), "ledger:monthly-capm only alpha's formula text is replaced for the method", replaced.join(" "));
+  const o = METHOD_OVERRIDES.alpha.formula;
+  check(o.was === TIPS.alpha.formula && /daily OLS intercept/.test(o.was), "ledger:monthly-capm the replaced text is the app's current one, which names the daily intercept", TIPS.alpha.formula);
+  const off = tipText("alpha", "formula", false);
+  check(off === o.now && tipText("alpha", "formula", true) === off && /monthly/.test(off) && /× 12/.test(off) && /Newey-West/.test(off) && !/daily OLS intercept/.test(off),
+    "ledger:monthly-capm alpha's formula tip names the monthly regression, × 12, and the Newey-West error at both settings", off);
+  const both = replaced.filter((at) => { const [k, l] = at.split("/"); return !!PLAIN_OVERRIDES[k]?.[l] || !!WORD_OVERRIDES[k]?.[l]; });
+  check(both.length === 0, "ledger:monthly-capm no text is replaced by two tables", both.join(" "));
 }
 
 // ---- (d3) ledger:sharpe-se-note -------------------------------------------------------------------

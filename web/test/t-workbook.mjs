@@ -17,7 +17,7 @@ const W = await import("../src/workbook.ts");
 const SC = await import("../src/tabs/optimization/scorecard.ts");
 const { CUSTOM_REFUSAL, failedLabel } = await import("../src/tabs/optimization/model.ts");
 const { portfolioReturns } = await import("../src/lib/portfolio.ts");
-const { scorecardRow } = await import("../src/lib/stats.ts");
+const { scorecardRow, fullMonths, CAPM_MIN_MONTHS } = await import("../src/lib/stats.ts");
 const { FITTED } = await import("../src/tabs/caption.ts");
 const { customWeights } = await import("../src/tabs/optimization/model.ts");
 const { exampleAnalysis, fixtureAnalysis } = await import("./_analysis.mjs");
@@ -45,7 +45,20 @@ for (const set of SETS) {
   const book = fromSheets(sheets);
   const cells = formulaCells(book);
   const ev = evaluator(book);
-  check(book.names.join("|") === "Notes|Prices|Returns|Weights|Daily|Scorecard", tag("sheets: Notes, Prices, Returns, Weights, Daily, Scorecard, in that order"), book.names.join("|"));
+  check(book.names.join("|") === "Notes|Prices|Returns|Weights|Daily|Monthly|Scorecard", tag("sheets: Notes, Prices, Returns, Weights, Daily, Monthly, Scorecard, in that order"), book.names.join("|"));
+  // Beta, alpha and R² read the Monthly sheet exactly when the page's are monthly; the cached value is the page's
+  // figure and check 1 below evaluates the formula, so a book that regressed other months than the page goes red.
+  {
+    const monthly = fullMonths(a.dates) >= CAPM_MIN_MONTHS;
+    const capmCells = cells.filter((x) => x.sheet === "Scorecard" && /^SLOPE\(|^CORREL\(.*\)\^2$|^\(\(AVERAGE\(/.test(x.cell.f));
+    const mrows = cells.filter((x) => x.sheet === "Monthly").map((x) => x.r);
+    check(capmCells.length > 0 && capmCells.every((x) => x.cell.f.includes("Monthly!") === monthly),
+      tag(`ledger:monthly-capm beta, alpha and R² read ${monthly ? "the Monthly sheet" : "Daily"}, as the page's ${monthly ? "monthly" : "daily"} regression does`), capmCells.map((x) => x.cell.f).slice(0, 3).join(" | "));
+    check(new Set(mrows).size === fullMonths(a.dates), tag("Monthly holds one row per full calendar month"), `${new Set(mrows).size} vs ${fullMonths(a.dates)}`);
+    const how = W.bookNotes(a, model, null).find(([l]) => l === "How each row is computed")[1];
+    check(monthly ? how.includes(`over the window's ${fullMonths(a.dates)} full calendar months`) : how.includes("Beta, alpha and R² regress the daily"),
+      tag("ledger:monthly-capm Notes says which returns beta, alpha and R² regress"), how);
+  }
 
   // Every formula cell: numeric, with a finite cached value, calling only known functions (the _xlfn. ones prefixed).
   const malformed = cells.filter((x) => x.cell.t !== "n" || !finite(x.cell.v) || x.cell.f.startsWith("="));

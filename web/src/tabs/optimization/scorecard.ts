@@ -22,7 +22,7 @@ import { ADDED_IDS, CAP, isAddedId, YEAR_ROWS, type AddedId } from "../../lib/co
 import type { Vec } from "../../lib/num.ts";
 import { portfolioReturns, type Custom } from "../../lib/portfolio.ts";
 import { fragility, REDRAWS, type Construction, type Fragility, type Redraws, type Strip } from "../../lib/robust.ts";
-import { scorecardRow, TRADING_DAYS, type ScoreRow } from "../../lib/stats.ts";
+import { CAPM_MIN_MONTHS, capmBasisWords, fullMonths, scorecardRow, TRADING_DAYS, type ScoreRow } from "../../lib/stats.ts";
 import type { ScoreTipKey } from "../../content/tooltips.ts";
 import type { Analysis, CellFormat, Column, FormatId, TableRow, TipKey } from "../../types.ts";
 import { FITTED, tableSpan } from "../caption.ts";
@@ -144,6 +144,7 @@ export const SCORE_METRICS: readonly ScoreMetric[] = [
   { id: "calmar", group: "adjusted", label: "Calmar", format: "num2", short: false, tip: "calmar", unit: RATIO, value: r((s) => s.calmar) },
   { id: "beta", group: "relative", label: "Beta", format: "num2", short: true, tip: "beta", unit: RATIO, value: r((s) => s.beta) },
   { id: "alpha", group: "relative", label: "Alpha, annual", format: "pct2", short: false, tip: "alpha", unit: DEC, value: r((s) => s.alphaAnn) },
+  { id: "alphaT", group: "relative", label: "Alpha t-stat, Newey-West", format: "num2", short: false, tip: "alpha_t", unit: RATIO, value: r((s) => s.alphaT) },
   { id: "corr", group: "relative", label: "Correlation", format: "num2", short: false, tip: "correlation", unit: RATIO, value: r((s) => s.correlation) },
   { id: "r2", group: "relative", label: "R²", format: "num2", short: false, tip: "r_squared", unit: RATIO, value: r((s) => s.r2) },
   { id: "te", group: "relative", label: "Tracking error", format: "pct2", short: true, tip: "tracking_error", unit: DEC, value: r((s) => s.trackingError) },
@@ -328,11 +329,14 @@ export function columnFigures(a: Analysis, c: Custom, redraws: Redraws | null, a
 }
 
 /** The caption's third line: the conventions every row follows. */
-export function scoreConventions(rf: number): string {
+export function scoreConventions(rf: number, dates: readonly string[]): string {
+  const months = fullMonths(dates);
+  const basis = capmBasisWords(months >= CAPM_MIN_MONTHS ? { basis: "monthly", obs: months } : { basis: "daily", obs: dates.length });
   return (
     `Annual figures at the ${format(rf, "pct2")} risk-free rate. Month rows and capture ratios compound the daily returns into ` +
     `complete calendar months; capture is the portfolio's average monthly return over the benchmark's, in the months the ` +
-    `benchmark rose (up) or fell (down). Tracking error is the standard deviation of daily active returns × √252. VaR and expected ` +
+    `benchmark rose (up) or fell (down). Beta, alpha and R² regress excess returns on the benchmark's, from ${basis}; alpha's ` +
+    `t-stat uses a Newey-West standard error. Tracking error is the standard deviation of daily active returns × √252. VaR and expected ` +
     `shortfall are historical, one day, at 95%. Drawdowns count from the amount invested. Sharpe prints ± one standard error ` +
     `(Lo, adjusted for skew and fat tails). Every figure is in-sample.`
   );
@@ -444,7 +448,7 @@ export function scorecard(a: Analysis, c: Custom, redraws: RedrawState, added: r
     lines,
     title: "Scorecard",
     span: tableSpan(a.dates[0], a.asOf),
-    conventions: extra ? `${scoreConventions(a.rf)} ${extra}` : scoreConventions(a.rf),
+    conventions: extra ? `${scoreConventions(a.rf, a.dates)} ${extra}` : scoreConventions(a.rf, a.dates),
     days: a.dates.length,
     seed: value ? value.seed : null,
     cut: cutWords(a, columns, figs),

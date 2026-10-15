@@ -2,7 +2,7 @@
 // Pure: it builds the cells, and src/download.ts writes them. It loads only when someone asks for the file
 // (a dynamic import from the scorecard's download row), never with the page.
 //
-// Six sheets:
+// Seven sheets:
 // - Notes: what the book is, the basket, the window, the rate, the conventions, and what is left out.
 // - Prices: the cleaned closes the page used, benchmark included, as values.
 // - Returns: each day's simple return as a formula on Prices (the close over the previous close, minus one).
@@ -12,6 +12,9 @@
 //   because SUMPRODUCT pairs a row with a row.
 // - Daily: per portfolio its daily return (fixed weights, rebalanced every day, as portfolioReturns does),
 //   then the running quantities the figures read, each one formula per row on the row above.
+// - Monthly: per portfolio its return in each full calendar month, the month-end wealth on Daily over the
+//   previous month-end's, minus one (the same compounding monthly.ts does). Beta, alpha and R² read it when the
+//   window holds 36 full months or more, as the page's do (capmFit in lib/stats.ts); under that they read Daily.
 // - Scorecard: the page's heads across, the benchmark last, and one row per figure.
 //
 // Every formula cell is saved with a value, and that value is the page's own number: for a scorecard
@@ -33,7 +36,7 @@ import { RF_SOURCE } from "./data/fred.ts";
 import { EXCEL_FORMATS, excelSerial, format } from "./format.ts";
 import type { Vec } from "./lib/num.ts";
 import { portfolioReturns } from "./lib/portfolio.ts";
-import { TRADING_DAYS } from "./lib/stats.ts";
+import { CAPM_MIN_MONTHS, MONTHS_A_YEAR, TRADING_DAYS } from "./lib/stats.ts";
 import { DEFAULT_AMOUNT } from "./state/defaults.ts";
 import type { Analysis, RfSource } from "./types.ts";
 import { FITTED } from "./tabs/caption.ts";
@@ -45,7 +48,7 @@ import { SCORE_GROUPS, SCORE_METRICS, type ScoreColumn, type ScoreMetric, type S
 export const BOOK_FILENAME = "scorecard_model";
 
 /** The sheets, in the book's order. */
-export const SHEETS = { notes: "Notes", prices: "Prices", returns: "Returns", weights: "Weights", daily: "Daily", score: "Scorecard" } as const;
+export const SHEETS = { notes: "Notes", prices: "Prices", returns: "Returns", weights: "Weights", daily: "Daily", monthly: "Monthly", score: "Scorecard" } as const;
 
 /** The scorecard rows the book computes, in the page's order; "sharpeSE" is the Sharpe row's standard error. */
 export const BOOK_ROWS = [
@@ -55,7 +58,7 @@ export const BOOK_ROWS = [
 export type BookRow = (typeof BOOK_ROWS)[number];
 
 /** The page's rows left to the values download, and why, as Notes says it. */
-export const LEFT_OUT_IDS = ["best", "worst", "positive", "up", "down", "longest", "longestCal", "lookback", "cut", "draws", "params"] as const;
+export const LEFT_OUT_IDS = ["alphaT", "best", "worst", "positive", "up", "down", "longest", "longestCal", "lookback", "cut", "draws", "params"] as const;
 
 /** The label of the standard error row, as the values download names it. */
 export const SE_LABEL = "Sharpe standard error";
@@ -160,6 +163,21 @@ interface Layout {
   acrossHead: number;
   /** Daily: the first column of each ok column's group (the benchmark's included), by scorecard column index. */
   group: Map<number, number>;
+  /** Monthly: each full month's Daily row at its end and at the previous month's end, and its sheet row. */
+  months: { end: number; prev: number; row: number }[];
+  /** Monthly: the column of each ok column's monthly return, by scorecard column index. */
+  mcol: Map<number, number>;
+  /** True when beta, alpha and R² regress the monthly returns (CAPM_MIN_MONTHS full months or more). */
+  monthly: boolean;
+}
+
+// The Daily row of each month's last return, then the full months: every month but the first and the last.
+function monthRows(dates: readonly string[]): { end: number; prev: number; row: number }[] {
+  const ends: number[] = [];
+  dates.forEach((d, t) => {
+    if (t + 1 === dates.length || dates[t + 1].slice(0, 7) !== d.slice(0, 7)) ends.push(FIRST + 1 + t);
+  });
+  return ends.slice(1, -1).map((end, m) => ({ end, prev: ends[m], row: FIRST + m }));
 }
 
 function layout(a: Analysis, model: ScoreModel, amount: number): Layout {
@@ -180,7 +198,12 @@ function layout(a: Analysis, model: ScoreModel, amount: number): Layout {
       c += DAILY_PARTS.length;
     }
   });
-  return { a, model, amount, n, last: FIRST + a.dates.length, benchCol: 1 + n, ports, sumRow, rfRow, amountRow, acrossRow, acrossHead, group };
+  const months = monthRows(a.dates);
+  const mcol = new Map([...group.keys()].map((k, j) => [k, 1 + j] as const));
+  return {
+    a, model, amount, n, last: FIRST + a.dates.length, benchCol: 1 + n, ports, sumRow, rfRow, amountRow, acrossRow, acrossHead, group,
+    months, mcol, monthly: months.length >= CAPM_MIN_MONTHS,
+  };
 }
 
 const rfRef = (L: Layout) => on(SHEETS.weights, abs(1, L.rfRow));
@@ -357,6 +380,24 @@ function dailySheet(L: Layout): { sheet: BookSheet; values: Map<number, DailyVal
   return { sheet: s.done(), values };
 }
 
+// Each full month's return per column: the month-end wealth on Daily over the previous month-end's, minus one.
+function monthlySheet(L: Layout, values: Map<number, DailyValues>): BookSheet {
+  const s = new Sheet(SHEETS.monthly);
+  s.text(0, 1, "Month end");
+  for (const m of L.months) s.date(0, m.row, L.a.dates[m.end - FIRST - 1]);
+  for (const [k, c] of L.mcol) {
+    const col = L.model.columns[k];
+    const w = (L.group.get(k) as number) + PART.wealth;
+    const v = values.get(k) as DailyValues;
+    s.text(c, 1, `${col.label}: monthly return`);
+    for (const m of L.months) {
+      s.formula(c, m.row, `${on(SHEETS.daily, at(w, m.end))}/${on(SHEETS.daily, at(w, m.prev))}-1`, v.wealth[m.end - FIRST] / v.wealth[m.prev - FIRST] - 1, EXCEL_FORMATS.pct2);
+    }
+  }
+  s.width(0, 12);
+  return s.done();
+}
+
 // The scorecard's rows: the page's metric (or the Sharpe's standard error), and its formula for one column.
 interface RowSpec {
   id: BookRow;
@@ -370,6 +411,9 @@ interface FormulaRefs {
   R: string; // its daily returns
   B: string; // the benchmark's
   A: string; // its active returns
+  RM: string; // its full months' returns, on Monthly
+  BM: string; // the benchmark's
+  monthly: boolean; // beta, alpha and R² regress RM on BM rather than R on B
   D: string; // its drawdowns, the first close included
   W: string; // its last wealth
   rf: string;
@@ -403,10 +447,17 @@ const ROWS: readonly RowSpec[] = (
     ],
     ["sortino", "sortino", (x) => `(${x.cell("mean")}-${x.rf})/${x.cell("downside")}`],
     ["calmar", "calmar", (x) => `${x.cell("annual")}/ABS(${x.cell("mdd")})`],
-    ["beta", "beta", (x) => `SLOPE(${x.R},${x.B})`],
-    ["alpha", "alpha", (x) => `((AVERAGE(${x.R})-${x.rf}/${Y})-${x.cell("beta")}*(AVERAGE(${x.B})-${x.rf}/${Y}))*${Y}`],
+    ["beta", "beta", (x) => (x.monthly ? `SLOPE(${x.RM},${x.BM})` : `SLOPE(${x.R},${x.B})`)],
+    [
+      "alpha",
+      "alpha",
+      (x) => {
+        const [r, b, p] = x.monthly ? [x.RM, x.BM, MONTHS_A_YEAR] : [x.R, x.B, Y];
+        return `((AVERAGE(${r})-${x.rf}/${p})-${x.cell("beta")}*(AVERAGE(${b})-${x.rf}/${p}))*${p}`;
+      },
+    ],
     ["corr", "corr", (x) => `CORREL(${x.R},${x.B})`],
-    ["r2", "r2", (x) => `${x.cell("corr")}^2`],
+    ["r2", "r2", (x) => (x.monthly ? `CORREL(${x.RM},${x.BM})^2` : `${x.cell("corr")}^2`)],
     ["te", "te", (x) => `_xlfn.STDEV.S(${x.A})*SQRT(${Y})`],
     ["ir", "ir", (x) => `AVERAGE(${x.A})*${Y}/${x.cell("te")}`],
     ["var", "var", (x) => `-_xlfn.PERCENTILE.INC(${x.R},0.05)`],
@@ -446,6 +497,7 @@ function scoreSheet(L: Layout, reason: string | null): BookSheet {
   const benchK = model.columns.findIndex((c) => c.id === "bench");
   const daily = (k: number, part: number) => (L.group.get(k) as number) + part;
   const range = (k: number, part: number, from = FIRST + 1) => on(SHEETS.daily, `${abs(daily(k, part), from)}:${abs(daily(k, part), L.last)}`);
+  const mrange = (k: number) => on(SHEETS.monthly, `${abs(L.mcol.get(k) as number, FIRST)}:${abs(L.mcol.get(k) as number, FIRST + L.months.length - 1)}`);
   model.columns.forEach((col, k) => {
     const c = SCORE_COL0 + k;
     s.text(c, 1, col.label);
@@ -455,6 +507,9 @@ function scoreSheet(L: Layout, reason: string | null): BookSheet {
       R: range(k, PART.ret),
       B: range(benchK, PART.ret),
       A: range(k, PART.active),
+      RM: mrange(k),
+      BM: mrange(benchK),
+      monthly: L.monthly,
       D: range(k, PART.dd, FIRST),
       W: on(SHEETS.daily, abs(daily(k, PART.wealth), L.last)),
       rf: rfRef(L),
@@ -471,6 +526,15 @@ function scoreSheet(L: Layout, reason: string | null): BookSheet {
   s.width(1, 34);
   s.width(2, 24);
   return s.done();
+}
+
+// How beta, alpha and R² are computed, as the page computes them (capmFit): monthly over 36 full months or more.
+function capmNote(a: Analysis): string {
+  const months = monthRows(a.dates).length;
+  const same = "subtracting the same rate from both does not move the slope, so the Beta cell reads the raw returns, and the Alpha cell subtracts the rate itself";
+  return months >= CAPM_MIN_MONTHS
+    ? `Beta, alpha and R² regress the monthly excess return on the benchmark's over the window's ${months} full calendar months (the Monthly sheet; the partial first and last months are left out), at the annual rate ÷ ${MONTHS_A_YEAR} a month, and alpha is the monthly intercept × ${MONTHS_A_YEAR}: monthly returns avoid the bias daily ones carry when markets close at different hours. ${same.charAt(0).toUpperCase()}${same.slice(1)}. The Correlation row stays on daily returns, so R² is not its square here.`
+    : `Beta, alpha and R² regress the daily excess return on the benchmark's, because the window has ${months} full calendar months, under the ${CAPM_MIN_MONTHS} a monthly beta needs; ${same}.`;
 }
 
 /** The Notes sheet's lines, label and text. Exported so a suite can read what the book says about itself. */
@@ -509,14 +573,14 @@ export function bookNotes(a: Analysis, model: ScoreModel, reason: string | null)
     ["Conventions", model.conventions],
     [
       "How each row is computed",
-      `${TRADING_DAYS} trading days a year. Returns are simple daily returns, and a portfolio's daily return is its weights times that day's returns, so the weights are held fixed and rebalanced every day. Volatility, tracking error and the Sharpe use sample standard deviations (n - 1). Downside deviation averages the squared shortfall below the daily risk-free rate over every day, zeros included. Beta and alpha regress the daily excess return on the benchmark's; subtracting the same daily rate from both does not move the slope, so the Beta cell reads the raw returns, and the Alpha cell subtracts the rate itself. VaR is the 5th percentile of daily returns, interpolated as PERCENTILE.INC does; expected shortfall is the mean of the days at or below it. The Sharpe's standard error uses SKEW and KURT, the sample skew and excess kurtosis.`,
+      `${TRADING_DAYS} trading days a year. Returns are simple daily returns, and a portfolio's daily return is its weights times that day's returns, so the weights are held fixed and rebalanced every day. Volatility, tracking error and the Sharpe use sample standard deviations (n - 1). Downside deviation averages the squared shortfall below the daily risk-free rate over every day, zeros included. ${capmNote(a)} VaR is the 5th percentile of daily returns, interpolated as PERCENTILE.INC does; expected shortfall is the mean of the days at or below it. The Sharpe's standard error uses SKEW and KURT, the sample skew and excess kurtosis.`,
     ],
     [
       "Left out",
-      `Only in the values download (Download Excel, Download CSV): ${left.join("; ")}. The month rows and the capture ratios group days into calendar months, and the longest drawdowns count spells of days; both need logic a worksheet shows badly. The fragility rows re-run the optimiser, which a worksheet does not.`,
+      `Only in the values download (Download Excel, Download CSV): ${left.join("; ")}. The month rows and the capture ratios group days into calendar months, and the longest drawdowns count spells of days; both need logic a worksheet shows badly. Alpha's t-stat divides it by a Newey-West standard error, a weighted sum over lagged residuals that a worksheet shows badly too. The fragility rows re-run the optimiser, which a worksheet does not.`,
     ],
     ["n/a", "Where the page prints a dash, the book writes n/a: the figure is not defined on this window (the benchmark has no tracking error against itself, so it has no information ratio)."],
-    ["Sheets", "Prices: the closes. Returns: each day's return, from Prices. Weights: the weights and the two inputs. Daily: each portfolio's daily return, wealth, running high, drawdown and active return. Scorecard: the figures."],
+    ["Sheets", "Prices: the closes. Returns: each day's return, from Prices. Weights: the weights and the two inputs. Daily: each portfolio's daily return, wealth, running high, drawdown and active return. Monthly: each portfolio's return in each full calendar month, from Daily's month-end wealth. Scorecard: the figures."],
   ];
   if (failed.length) lines.push(["Not shown", failed.map((c) => `${c.label}: ${missingReason(c, a, reason)}`).join(" ")]);
   return lines;
@@ -549,6 +613,7 @@ export function scoreBook(input: BookInput): BookSheet[] {
     returnsSheet(L),
     weightsSheet(L, reason),
     daily.sheet,
+    monthlySheet(L, daily.values),
     scoreSheet(L, reason),
   ];
 }

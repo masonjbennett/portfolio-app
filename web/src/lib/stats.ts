@@ -156,6 +156,142 @@ export function capm(stock: Vec, bench: Vec, rf: number): Capm {
   return { beta: fit.slope, alphaAnn: fit.intercept * TRADING_DAYS, r2: fit.r ** 2 };
 }
 
+// ---- beta and alpha as the page reports them: monthly, with a standard error -------------------
+//
+// FDA2 Week 5, 5.4.6: the market model is "typically estimated using monthly excess returns over a 3-to-5
+// year window"; daily returns bias beta through non-synchronous trading (EFA's markets close hours before
+// the S&P 500's). 5.4.4: an alpha means nothing without its precision. So the page regresses MONTHLY excess
+// returns when the window holds CAPM_MIN_MONTHS full calendar months, and the daily ones (capm above, the
+// Streamlit app's method) when it does not; either way alpha carries a Newey-West standard error. The
+// divergence from the app is t-ledger's "monthly-capm".
+
+/** Full calendar months a monthly beta needs: Week 5's three-year floor. */
+export const CAPM_MIN_MONTHS = 36;
+export const MONTHS_A_YEAR = 12;
+
+/** The Newey-West lag for T observations, floor(4 (T / 100)^(2/9)) (Newey and West 1994's rule). */
+export function neweyWestLag(T: number): number {
+  return Math.floor(4 * (T / 100) ** (2 / 9));
+}
+
+export interface HacFit {
+  slope: number;
+  intercept: number;
+  r2: number;
+  slopeSE: number;
+  interceptSE: number;
+}
+
+// OLS of y on [1, x] with the Newey-West covariance (Bartlett weights 1 - l / (L + 1)), as statsmodels'
+// OLS(y, X).fit(cov_type="HAC", cov_kwds={"maxlags": L}) computes it: no small-sample correction.
+// V = (X'X)^-1 S (X'X)^-1, S = sum of u_t u_t' plus the weighted lagged cross products, u_t = e_t (1, x_t).
+export function olsHAC(x: Vec, y: Vec, lag: number): HacFit {
+  const n = x.length;
+  const fit = linregress(x, y);
+  const e = y.map((v, i) => v - fit.intercept - fit.slope * x[i]);
+  let s00 = 0;
+  let s01 = 0;
+  let s11 = 0;
+  for (let l = 0; l <= lag; l++) {
+    let g00 = 0;
+    let g01 = 0;
+    let g10 = 0;
+    let g11 = 0;
+    for (let t = l; t < n; t++) {
+      const ee = e[t] * e[t - l];
+      g00 += ee;
+      g01 += ee * x[t - l];
+      g10 += ee * x[t];
+      g11 += ee * x[t] * x[t - l];
+    }
+    if (l === 0) {
+      s00 += g00;
+      s01 += g01;
+      s11 += g11;
+    } else {
+      const w = 1 - l / (lag + 1);
+      s00 += 2 * w * g00;
+      s01 += w * (g01 + g10);
+      s11 += 2 * w * g11;
+    }
+  }
+  const sx = sum(x);
+  const sxx = sum(x.map((v) => v * v));
+  const det = n * sxx - sx * sx;
+  // (X'X)^-1 = [[sxx, -sx], [-sx, n]] / det
+  const i00 = sxx / det;
+  const i01 = -sx / det;
+  const i11 = n / det;
+  const v00 = i00 * (i00 * s00 + i01 * s01) + i01 * (i00 * s01 + i01 * s11);
+  const v11 = i01 * (i01 * s00 + i11 * s01) + i11 * (i01 * s01 + i11 * s11);
+  return { slope: fit.slope, intercept: fit.intercept, r2: fit.r ** 2, slopeSE: Math.sqrt(v11), interceptSE: Math.sqrt(v00) };
+}
+
+/** Full calendar months in a window of daily return dates: every month but the first and the last. */
+export function fullMonths(dates: readonly string[]): number {
+  let months = 0;
+  let ym = "";
+  for (const d of dates) {
+    const k = d.slice(0, 7);
+    if (k !== ym) {
+      months += 1;
+      ym = k;
+    }
+  }
+  return Math.max(0, months - 2);
+}
+
+export interface CapmFit extends Capm {
+  basis: "monthly" | "daily";
+  /** The regression's observations: full months, or days. */
+  obs: number;
+  /** The Newey-West lag used. */
+  lag: number;
+  betaSE: number;
+  /** Alpha's standard error, annual like alphaAnn. */
+  alphaSE: number;
+  /** Alpha over its standard error. */
+  alphaT: number;
+}
+
+// Monthly excess returns over the full months (monthly.ts compounds them; the partial first and last are
+// dropped), the monthly rate rf / 12 as the daily one is rf / 252, alpha x 12. Under CAPM_MIN_MONTHS, capm's
+// daily regression, alpha x 252.
+export function capmFit(stock: Vec, bench: Vec, dates: readonly string[], rf: number): CapmFit {
+  const monthly = fullMonths(dates) >= CAPM_MIN_MONTHS;
+  const per = monthly ? MONTHS_A_YEAR : TRADING_DAYS;
+  const full = (r: Vec) => monthlyReturns(r, dates).filter((m) => !m.partial).map((m) => m.ret);
+  const x = (monthly ? full(bench) : bench).map((v) => v - rf / per);
+  const y = (monthly ? full(stock) : stock).map((v) => v - rf / per);
+  const lag = neweyWestLag(x.length);
+  const h = olsHAC(x, y, lag);
+  return {
+    beta: h.slope,
+    alphaAnn: h.intercept * per,
+    r2: h.r2,
+    basis: monthly ? "monthly" : "daily",
+    obs: x.length,
+    lag,
+    betaSE: h.slopeSE,
+    alphaSE: h.interceptSE * per,
+    alphaT: h.intercept / h.interceptSE,
+  };
+}
+
+/** Alpha's t in plain words: within two standard errors of zero, it cannot be told from zero. */
+export function alphaReading(t: number): string {
+  if (!Number.isFinite(t)) return "no reading";
+  if (Math.abs(t) < 2) return "not distinguishable from zero";
+  return t > 0 ? "above zero, beyond its noise" : "below zero, beyond its noise";
+}
+
+/** Which returns the betas came from, in words: "93 monthly returns" or why it is daily. */
+export function capmBasisWords(fit: Pick<CapmFit, "basis" | "obs">): string {
+  return fit.basis === "monthly"
+    ? `${fit.obs} monthly returns`
+    : `daily returns: under ${CAPM_MIN_MONTHS / MONTHS_A_YEAR} years of full months`;
+}
+
 // Standard normal quantile, Wichura's AS241 (PPND16): about 1e-16 relative, which is what
 // scipy's ndtri delivers.
 export function normPpf(p: number): number {
@@ -473,10 +609,15 @@ export interface ScoreRow {
   sortino: number;
   calmar: number;
   // Against the benchmark
-  beta: number;
+  beta: number; // capmFit: monthly over 36 full months or more, daily under
+  betaSE: number; // Newey-West
   alphaAnn: number; // decimal a year, CAPM on excess returns
-  correlation: number;
-  r2: number;
+  alphaSE: number; // Newey-West, decimal a year
+  alphaT: number;
+  capmBasis: "monthly" | "daily";
+  capmObs: number;
+  correlation: number; // daily
+  r2: number; // of the beta regression, so monthly when beta is
   trackingError: number; // decimal a year
   informationRatio: number;
   upCapture: number; // ratio, 1 = 100%
@@ -495,7 +636,7 @@ export function scorecardRow(r: Vec, b: Vec, dates: readonly string[], start: st
   const s = annualizedStats(r, rf);
   const m = monthStats(monthlyReturns(r, dates));
   const cap = captureRatios(r, b, dates);
-  const fit = capm(r, b, rf);
+  const fit = capmFit(r, b, dates, rf);
   const corr = correlation(r, b);
   const t = historicalTail(r, 0.05);
   const withStart = start !== null;
@@ -516,9 +657,14 @@ export function scorecardRow(r: Vec, b: Vec, dates: readonly string[], start: st
     sortino: s.sortino,
     calmar: calmar(r, withStart),
     beta: fit.beta,
+    betaSE: fit.betaSE,
     alphaAnn: fit.alphaAnn,
+    alphaSE: fit.alphaSE,
+    alphaT: fit.alphaT,
+    capmBasis: fit.basis,
+    capmObs: fit.obs,
     correlation: corr,
-    r2: corr ** 2,
+    r2: fit.r2,
     trackingError: trackingError(r, b),
     informationRatio: informationRatio(r, b),
     upCapture: cap.up,

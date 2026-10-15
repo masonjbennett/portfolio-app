@@ -179,6 +179,9 @@ const FOUND = {
   "four tips a newcomer misreads (Sharpe above 1.0 'generally good', beta as volatility, alpha as outperforming or skill, Sortino as losses) -> words that describe the window and promise nothing": { "plain-tip-readings": ["t-tooltips"] },
   "the Snapshot's plates are the tangency's Sharpe and return and the benchmark's return and volatility, and the band compares with the benchmark -> the Sharpe ratios of equal weight, the tangency (in-sample, ±), GMV (in-sample) and the benchmark, the sentence measured against equal weight, the three dropped figures kept in the Optimization tab's summary table": { "snapshot-plates": ["t-app"] },
   "the page title is the app's page_title -> the same words with the author's name after them": { "page-title": ["t-shell"] },
+  "beta and alpha on daily returns, alpha with no precision -> monthly excess returns over 36 full months or more (FDA2 Week 5, 5.4.6), daily under, alpha with a Newey-West t-stat and its reading (5.4.4); one method for the per-asset table, the scorecard and the book's Monthly sheet": {
+    "monthly-capm": ["t-capm", "t-tab-risk", "t-tooltips", "t-workbook"],
+  },
 };
 const PENDING = [];
 

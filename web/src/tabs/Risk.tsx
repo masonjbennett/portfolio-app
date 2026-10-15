@@ -45,6 +45,7 @@ import {
   betaChart,
   betaTitle,
   CAPM_COLUMNS,
+  capmMethod,
   capmRows,
   capmTableRows,
   DEFAULT_WINDOW,
@@ -233,11 +234,7 @@ const Capm = memo(function Capm({ a, allowShort }: SectionProps) {
   const title = state.status === "ready" ? betaTitle(state.value, a.benchLabel) : "CAPM Beta by Stock";
   const how = (
     <>
-      <p className="risk-note">
-        Each asset's daily return above the risk-free rate is regressed on the {a.benchLabel}'s. Beta is the slope: how far the
-        asset moved, on average, for each 1% the benchmark moved. Alpha is the intercept, times 252. R² is the share of the
-        asset's daily variation the benchmark accounts for.
-      </p>
+      <p className="risk-note">{capmMethod(list, a.benchLabel)}</p>
       <p className="risk-sub">Claret bars sit above the dashed market line at 1: those assets moved more than the benchmark. Navy bars moved less.</p>
       <HowTips keys={["beta", "alpha"]} allowShort={allowShort} />
     </>

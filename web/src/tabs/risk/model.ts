@@ -14,7 +14,7 @@
 //   never "nan" (the app prints f"{nan:.3f}" as "nan").
 import { format } from "../../format.ts";
 import { cullLabels, spreadLabels, textWidth, type Rect } from "../../charts/labels.ts";
-import { annualizedStats, capm, drawdowns, rollingStd, TRADING_DAYS } from "../../lib/stats.ts";
+import { alphaReading, annualizedStats, capmFit, drawdowns, rollingStd, TRADING_DAYS, type CapmFit } from "../../lib/stats.ts";
 import { monthYear } from "../../chrome/when.ts";
 import { drawdownEpisodes, relatedEvent } from "../../lib/episodes.ts";
 import { NAMED_FALLS } from "../../content/episodes.ts";
@@ -270,25 +270,37 @@ export function riskRows(a: Analysis): TableRow[] {
 export const CAPM_COLUMNS: Column[] = [
   { key: "asset", label: "Asset", format: "text", first: true },
   { key: "beta", label: "Beta", format: "num3" },
+  { key: "betaSE", label: "Beta SE", format: "num3" },
   { key: "alpha", label: "Alpha (Ann.)", format: "pct2" },
+  { key: "alphaT", label: "Alpha t", format: "num2" },
+  { key: "reading", label: "Alpha reads", format: "text" },
   { key: "r2", label: "R²", format: "num3" },
 ];
 
-export interface CapmRow {
-  name: string;
-  beta: number;
-  alphaAnn: number;
-  r2: number;
-}
+export type CapmRow = CapmFit & { name: string };
 
 // Each ticker's excess return regressed on the benchmark's (1377-1392). Tickers only, no benchmark
 // row, as in the app. After cleaning no return is missing, so the app's dropna (1383) drops nothing.
+// Monthly over 36 full months or more, the scorecard's own capmFit, so the page prints one beta per asset.
 export function capmRows(a: Analysis): CapmRow[] {
-  return a.tickers.map((t, j) => ({ name: t, ...capm(a.returns[j], a.bench, a.rf) }));
+  return a.tickers.map((t, j) => ({ name: t, ...capmFit(a.returns[j], a.bench, a.dates, a.rf) }));
 }
 
 export function capmTableRows(list: CapmRow[]): TableRow[] {
-  return list.map((c) => ({ asset: c.name, beta: fin(c.beta), alpha: fin(c.alphaAnn), r2: fin(c.r2) }));
+  return list.map((c) => ({
+    asset: c.name,
+    beta: fin(c.beta),
+    betaSE: fin(c.betaSE),
+    alpha: fin(c.alphaAnn),
+    alphaT: fin(c.alphaT),
+    reading: alphaReading(c.alphaT),
+    r2: fin(c.r2),
+  }));
+}
+
+/** The alpha with its t and its reading, as the card's note prints the asset with the largest |t|: "VNQ's alpha, -2.10% a year (t = -0.8), is not distinguishable from zero". */
+export function alphaSentence(c: CapmRow): string {
+  return `${c.name}'s alpha, ${format(c.alphaAnn, "pct2")} a year (t = ${format(c.alphaT, "num2")}), is ${alphaReading(c.alphaT)}`;
 }
 
 /** Above the market line: the beta itself above 1, never its 3-decimal print (the app's 1396-1398). */
@@ -457,4 +469,25 @@ export function betaValueSpots(b: BetaChart, plot: PlotArea): BetaValueSpot[] {
   // A value past its own bar's end never meets that bar; inside it, it sits on it by design.
   const at = cullLabels(spots, (i) => [market, ...bars.filter((_, k) => k !== i)]);
   return at.map((k) => (k < 0 ? null : k === 0 ? "past" : "inside"));
+}
+
+/**
+ * The CAPM card's method note, in words that follow the window: which returns were regressed and why, what
+ * beta, alpha and R² are, and the alpha with the largest |t| read against its noise. One rule for every asset,
+ * so the first row's basis is every row's.
+ */
+export function capmMethod(list: CapmRow[], benchLabel: string): string {
+  if (!list.length) return "";
+  const monthly = list[0].basis === "monthly";
+  const per = monthly ? "monthly" : "daily";
+  const how = monthly
+    ? `Each asset's monthly return above the risk-free rate (the annual rate ÷ 12) is regressed on the ${benchLabel}'s, over the window's ${list[0].obs} full calendar months. Monthly returns avoid the bias daily ones carry when markets close at different hours.`
+    : `Each asset's daily return above the risk-free rate is regressed on the ${benchLabel}'s: the window has under 3 years of full calendar months, too few for a monthly beta.`;
+  const finite = list.filter((c) => Number.isFinite(c.alphaT));
+  const top = finite.length ? finite.reduce((x, y) => (Math.abs(y.alphaT) > Math.abs(x.alphaT) ? y : x)) : null;
+  return (
+    `${how} Beta is the slope: how far the asset moved, on average, for each 1% the benchmark moved. Alpha is the intercept, ` +
+    `times ${monthly ? 12 : TRADING_DAYS}, with a t-stat from a Newey-West standard error: between −2 and 2, it cannot be told ` +
+    `from zero.${top ? ` ${alphaSentence(top)}.` : ""} R² is the share of the asset's ${per} variation the benchmark accounts for.`
+  );
 }

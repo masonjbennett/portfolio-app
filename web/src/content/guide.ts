@@ -345,6 +345,9 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
           "CAPM, the capital asset pricing model, is the textbook idea that part of an asset's return simply follows the " +
             "market. Beta says how much an asset tended to move when the benchmark moved: above one, more; below one, less. " +
             "Alpha is the yearly return left over that the benchmark's moves do not explain.",
+          "Both come from monthly returns when the window holds three years of whole months, as textbooks estimate them, and " +
+            "from daily ones when it does not; the card's note says which. Each alpha carries a t-stat: between minus two and " +
+            "two, it cannot be told apart from zero.",
           "Both describe this window, not a skill that will carry on. The dashed line at one is the benchmark's own beta.",
         ],
       },
