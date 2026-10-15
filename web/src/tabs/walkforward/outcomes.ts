@@ -7,6 +7,8 @@
 import { DEFAULT_HORIZON, horizonFor, horizonsFor, outcomes, START, type Fan, type Horizon, type OutcomeKey } from "../../lib/simulate.ts";
 import { format } from "../../format.ts";
 import { MIX } from "../../overview/model.ts";
+import { benchDisplay } from "../../state/defaults.ts";
+import type { Kept, KeptCheck, Placement } from "../../lib/kept.ts";
 import type { Analysis } from "../../types.ts";
 
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five"];
@@ -95,3 +97,60 @@ export function numberRows(a: Analysis, fan: Fan): Record<string, number | strin
   return rows;
 }
 
+
+// ---- a kept fan (src/lib/kept.ts), opened from its link -------------------------------------------------------------
+
+const ordinal = (n: number) => {
+  const t = n % 100;
+  const s = t >= 11 && t <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${s}`;
+};
+
+/** How a line is named in a kept fan's sentences. */
+export function keptLineWords(key: OutcomeKey, benchmark: string): string {
+  if (key === "ew") return "split equally";
+  if (key === "gmv") return `in the ${MIX.gmv.name.toLowerCase()}`;
+  return `in the ${benchDisplay(benchmark)}`;
+}
+
+/** Where a real value sits among the kept percentiles, in words. */
+export function placeWords(p: Placement): string {
+  if (p.at === "below") return "below the 10th percentile";
+  if (p.at === "above") return "above the 90th percentile";
+  return `about the ${ordinal(p.pct)} percentile`;
+}
+
+/** The kept card's title (fourteen words or fewer). */
+export function keptTitle(k: Kept): string {
+  return `The fan kept on ${k.asOf}, with the real prices since`;
+}
+
+/** The kept card's sub-line (twenty-five words or fewer): where the first line landed, or why nothing is compared. */
+export function keptSub(k: Kept, check: KeptCheck | null): string {
+  if (!check) return `Fetching the real prices since ${k.asOf}.`;
+  if (check.status === "early") return `Nothing to compare yet: a month of real prices has not passed since ${k.asOf}.`;
+  if (check.status === "failed") return check.message;
+  const l = check.lines[0];
+  if (!l) return "None of the kept lines could be priced since the day it was kept.";
+  const when = check.complete ? `At the end of ${years(k.horizon)}, on ${check.date}` : `On ${check.date}`;
+  return `${when}, ${usd(START)} ${keptLineWords(l.key, k.benchmark)} stood at ${usd(l.value)}: ${placeWords(l.place)} of what was simulated.`;
+}
+
+/** The cross-check's line when a recompute from today's copy of the same prices moved the fan; null when it did not. */
+export function keptGapNote(gap: number | null): string | null {
+  if (gap === null || gap < 0.005) return null;
+  return `Recomputed from today's copy of the same prices, the fan moves by up to ${format(gap, "pct1")}: Yahoo revises adjusted closes. The fan drawn is the one kept.`;
+}
+
+/** The kept card's numbers: each line's real value at the check, its kept band there, and where it sits. */
+export function keptRows(k: Kept, check: KeptCheck): Record<string, number | string>[] {
+  if (check.status !== "ready") return [];
+  return check.lines.map((l) => ({
+    line: l.key === "bench" ? benchDisplay(k.benchmark) : MIX[l.key].name,
+    value: l.value,
+    p10: l.band[0],
+    p50: l.band[2],
+    p90: l.band[4],
+    place: placeWords(l.place),
+  }));
+}

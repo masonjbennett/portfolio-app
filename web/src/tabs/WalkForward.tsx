@@ -23,6 +23,7 @@ import { basketFinding, holdsFinding, holdupFinding, holdupSub, WF_HEADING, WF_L
 import { said } from "./performance.ts";
 import Live from "./walkforward/Live.tsx";
 import Outcomes from "./walkforward/Outcomes.tsx";
+import { decodeKept } from "../lib/kept.ts";
 import { outcomesFinding } from "./walkforward/outcomes.ts";
 import Published, { Holds } from "./walkforward/Published.tsx";
 import { dayAfter, PUBLISHED_LAST_BAR, PUBLISHED_RF } from "./walkforward/terms.ts";
@@ -54,6 +55,17 @@ export function walkRates(h: RfHistory | null, a: Analysis): WalkRates {
   if (!windowRate(h.series, a.prices.dates[0], a.asOf)) return { basis, points: null, flat: h.loading ? "loading" : "uncovered" };
   return { basis, points: h.series.series, flat: null };
 }
+
+// A kept fan's link (src/lib/kept.ts), read once as this chapter's code arrives, before anything can rewrite the
+// address bar. It opens the Range of outcomes row, whose card then shows the kept fan above the live one.
+const KEPT = (() => {
+  try {
+    return typeof location === "undefined" ? null : decodeKept(location.search);
+  } catch {
+    return null;
+  }
+})();
+if (KEPT) openMore(WF_LIST, "outcomes");
 
 export default function WalkForward({ analysis, settings, requestSettings }: TabProps) {
   const page = useContext(TabContext);
@@ -114,7 +126,7 @@ export default function WalkForward({ analysis, settings, requestSettings }: Tab
       finding: said(WF_ROWS.outcomes, () => outcomesFinding(analysis)),
       children: (
         <Boundary name="Range of outcomes" resetKey={analysis}>
-          <Outcomes analysis={analysis} />
+          <Outcomes analysis={analysis} kept={KEPT} />
         </Boundary>
       ),
     },

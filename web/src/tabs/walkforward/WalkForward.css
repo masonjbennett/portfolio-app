@@ -45,3 +45,9 @@
   margin: 0 0 var(--space-2);
   color: var(--color-ink2);
 }
+
+/* The link that keeps the fan, under its chart. */
+.wfo-keep {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+}

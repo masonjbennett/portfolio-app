@@ -34,6 +34,9 @@ export type Horizon = (typeof HORIZONS)[number];
 export const DEFAULT_HORIZON: Horizon = 3;
 /** The percentiles reported: the band is the 10th to the 90th, so eight paths in ten end inside it. */
 export const BAND = [10, 50, 90] as const;
+/** The percentiles a kept link stores (src/lib/kept.ts): the band's three and the quartiles between, so a real value
+ * can later be placed between them. The page draws only BAND. */
+export const KEPT_PCTS = [10, 25, 50, 75, 90] as const;
 
 /** The horizons a window of `rows` return rows can offer: never further out than the window is long. */
 export function horizonsFor(rows: number): Horizon[] {
@@ -62,11 +65,13 @@ export function blockRows(rows: number, days: number, uniform: () => number, blo
   return out;
 }
 
-/** One line of the fan: $START's ending at each checkpoint's 10th, 50th and 90th percentiles. */
+/** One line of the fan: $START's ending at each checkpoint's 10th, 25th, 50th, 75th and 90th percentiles. */
 export interface FanLine {
   key: string;
   p10: number[];
+  p25: number[];
   p50: number[];
+  p75: number[];
   p90: number[];
   /** Every path's ending at the horizon, in path order (the tests read it; the card does not). */
   endings: Float64Array;
@@ -120,16 +125,12 @@ export function simulate(series: { key: string; r: Vec }[], horizon: number, opt
   }
   // Sorted once here, so percentile's own sort runs over data already in order.
   const lines = series.map((s, j) => {
-    const p10 = [START];
-    const p50 = [START];
-    const p90 = [START];
+    const [p10, p25, p50, p75, p90] = KEPT_PCTS.map(() => [START]);
     for (const xs of at[j]) {
       const sorted = xs.slice().sort();
-      p10.push(percentile(sorted, BAND[0]));
-      p50.push(percentile(sorted, BAND[1]));
-      p90.push(percentile(sorted, BAND[2]));
+      KEPT_PCTS.forEach((q, k) => [p10, p25, p50, p75, p90][k].push(percentile(sorted, q)));
     }
-    return { key: s.key, p10, p50, p90, endings: endings[j] };
+    return { key: s.key, p10, p25, p50, p75, p90, endings: endings[j] };
   });
   return { horizon, days, months, lines, paths };
 }

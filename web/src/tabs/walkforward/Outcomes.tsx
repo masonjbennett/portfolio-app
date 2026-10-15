@@ -12,11 +12,14 @@ import Table from "../../components/Table.tsx";
 import { axisProps, DASH, gridProps, legendProps, ROLE, tooltipProps } from "../../charts/theme.ts";
 import { ReadableTip } from "../../charts/ReadableTip.tsx";
 import { format } from "../../format.ts";
+import { encodeKept, keptOf, type Kept } from "../../lib/kept.ts";
+import { DEFAULT_SEED } from "../../lib/rng.ts";
 import { BLOCK_DAYS, PATHS, START, type Fan, type Horizon, type OutcomeKey } from "../../lib/simulate.ts";
 import { MIX } from "../../overview/model.ts";
 import type { Analysis, Column, LoadState } from "../../types.ts";
 import { tableSpan } from "../caption.ts";
 import { WF_ROWS } from "../holdup.ts";
+import KeptFan from "./Kept.tsx";
 import { chartRows, fanOf, lineName, numberRows, outcomesSub, outcomesTitle, rowHorizons, spanOf } from "./outcomes.ts";
 
 const HEIGHT = 340;
@@ -83,7 +86,7 @@ const FanPlot = memo(function FanPlot({ a, fan }: { a: Analysis; fan: Fan }) {
   );
 });
 
-export default function Outcomes({ analysis: a }: { analysis: Analysis }) {
+export default function Outcomes({ analysis: a, kept = null }: { analysis: Analysis; kept?: Kept | null }) {
   const { offered, first } = rowHorizons(a);
   const [pick, setPick] = useState<Horizon | null>(first);
   const h = pick && offered.includes(pick) ? pick : first;
@@ -93,6 +96,8 @@ export default function Outcomes({ analysis: a }: { analysis: Analysis }) {
     : { status: "empty", reason: "The window holds less than a year of returns, so there is nothing to reshuffle into a year." };
   const options = offered.map((y) => ({ value: String(y), label: y === 1 ? "1 year" : `${y} years` }));
   const span = spanOf(a).replace(/'s$/, "");
+  // The link that keeps this fan: the share link for this window plus the fan's own figures (src/lib/kept.ts).
+  const keep = fan ? encodeKept(keptOf(a, fan, DEFAULT_SEED)) : null;
   const numbers = fan ? (
     <Table
       title="Range of Outcomes"
@@ -127,9 +132,13 @@ export default function Outcomes({ analysis: a }: { analysis: Analysis }) {
         and not a forecast. It cannot hold a month the window did not have, and it offers no horizon longer than the
         window.
       </p>
+      <p className="wfo-how">
+        &ldquo;Keep this fan to check later&rdquo; is a link holding only the tickers, the window and the fan&rsquo;s
+        figures. Opened later, it draws this fan again, as it was, with the real prices since {a.asOf} over it.
+      </p>
     </>
   );
-  return (
+  const card = (
     <Card label={WF_ROWS.outcomes} numbers={numbers} how={how}>
       {options.length > 1 ? (
         <div className="wfo-switch">
@@ -145,6 +154,18 @@ export default function Outcomes({ analysis: a }: { analysis: Analysis }) {
       >
         {(f) => <FanPlot a={a} fan={f} />}
       </ChartFrame>
+      {keep ? (
+        <p className="wfo-keep">
+          <a href={keep}>Keep this fan to check later</a>
+        </p>
+      ) : null}
     </Card>
+  );
+  if (!kept) return card;
+  return (
+    <>
+      <KeptFan kept={kept} analysis={a} />
+      {card}
+    </>
   );
 }

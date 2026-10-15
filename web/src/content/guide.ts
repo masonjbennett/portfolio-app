@@ -529,6 +529,10 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
             "window is long.",
           "It is a spread under that one assumption, not a forecast. The best-tradeoff mix is left out: its weights come " +
             "from the same months' average returns, so reshuffling them would replay the hindsight the test measures.",
+          "[[Keep this fan to check later]] is a link holding only the tickers, the window and the fan's figures. Opened " +
+            "later, it draws the same fan again with the real prices since over it, and says where each line stands: " +
+            "about which percentile of what was simulated, at the day reached. Under a month in, there is nothing to " +
+            "compare yet. One fan proves little: real prices should land outside the band about one time in five.",
         ],
       },
     ],
