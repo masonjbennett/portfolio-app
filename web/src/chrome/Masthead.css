@@ -50,10 +50,13 @@
     order: 1;
   }
 
+  /* A 44px tap area that takes no more of the row than the title does: the negative margin lets it overlap the
+     space above and below, so the byline and everything under it stay where the first screen needs them. */
   .masthead-links a {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
+    margin-block: -12px;
   }
 
   .masthead-byline {

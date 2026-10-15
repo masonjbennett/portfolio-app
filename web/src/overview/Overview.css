@@ -228,6 +228,12 @@
     line-height: 1.42;
   }
 
+  /* The run link keeps its 44px tap area but overlaps the lines around it, so the lede ends no lower than it did
+     before touch targets: on a basket outside the published sets the lead chart has no pixels to give. */
+  .ov-lede .ov-run {
+    margin-block: -12px;
+  }
+
   .ov-grid,
   .ov-why {
     grid-template-columns: minmax(0, 1fr);
