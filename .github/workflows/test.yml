@@ -8,6 +8,10 @@
 # vite) is already gated, because Vercel runs it to deploy at all.
 #
 # No suite reaches the network: the ones that call fetch stub it or serve on 127.0.0.1.
+#
+# One suite drives a real browser: t-first-screen starts Vite on 127.0.0.1 and measures the Overview's first screen in
+# headless Chrome, which the ubuntu runner ships at /usr/bin/google-chrome (it fails, never skips, without one). The
+# runner sets CI, so it starts Chrome with --no-sandbox.
 name: Tests
 
 on:

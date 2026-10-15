@@ -12,16 +12,18 @@
 // "Run the same test on this basket" button). Each case opens in a fresh browser context, so a basket remembered by
 // one case cannot change what the next one loads.
 //
-// WHY THIS IS NOT A SUITE IN test/: the published set and the outside basket load live prices through /api/prices,
-// and no suite reaches the network (CI runs them offline, see .github/workflows/test.yml). It runs before every push
-// that touches CSS or the Overview, and against production after a deploy. Exit 1 on any miss.
+// Two ways it runs. As this script, with live prices: before a push that touches CSS or the Overview, and against
+// production after a deploy (exit 1 on any miss). And as test/t-first-screen.mjs, in `npm test` and so in CI: the
+// same cases through checkFirstScreen below, against a dev server whose /api handlers are fed the frozen price and
+// rate fixtures (no suite reaches the network), so a layout change that moves 5a goes red before it ships. Until
+// Oct 14 2026 only this script existed, and the M3 phone regression reached production because nothing ran it.
 //
 // The browser: GUIDE_BROWSER if set, else the first of the usual Edge and Chrome paths that exists (as guide:pdf).
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const BROWSERS = [
@@ -168,33 +170,41 @@ function judge(screen, c, m) {
   return misses;
 }
 
-async function main() {
-  const browser = BROWSERS.find((p) => existsSync(p));
+/** The browser the check drives, or null when none of the usual paths exists. */
+export const findBrowser = () => BROWSERS.find((p) => existsSync(p)) ?? null;
+
+/** Starts Vite's dev server on a free port (with the /api bridge); its url and a close(). */
+export async function devServer() {
+  const { createServer } = await import("vite");
+  const server = await createServer({ root, logLevel: "error", server: { port: 0, strictPort: false, open: false } });
+  await server.listen();
+  const origin = server.resolvedUrls?.local?.[0] ?? "";
+  if (!origin) throw new Error("the dev server did not say where it listens");
+  return { origin, close: () => server.close() };
+}
+
+/**
+ * Every case at every screen against `origin`, in one headless browser. Returns one row per case: its screen, its
+ * case, what was measured (null when nothing settled) and its misses. Logs as it goes unless `log` is null.
+ */
+export async function checkFirstScreen(origin, { log = console.log } = {}) {
+  const browser = findBrowser();
   if (!browser) throw new Error("no Edge or Chrome found; set GUIDE_BROWSER to one");
-
-  let server = null;
-  let origin = process.argv[2];
-  if (!origin) {
-    const { createServer } = await import("vite");
-    server = await createServer({ root, logLevel: "error", server: { port: 0, strictPort: false, open: false } });
-    await server.listen();
-    origin = server.resolvedUrls?.local?.[0] ?? "";
-    if (!origin) throw new Error("the dev server did not say where it listens");
-  }
   origin = origin.replace(/\/?$/, "/");
-
   const profile = mkdtempSync(join(tmpdir(), "first-screen-"));
+  // A Linux CI runner's Chrome may refuse to start its sandbox; the page is our own, served on 127.0.0.1.
+  const sandbox = process.platform === "linux" && process.env.CI ? ["--no-sandbox"] : [];
   const proc = spawn(browser, [
     "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-    "--hide-scrollbars", `--user-data-dir=${profile}`, "--remote-debugging-port=0", "about:blank",
+    "--hide-scrollbars", ...sandbox, `--user-data-dir=${profile}`, "--remote-debugging-port=0", "about:blank",
   ], { stdio: "ignore" });
-  let failed = 0;
+  const rows = [];
   try {
     const port = await until("the browser's debugging port", () => {
       const f = join(profile, "DevToolsActivePort");
       return existsSync(f) ? Number(readFileSync(f, "utf8").split(/\r?\n/)[0]) || null : null;
     });
-    console.log(`first screen: ${origin}`);
+    log?.(`first screen: ${origin}`);
     for (const screen of SCREENS) {
       for (const c of CASES) {
         let misses;
@@ -206,16 +216,15 @@ async function main() {
           misses = [err.message];
         }
         const nums = m ? `question ${m.question}, lede ${m.lede}, chart ${m.chart}` : "not measured";
-        console.log(`  ${misses.length ? "FAIL" : "ok  "} ${screen.name}, ${c.name}: ${nums}` +
+        log?.(`  ${misses.length ? "FAIL" : "ok  "} ${screen.name}, ${c.name}: ${nums}` +
           ` (targets ${screen.question} / ${screen.lede} / ${screen.chart})`);
-        for (const x of misses) console.log(`         ${x}`);
-        if (misses.length && m) console.log(`         above the question: ${m.above}`);
-        if (misses.length) failed += 1;
+        for (const x of misses) log?.(`         ${x}`);
+        if (misses.length && m) log?.(`         above the question: ${m.above}`);
+        rows.push({ screen, c, m, misses });
       }
     }
   } finally {
     proc.kill();
-    await server?.close();
     for (let i = 0; i < 20; i++) {
       try {
         rmSync(profile, { recursive: true, force: true });
@@ -225,12 +234,24 @@ async function main() {
       }
     }
   }
-  const total = SCREENS.length * CASES.length;
-  console.log(`first screen: ${total - failed}/${total} met`);
-  if (failed) process.exitCode = 1;
+  return rows;
 }
 
-main().catch((err) => {
-  console.error(`first screen: ${err.message}`);
-  process.exitCode = 1;
-});
+async function main() {
+  const server = process.argv[2] ? null : await devServer();
+  try {
+    const rows = await checkFirstScreen(process.argv[2] ?? server.origin);
+    const failed = rows.filter((r) => r.misses.length).length;
+    console.log(`first screen: ${rows.length - failed}/${rows.length} met`);
+    if (failed) process.exitCode = 1;
+  } finally {
+    await server?.close();
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`first screen: ${err.message}`);
+    process.exitCode = 1;
+  });
+}
