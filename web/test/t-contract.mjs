@@ -329,12 +329,14 @@ check(T.LEVELS?.[0]?.oracle === knowledge && D.DEFAULT_LEVEL === undefined, "def
 const points = Number(grab(/def efficient_frontier\([^)]*n_points=(\d+)/, "efficient_frontier's n_points")[1]);
 check(D.FRONTIER_POINTS === points, "defaults: FRONTIER_POINTS (948)", `${D.FRONTIER_POINTS} vs ${points}`);
 const tabs = grab(/st\.tabs\(\[([\s\S]*?)\]\)/, "the tab labels")[1]?.match(/"([^"]+)"/g)?.map((s) => s.slice(1, -1).trim());
-// The app's six tabs are the page's first six parts, in order: five draw themselves, under the app's labels, and the
-// fifth, Custom Portfolio, is the Your mix panel inside the Optimization tab.
+// The app's six tabs are the page's first six parts, in order: five draw themselves and the fifth, Custom Portfolio,
+// is the Your mix panel inside the Optimization tab. Their labels are the page's own words since Oct 14 2026, never
+// the app's: the page stopped printing the app's tab names at the redesign, and a guide headed with them sent a
+// reader looking for tabs that do not exist.
 const APP_PARTS = ["returns", "risk", "correlation", "optimization", "custom", "sensitivity"];
 check(tabs?.length === 6 && same(T.PART_IDS?.slice(0, 6) ?? [], APP_PARTS) && tabs[4] === "Custom Portfolio" && T.hostOf?.("custom") === "optimization" &&
-  APP_PARTS.every((id, i) => id === "custom" || T.TAB_LABELS[id] === tabs[i]) && D.DEFAULT_CHAPTER === T.CHAPTER_IDS?.[0],
-  "types: the app's six tabs (1213-1220) are the page's first six parts, in order, five under the app's labels, trimmed, and Custom Portfolio the panel inside Optimization; the page opens on its first chapter",
+  !Object.values(T.TAB_LABELS).some((l) => tabs.includes(l)) && D.DEFAULT_CHAPTER === T.CHAPTER_IDS?.[0],
+  "types: the app's six tabs (1213-1220) are the page's first six parts, in order, none under the app's old label, and Custom Portfolio the panel inside Optimization; the page opens on its first chapter",
   JSON.stringify(tabs));
 // The five chapters hold the six tabs, each exactly once, and keep the app's order inside each chapter but one: Does
 // it hold up? leads with the walk-forward test, the page's own.
@@ -345,8 +347,8 @@ check(T.CHAPTER_IDS?.length === 5 && T.CHAPTER_IDS[0] === "overview" && T.CHAPTE
   "types: five chapters, the Overview first and holding no tab, the other four holding the six tabs once each, Does it hold up? led by the walk-forward test", JSON.stringify(T.CHAPTER_TABS));
 // The page's own test, which the app does not have, comes last, so the app's keep their places.
 check(T.TAB_IDS?.length === 6 && T.TAB_IDS[5] === "walkforward" && T.PART_IDS?.length === 7 && T.PART_IDS[6] === "walkforward" &&
-  T.TAB_LABELS?.walkforward === "Walk-forward" && Object.keys(T.TAB_LABELS ?? {}).length === 6 && !T.TAB_IDS.includes("custom"),
-  "types: the walk-forward test, labelled Walk-forward, comes after the app's tabs; Custom is a part, not a tab", JSON.stringify(T.TAB_IDS));
+  T.TAB_LABELS?.walkforward === "The walk-forward test" && Object.keys(T.TAB_LABELS ?? {}).length === 6 && !T.TAB_IDS.includes("custom"),
+  "types: the walk-forward test, labelled The walk-forward test, comes after the app's tabs; Custom is a part, not a tab", JSON.stringify(T.TAB_IDS));
 
 // ---- (h) the published sets come first in the rail; the app's own follow -----------------------------
 {

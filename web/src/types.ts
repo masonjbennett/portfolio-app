@@ -86,14 +86,19 @@ export interface Prefs {
  */
 export type TabId = "returns" | "risk" | "correlation" | "optimization" | "sensitivity" | "walkforward";
 
-/** Tab labels, the app's text with its two-space padding trimmed (1213-1220), then the page's own. */
+/**
+ * Each tab's name inside its chapter, as the guide heads it and the palette lists it: the page's own words for that
+ * part (its More list's heading, without "More on"). Until Oct 14 2026 these were the Streamlit app's tab names
+ * (1213-1220: "Returns & Statistics", "Portfolio Optimization", ...), which the page stopped printing at the
+ * redesign, so the guide sent a reader looking for tabs that no longer exist.
+ */
 export const TAB_LABELS: Readonly<Record<TabId, string>> = {
-  returns: "Returns & Statistics",
-  risk: "Risk Analysis",
-  correlation: "Correlation",
-  optimization: "Portfolio Optimization",
-  sensitivity: "Sensitivity",
-  walkforward: "Walk-forward",
+  returns: "The returns",
+  risk: "How deep the falls went",
+  correlation: "How they move together",
+  optimization: "The mixes",
+  sensitivity: "If the fitting window changed",
+  walkforward: "The walk-forward test",
 };
 
 /** The tab ids in display order. */

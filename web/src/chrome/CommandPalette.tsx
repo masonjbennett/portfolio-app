@@ -19,9 +19,24 @@ interface Command {
   key: string;
   group: string;
   label: string;
+  /** Words a search also matches that the row does not print. */
+  find?: string;
   current: boolean;
   run: () => void;
 }
+
+// The topic words each part was known by before the redesign (the Streamlit app's tab names) and the words a reader
+// is likely to type for it. The parts are labelled in the page's own words now ("How deep the falls went"), and
+// without these "risk" or "sensitivity" would find nothing.
+const PART_FIND: Readonly<Record<PartId, string>> = {
+  returns: "returns statistics growth",
+  risk: "risk analysis drawdowns volatility beta",
+  correlation: "correlation covariance",
+  optimization: "portfolio optimization frontier tangency sharpe",
+  custom: "custom portfolio weights",
+  sensitivity: "sensitivity lookback windows",
+  walkforward: "walk-forward out-of-sample",
+};
 
 const goToGuide = () => window.location.assign(GUIDE_HREF);
 
@@ -48,11 +63,11 @@ export default function CommandPalette({ chapter, setChapter, jump, openGuide = 
 
   const commands: Command[] = [
     ...CHAPTER_IDS.map((c) => ({ key: `chapter-${c}`, group: "Chapter", label: CHAPTER_LABELS[c], current: c === chapter, run: () => setChapter(c) })),
-    ...PART_IDS.map((t) => ({ key: `tab-${t}`, group: CHAPTER_LABELS[chapterOf(t)], label: PART_LABELS[t], current: false, run: () => jump(t) })),
+    ...PART_IDS.map((t) => ({ key: `tab-${t}`, group: CHAPTER_LABELS[chapterOf(t)], label: PART_LABELS[t], find: PART_FIND[t], current: false, run: () => jump(t) })),
     { key: "guide", group: "Guide", label: GUIDE_TITLE, current: false, run: openGuide },
   ];
   const q = query.trim().toLowerCase();
-  const shown = q ? commands.filter((c) => `${c.group} ${c.label}`.toLowerCase().includes(q)) : commands;
+  const shown = q ? commands.filter((c) => `${c.group} ${c.label} ${c.find ?? ""}`.toLowerCase().includes(q)) : commands;
   const at = Math.min(index, Math.max(shown.length - 1, 0));
 
   const pick = (c: Command | undefined) => {
