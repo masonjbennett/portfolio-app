@@ -12,6 +12,7 @@ import { format } from "../../format.ts";
 import type { Vec } from "../../lib/num.ts";
 import type { Redraws } from "../../lib/robust.ts";
 import type { Analysis } from "../../types.ts";
+import { ADDED_LABEL } from "./model.ts";
 import type { RedrawState } from "./scorecard.ts";
 
 export interface StripRow {
@@ -91,7 +92,8 @@ export function StripsHow({ redraws }: { redraws: RedrawState }) {
       Each bronze dot is the tangency weight re-solved on one of {ready ? ready.count : "the"} sets of expected returns drawn around
       this window's estimates, each asset's spread set by its own volatility and the window's length, with the covariance held at its
       in-sample estimate. The black tick is this window's own tangency weight. GMV reads no expected returns, so every draw puts it on
-      the one teal dot. A what-if on these prices, not a forecast.
+      the one teal dot. A what-if on these prices, not a forecast. The scorecard{"’"}s added column {ADDED_LABEL["tan.rs"]} is the average
+      of such re-solves, with the window{"’"}s months redrawn rather than its averages.
     </p>
   );
 }

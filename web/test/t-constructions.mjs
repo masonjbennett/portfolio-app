@@ -73,7 +73,7 @@ for (const name of SETS) {
     const sol = {};
     for (const id of C.ADDED_IDS) {
       const own = C.ownWindow(id, cols);
-      sol[id] = C.solveAdded(id, own.m, own.S, own.T, rf, allowShort);
+      sol[id] = C.solveAdded(id, own.m, own.S, own.T, rf, allowShort, own.rows);
       check(sol[id] !== null, `${lab}: ${id} solves`);
     }
     if (C.ADDED_IDS.some((id) => !sol[id])) continue;
@@ -157,8 +157,8 @@ for (const name of SETS) {
   check(C.unavailable("tan.cap", 1943, C.CAP_MIN_ASSETS) === null, "tan.cap: five assets offered");
   check(C.CAP_MIN_ASSETS === 5 && C.CAP === 0.25, "the cap is 25% and needs five assets");
   check([[3, 1], [253, 2], [1943, 30]].every(([T, n]) => C.unavailable("rp", T, n) === null), "rp: always offered");
-  check(same(C.availability(253, 7), { "tan.1y": null, "tan.bs": null, "tan.lw": null, "tan.cap": null, rp: null }), "availability: all five at 253 x 7");
-  check(same(C.availability(252, 4), { "tan.1y": "window-is-one-year", "tan.bs": null, "tan.lw": null, "tan.cap": "too-few-assets", rp: null }), "availability: reasons at 252 x 4");
+  check(same(C.availability(253, 7), { "tan.1y": null, "tan.bs": null, "tan.lw": null, "tan.rs": null, "tan.cap": null, rp: null }), "availability: all six at 253 x 7");
+  check(same(C.availability(252, 4), { "tan.1y": "window-is-one-year", "tan.bs": null, "tan.lw": null, "tan.rs": null, "tan.cap": "too-few-assets", rp: null }), "availability: reasons at 252 x 4");
   check(C.ADDED_IDS.every(C.isAddedId) && !["ew", "gmv", "tan", "custom", "bench"].some(C.isAddedId), "isAddedId names the four and nothing else");
 }
 
@@ -233,7 +233,9 @@ for (const [name, cols, rf] of [
   const n = cols.length;
   for (const allowShort of [false, true]) {
     const lab = `${name}${allowShort ? " short" : ""}`;
-    for (const id of C.ADDED_IDS) {
+    // The resampled tangency has no strip of redraws (an average of 2,000 solves is not redrawn 200 times); its
+    // fragility rows are held in t-resample.
+    for (const id of C.ADDED_IDS.filter((x) => x !== "tan.rs")) {
       const own = C.ownWindow(id, cols);
       // The caller's lookback weights: the construction solved on each trailing window.
       const lookbacks = windows(T).map(({ lb }) => {

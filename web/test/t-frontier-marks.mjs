@@ -36,8 +36,8 @@ const { ADDED_LABEL: HEADS } = await import("../src/tabs/optimization/model.ts")
 // Each construction solved on its own window, as the tab solves it; one with no answer is left out.
 const addedFor = (a) =>
   ADDED_IDS.flatMap((id) => {
-    const { m, S, T } = ownWindow(id, a.returns);
-    const s = solveAdded(id, m, S, T, a.rf, a.allowShort);
+    const { m, S, T, rows } = ownWindow(id, a.returns);
+    const s = solveAdded(id, m, S, T, a.rf, a.allowShort, rows);
     return s ? [{ id, label: HEADS[id], w: s.w }] : [];
   });
 
@@ -57,7 +57,7 @@ const cases = BASKETS.flatMap(([name, make]) => [false, true].map((allowShort) =
   const a = make({ allowShort });
   return { tag: `${name} ${allowShort ? "short" : "long"}`, a, added: addedFor(a) };
 }));
-check(cases.every((c) => c.added.length === 5), "setup: all five constructions solve on both baskets, long-only and shorting",
+check(cases.every((c) => c.added.length === 6), "setup: all six constructions solve on both baskets, long-only and shorting",
   cases.map((c) => `${c.tag}: ${c.added.map((x) => x.id).join(",")}`).join("; "));
 
 const ready = (value) => ({ status: "ready", value });
@@ -215,15 +215,15 @@ const SHAPE_APART = 0.3;
     drawn.map((m) => `${m.name} ${m.fill}@${m.opacity ?? 1}/${m.stroke}`).join("; "));
   // Drawn after the four portfolio markers, so one that lands on a portfolio is not hidden under it.
   const order = [...root.querySelectorAll(".frontier-mark, .frontier-added")].map((g) => (g.classList.contains("frontier-added") ? "added" : "mark"));
-  check(order.length === 9 && order.lastIndexOf("mark") < order.indexOf("added"), "outlines: the added markers are drawn over the four portfolio markers", order.join(","));
+  check(order.length === 10 && order.lastIndexOf("mark") < order.indexOf("added"), "outlines: the added markers are drawn over the four portfolio markers", order.join(","));
   check(new Set(Object.values(F.ADDED_GLYPH)).size === ADDED_IDS.length && ADDED_IDS.every((id) => F.ADDED_GLYPH[id]),
     "outlines: every construction has an outline, and no two share one");
   // Which outline marks which construction is a choice a reader learns once and reads on every chart after,
   // so it is pinned: swapping two of them must fail here, not pass because the set of shapes is the same.
-  const GLYPH_OF = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.lw": "triangle-left", "tan.cap": "saltire", rp: "triangle-right" };
+  const GLYPH_OF = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.lw": "triangle-left", "tan.rs": "sparkle", "tan.cap": "saltire", rp: "triangle-right" };
   const onChart = added.map((x) => [x.id, root.querySelector(`.frontier-added--${x.id.replace(".", "-")} .frontier-glyph`)?.getAttribute("data-glyph")]);
   check(JSON.stringify(F.ADDED_GLYPH) === JSON.stringify(GLYPH_OF) && onChart.length === ADDED_IDS.length && onChart.every(([id, g]) => g === GLYPH_OF[id]),
-    "outlines: each construction keeps its own outline (last year an hourglass, shrunk means a wye, shrunk covariance a left triangle, capped a saltire, risk parity a right triangle), on the chart too",
+    "outlines: each construction keeps its own outline (last year an hourglass, shrunk means a wye, shrunk covariance a left triangle, resampled a four-pointed star, capped a saltire, risk parity a right triangle), on the chart too",
     onChart.map(([id, g]) => `${id}=${g}`).join(" "));
   const strangers = [];
   for (const el of root.querySelectorAll("*")) {

@@ -35,6 +35,7 @@ import {
   type Unavailable,
 } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
+import { PATHS } from "../../lib/simulate.ts";
 import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, windows, type Custom, type Row } from "../../lib/portfolio.ts";
 import { returnShare, sharpeSE, TRADING_DAYS, wealth } from "../../lib/stats.ts";
 import type { Role } from "../../charts/theme.ts";
@@ -81,7 +82,7 @@ export function finiteSE(a: Analysis, w: Vec): number | null {
 }
 
 // ---- the added constructions ------------------------------------------------------------------------
-// Five more ways to build a portfolio from the same prices, which the reader can add to the scorecard and
+// Six more ways to build a portfolio from the same prices, which the reader can add to the scorecard and
 // the weights table one at a time. Each is solved by the engine (src/lib/constructions.ts) on its own
 // window's moments, once per analysis, and every one is in-sample: its weights are chosen on the prices
 // its figures are then computed on, exactly as the tangency column's are.
@@ -91,6 +92,7 @@ export const ADDED_LABEL: Readonly<Record<AddedId, string>> = {
   "tan.1y": "Tangency, last year",
   "tan.bs": "Tangency, shrunk means",
   "tan.lw": "Tangency, shrunk covariance",
+  "tan.rs": "Tangency, resampled",
   "tan.cap": `Tangency, at most ${Math.round(CAP * 100)}% each`,
   rp: "Risk parity",
 };
@@ -112,6 +114,9 @@ export function addedSub(id: AddedId, allowShort: boolean): string {
  * says "no weights", not "failed": for the tangencies the usual cause is the window itself (nothing they may
  * hold earns more than the rate), not the solver, and addedMissing() says which.
  */
+/** The percentiles of each weight across the resampled tangency's draws that the weights table shows. */
+export const RS_BAND = [10, 90] as const;
+
 export const addedMissingLabel = (id: AddedId) => `${ADDED_LABEL[id]} (no weights)`;
 
 /** One added construction on one analysis: why the basket cannot have it, its own window, its solution. */
@@ -145,7 +150,7 @@ export function addedFit(a: Analysis, id: AddedId): AddedFit {
   return cached(FITS, a, id, () => {
     const reason = unavailable(id, a.dates.length, a.tickers.length);
     const own = reason ? null : ownWindow(id, a.returns);
-    const sol = own ? solveAdded(id, own.m, own.S, own.T, a.rf, a.allowShort) : null;
+    const sol = own ? solveAdded(id, own.m, own.S, own.T, a.rf, a.allowShort, own.rows) : null;
     return { id, reason, own, sol };
   });
 }
@@ -188,6 +193,10 @@ export function addedMissing(a: Analysis, id: AddedId): string {
       : `no long-only mix holding at most ${Math.round(CAP * 100)}% of each asset earns more than ${rate} on this window`;
   }
   if (id === "rp") return generic;
+  if (id === "tan.rs") {
+    const bounds = a.allowShort ? `mix with every weight between ${MINUS}100% and 100%` : "long-only mix";
+    return `no ${bounds} earns more than ${rate} on any of its ${PATHS.toLocaleString("en-US")} redraws of ${where}'s months`;
+  }
   // The two tangencies the shorting switch reaches. Long-only they always find a mix (the least negative
   // one), so only a failed solve leaves them empty; with shorting on, the box can leave none above the rate.
   let means = own.m;
@@ -219,12 +228,31 @@ export function addedLookbacks(a: Analysis, id: AddedId): (Vec | null)[] {
     if (id === "tan.1y" || addedFit(a, id).reason) return [];
     const ws = windows(a.dates.length);
     if (ws.length < 2) return [];
-    // Each trailing window read the construction's own way (ownWindow), so the shrunk-covariance one shrinks each.
-    return ws.map(({ lb }) => {
-      const { m, S } = ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));
-      return solveAdded(id, m, S, lb, a.rf, a.allowShort)?.w ?? null;
-    });
+    return ws.map(({ lb }) => addedLookbackAt(a, id, lb));
   });
+}
+
+const LOOKBACK_AT = new WeakMap<Analysis, Map<string, Vec | null>>();
+
+/**
+ * Construction `id` re-solved on the trailing `lb` rows, once per analysis: addedLookbacks() reads one per window,
+ * and the resampled tangency's after-paint solve (src/tabs/optimization/redraws.ts) fills them one at a time. Each
+ * window is read the construction's own way (ownWindow), so the shrunk-covariance one shrinks each and the resampled
+ * one resamples each. The full window's is the column's own weights.
+ */
+export function addedLookbackAt(a: Analysis, id: AddedId, lb: number): Vec | null {
+  let per = LOOKBACK_AT.get(a);
+  if (!per) LOOKBACK_AT.set(a, (per = new Map()));
+  const key = `${id}|${lb}`;
+  if (!per.has(key)) {
+    if (lb === a.dates.length) {
+      per.set(key, addedFit(a, id).sol?.w ?? null);
+    } else {
+      const own = ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));
+      per.set(key, solveAdded(id, own.m, own.S, lb, a.rf, a.allowShort, own.rows)?.w ?? null);
+    }
+  }
+  return per.get(key) ?? null;
 }
 
 /** The added constructions the page shows: those chosen that this basket and window can have, in the fixed order. */
@@ -351,13 +379,22 @@ export function weightTable(a: Analysis, added: readonly AddedId[] = [], c: Cust
     { key: "asset", label: "Asset", format: "text", first: true },
     ...order.map((id, k): Column => ({ key: id, label: ws[k] ? PORT_LABEL[id] : failedLabel(id), format: "pct2" })),
     ...(c ? [{ key: "custom", label: c.ok ? "Custom" : "Custom (not shown)", format: "pct2" } as Column] : []),
-    ...extra.map(({ id, w }): Column => ({ key: id, label: w ? ADDED_LABEL[id] : addedMissingLabel(id), format: "pct2" })),
+    ...extra.flatMap(({ id, w }): Column[] => [
+      { key: id, label: w ? ADDED_LABEL[id] : addedMissingLabel(id), format: "pct2" },
+      // The resampled tangency's spread across its draws sits beside its averaged weights.
+      ...(id === "tan.rs" && w ? RS_BAND.map((q): Column => ({ key: `${id}.p${q}`, label: `${ADDED_LABEL[id]}, ${q}th percentile`, format: "pct2" })) : []),
+    ]),
   ];
   const rows = a.tickers.map((t, i) => {
     const row: TableRow = { asset: t };
     order.forEach((id, k) => (row[id] = ws[k] ? (ws[k] as Vec)[i] : null));
     if (c) row.custom = c.ok ? c.w[i] : null;
     for (const { id, w } of extra) row[id] = w ? w[i] : null;
+    const rs = extra.some((x) => x.id === "tan.rs") ? addedFit(a, "tan.rs").sol?.rs : null;
+    if (rs) {
+      row["tan.rs.p10"] = rs.p10[i];
+      row["tan.rs.p90"] = rs.p90[i];
+    }
     return row;
   });
   return tableState({ columns, rows }, "the weights table");

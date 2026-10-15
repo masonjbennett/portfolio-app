@@ -1,4 +1,4 @@
-// The ids of the five constructions the scorecard can add (./constructions.ts says what each one is),
+// The ids of the six constructions the scorecard can add (./constructions.ts says what each one is),
 // and the three numbers that define them without solving anything: the last-year window, the cap, and
 // the fewest assets the cap is offered on.
 //
@@ -8,10 +8,10 @@
 // six, so an import from there keeps working.
 import { TRADING_DAYS } from "./stats.ts";
 
-export type AddedId = "tan.1y" | "tan.bs" | "tan.lw" | "tan.cap" | "rp";
+export type AddedId = "tan.1y" | "tan.bs" | "tan.lw" | "tan.rs" | "tan.cap" | "rp";
 
 /** The added constructions, in the order the scorecard offers them. */
-export const ADDED_IDS: readonly AddedId[] = ["tan.1y", "tan.bs", "tan.lw", "tan.cap", "rp"];
+export const ADDED_IDS: readonly AddedId[] = ["tan.1y", "tan.bs", "tan.lw", "tan.rs", "tan.cap", "rp"];
 
 export function isAddedId(x: string): x is AddedId {
   return (ADDED_IDS as readonly string[]).includes(x);

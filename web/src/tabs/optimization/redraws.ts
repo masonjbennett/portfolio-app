@@ -9,11 +9,12 @@
 // a reader adding all four is never kept waiting for every solve at once.
 import { useEffect, useMemo, useState } from "react";
 import type { AddedId } from "../../lib/constructions.ts";
+import { windows } from "../../lib/portfolio.ts";
 import { DEFAULT_SEED } from "../../lib/rng.ts";
 import { addedStrip, redraw, REDRAWS } from "../../lib/robust.ts";
 import type { Analysis } from "../../types.ts";
-import { addedFit } from "./model.ts";
-import type { AddedDraws, RedrawState, StripState } from "./scorecard.ts";
+import { addedFit, addedLookbackAt } from "./model.ts";
+import { addedFragility, type AddedDraws, type RedrawState, type StripState } from "./scorecard.ts";
 
 // One object, so a memo keyed on the state does not recompute while the draws are pending.
 const PENDING: RedrawState = { status: "pending" };
@@ -92,4 +93,55 @@ export function useAddedStrips(a: Analysis, ids: readonly AddedId[], seed: numbe
     for (const id of ids) out[id] = got[id] ?? PENDING_STRIP;
     return out;
   }, [ids, got]);
+}
+
+// ---- the resampled tangency, solved after paint ------------------------------------------------------
+// Its column costs one resample (PATHS bootstrap draws, each re-solved) for its weights, one for each lookback
+// window but the full one, and one for its cut row: tens of milliseconds each at ten assets, and several hundred
+// together, measured Oct 15 2026. So it is never solved during a render: once the reader adds it, each resample
+// runs in a macrotask of its own after the page has painted, and the column joins the scorecard when the last lands.
+// Everything solved is kept per analysis (addedFit, addedLookbackAt, addedFragility), so the column comes back at
+// once when toggled off and on, and an unmount part-way loses nothing.
+
+/** The resampled tangency's solves on analysis `a`, one resample each, in the order they run. */
+export function resampledSteps(a: Analysis): (() => unknown)[] {
+  const ws = windows(a.dates.length);
+  return [
+    () => addedFit(a, "tan.rs"),
+    ...(ws.length < 2 ? [] : ws.map(({ lb }) => () => addedLookbackAt(a, "tan.rs", lb))),
+    () => addedFragility(a, "tan.rs", null),
+  ];
+}
+
+const RESAMPLED_READY = new WeakSet<Analysis>();
+
+/**
+ * True once the resampled tangency's column is solved on `a` (at once when it is not `wanted`): its solves run one
+ * per macrotask after paint, and the scorecard shows the column only once this is true.
+ */
+export function useResampled(a: Analysis, wanted: boolean): boolean {
+  const [done, setDone] = useState<Analysis | null>(null);
+  const ready = !wanted || done === a || RESAMPLED_READY.has(a);
+  useEffect(() => {
+    if (ready) return undefined;
+    // Each solve schedules the next itself, so the chain does not wait on a render between them.
+    const steps = resampledSteps(a);
+    let live = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const run = (k: number) => {
+      t = setTimeout(() => {
+        if (!live) return;
+        steps[k]();
+        if (k + 1 < steps.length) return run(k + 1);
+        RESAMPLED_READY.add(a);
+        setDone(a);
+      }, 0);
+    };
+    run(0);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [a, ready]);
+  return ready;
 }

@@ -9,7 +9,7 @@
 // rows the window's estimates came from. Every expected return this module RETURNS is ANNUAL and a
 // decimal (0.12 is 12% a year), and every weight is a decimal fraction of the portfolio (0.45 is 45%).
 //
-// The five added constructions (src/lib/constructions.ts) get the same what-ifs through solveAdded(): each
+// The six added constructions (src/lib/constructions.ts) get the same what-ifs through solveAdded(): each
 // is re-solved, the same way it was built, on the moved means, with the covariance held where it was. For
 // those, m, S and T are the construction's OWN window (the last year, for the last-year tangency).
 import { isAddedId, solveAdded, type AddedId } from "./constructions.ts";
@@ -379,16 +379,17 @@ export function cutLargest(
 /**
  * Row 2 for an added construction: the same cut, the largest holding's expected return lowered by one
  * standard error, then the construction re-solved its own way (the shrunk-mean tangency shrinks the cut
- * means again; risk parity reads no means, so nothing moves). m, S and T are its own window. Null when the
- * solve fails before or after the cut.
+ * means again; risk parity reads no means, so nothing moves). m, S and T are its own window, and `rows` the
+ * return columns the resampled tangency redraws (Moments.rows; its every draw is centred on the cut means). Null
+ * when the solve fails before or after the cut.
  */
-export function cutAdded(id: AddedId, m: Vec, S: Mat, rf: number, allowShort: boolean, T: number): CutRow | null {
-  const base = solveAdded(id, m, S, T, rf, allowShort);
+export function cutAdded(id: AddedId, m: Vec, S: Mat, rf: number, allowShort: boolean, T: number, rows?: Vec[]): CutRow | null {
+  const base = solveAdded(id, m, S, T, rf, allowShort, rows);
   if (!base) return null;
   const from = largestHoldingTied(base.w);
   const means = m.slice();
   means[from] = returnBand(m, S, T, from).lo1 / TRADING_DAYS;
-  const after = solveAdded(id, means, S, T, rf, allowShort);
+  const after = solveAdded(id, means, S, T, rf, allowShort, rows);
   if (!after) return null;
   const to = largestHoldingTied(after.w);
   return {
@@ -407,7 +408,9 @@ export function cutAdded(id: AddedId, m: Vec, S: Mat, rf: number, allowShort: bo
  * the covariance stays at its in-sample estimate. m, S and T are the construction's OWN window, so the
  * last-year tangency's means are drawn with T = 252. Risk parity reads no means, so every draw re-solves to
  * the same weights and the strip has zero width. The strip's largest-holding counts break ties to 1e-12
- * (largestHoldingTied), as the cut and draw rows do. Null when S has no Cholesky factor.
+ * (largestHoldingTied), as the cut and draw rows do. Null when S has no Cholesky factor, and always for the
+ * resampled tangency: it is itself an average over PATHS redrawn windows (./resample.ts), so redrawing its
+ * means REDRAWS times would mean REDRAWS x PATHS solves, and its own spread across its draws is reported instead.
  */
 export function addedStrip(
   id: AddedId,
@@ -419,6 +422,7 @@ export function addedStrip(
   count: number = REDRAWS,
   seed: number = DEFAULT_SEED,
 ): Strip | null {
+  if (id === "tan.rs") return null;
   const drawn = drawMeans(m, S, T, count, seed);
   if (!drawn) return null;
   const ws = drawn.map((d) => solveAdded(id, d, S, T, rf, allowShort)?.w ?? null);
@@ -454,7 +458,8 @@ export function paramCount(kind: Construction | AddedId, n: number): number {
   // Risk parity reads the covariance only, as minimum variance does; the last-year, shrunk-mean,
   // shrunk-covariance and capped tangencies read the n means as well (shrinking a covariance estimates no fewer). The last-year one's are estimated from 252 rows (Fragility.days).
   if (kind === "rp") return (n * (n + 1)) / 2;
-  if (kind === "tan.1y" || kind === "tan.bs" || kind === "tan.lw" || kind === "tan.cap") return n + (n * (n + 1)) / 2;
+  // The resampled tangency re-estimates the same n means and n(n + 1)/2 covariances on every draw.
+  if (kind === "tan.1y" || kind === "tan.bs" || kind === "tan.lw" || kind === "tan.rs" || kind === "tan.cap") return n + (n * (n + 1)) / 2;
   return 0;
 }
 
@@ -483,6 +488,8 @@ export interface FragilityInput {
    * The four portfolios above read `redraws` and ignore this.
    */
   strip?: Strip | null;
+  /** The resampled tangency only: the return columns it redraws (Moments.rows). */
+  rows?: Vec[];
 }
 
 /**
@@ -499,10 +506,10 @@ export function fragility(kind: Construction | AddedId, x: FragilityInput): Frag
   const n = x.m.length;
   const days = x.T;
   if (isAddedId(kind)) {
-    const own = solveAdded(kind, x.m, x.S, x.T, x.rf, x.allowShort);
+    const own = solveAdded(kind, x.m, x.S, x.T, x.rf, x.allowShort, x.rows);
     return {
       lookback: kind === "tan.1y" ? null : lookbackSpread(x.lookbacks),
-      cut: cutAdded(kind, x.m, x.S, x.rf, x.allowShort, x.T),
+      cut: cutAdded(kind, x.m, x.S, x.rf, x.allowShort, x.T, x.rows),
       draws: own && x.strip ? drawSpread(x.strip, largestHoldingTied(own.w)) : null,
       params: paramCount(kind, n),
       days,

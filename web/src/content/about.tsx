@@ -42,7 +42,8 @@ const list = (xs: readonly number[]) => `${xs.slice(0, -1).join(", ")} or ${xs[x
 
 // The papers behind what the page does, and only those (proposal D12 as the skeptics cut it: a citation for a
 // method the page does not use reads as name-dropping). Ledoit and Wolf came in with the shrunk-covariance column
-// (Oct 2026), the constant-correlation paper only, the target that column uses. The walk-forward tab cites DeMiguel, Garlappi and Uppal by its own
+// (Oct 2026), the constant-correlation paper only, the target that column uses; Michaud's 1998 book with the
+// resampled column, which follows it with a block bootstrap of the window's rows in place of its normal draws. The walk-forward tab cites DeMiguel, Garlappi and Uppal by its own
 // CITE_AUTHORS / CITE_TITLE; they are written out here because that tab loads on demand, and t-about holds the two together.
 const LITERATURE: ReactNode = (
   <>
@@ -56,7 +57,9 @@ const LITERATURE: ReactNode = (
     <cite>The Statistics of Sharpe Ratios</cite>, Financial Analysts Journal 58(4), with Mertens&rsquo; (2002)
     correction; the shrunk-mean tangency is Jorion (1986), <cite>Bayes-Stein Estimation for Portfolio Analysis</cite>,
     Journal of Financial and Quantitative Analysis 21(3), and the shrunk-covariance tangency Ledoit and Wolf (2004),{" "}
-    <cite>Honey, I Shrunk the Sample Covariance Matrix</cite>, Journal of Portfolio Management 30(4).
+    <cite>Honey, I Shrunk the Sample Covariance Matrix</cite>, Journal of Portfolio Management 30(4). The resampled tangency
+    averages the weights over redrawn windows as Michaud (1998), <cite>Efficient Asset Management</cite>, Harvard Business
+    School Press, does.
   </>
 );
 

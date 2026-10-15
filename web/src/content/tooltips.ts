@@ -188,6 +188,7 @@ export type ScoreTipKey =
   | "col_last_year"
   | "col_shrunk"
   | "col_shrunk_cov"
+  | "col_resampled"
   | "col_capped"
   | "col_parity"
   | "ew_sharpe"
@@ -316,6 +317,11 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     finance: "Tangency on the Ledoit-Wolf shrunk covariance (Ledoit and Wolf, 2004, Journal of Portfolio Management) with the constant-correlation target: every asset keeps its own variance and every correlation moves toward their average. That target, not the scaled identity, because a basket can mix bonds with stocks, and an identity target would pull their very different variances toward one figure. The intensity is the paper's estimate from the window; the means are the sample ones. In-sample.",
     formula: "Σ̂ = (1 − δ) S + δ F, with Fᵢᵢ = Sᵢᵢ, Fᵢⱼ = r̄ √(SᵢᵢSⱼⱼ), r̄ the average sample correlation, and δ = max(0, min(1, (π̂ − ρ̂) / γ̂ / T)); then the tangency on m and Σ̂; parameters n + n(n + 1)/2.",
   },
+  col_resampled: {
+    plain: "The average of many maximum-Sharpe mixes, each solved on the window's months drawn again in a new order. One solve leans hard on averages that are a little off; the average leans less on any one of them. Its figures are in-sample.",
+    finance: "Resampled tangency (Michaud, 1998, Efficient Asset Management): block-bootstrap draws of the window's rows, as many and in the same month-long blocks as the Range of outcomes, each draw's sample means and covariance solved for maximum Sharpe at the page's rate, and the weights averaged. A draw whose maximum-Sharpe mix earns no more than the rate is left out. In-sample.",
+    formula: "w̄ = (1/K) Σₖ wₖ, with wₖ = argmax (w′mₖ − r_f) / √(w′Sₖw) on draw k's rows, over the K draws whose wₖ earns more than r_f; each weight's band is its 10th to 90th percentile over the same draws.",
+  },
   col_capped: {
     plain: `The maximum-Sharpe mix with no short positions and no asset above ${CAP_PCT} of the money. Its weights were chosen on this window's prices, so its figures are in-sample.`,
     finance: `Long-only tangency with an upper bound of ${CAP_PCT} on every weight, solved on the window's means and covariance at the page's risk-free rate. It needs at least ${CAP_MIN_ASSETS} assets, and the shorting switch does not reach it. In-sample.`,
@@ -368,6 +374,7 @@ export const SCORE_TIP_NAMES: Readonly<Record<ScoreTipKey, string>> = {
   col_last_year: "tangency on the last year",
   col_shrunk: "tangency on shrunk means",
   col_shrunk_cov: "tangency on shrunk covariance",
+  col_resampled: "resampled tangency",
   col_capped: "tangency with a 25% cap",
   col_parity: "risk parity",
   ew_sharpe: "equal-weight Sharpe",

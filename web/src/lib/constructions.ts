@@ -1,8 +1,10 @@
-// Five more ways to build a portfolio from the same window, for the scorecard's added columns.
+// Six more ways to build a portfolio from the same window, for the scorecard's added columns.
 //
 //   tan.1y   maximum Sharpe on the last year of the window only
 //   tan.bs   maximum Sharpe on Bayes-Stein shrunk means (Jorion, 1986)
 //   tan.lw   maximum Sharpe on the Ledoit-Wolf shrunk covariance, constant-correlation target (2004)
+//   tan.rs   resampled maximum Sharpe: the average of the maximum-Sharpe weights over block-bootstrapped
+//            copies of the window's rows (Michaud, 1998; ./resample.ts)
 //   tan.cap  maximum Sharpe, long-only, no weight above CAP
 //   rp       risk parity: every asset contributes the same share of the portfolio's variance
 //
@@ -13,7 +15,8 @@
 // (ddof 1), `T` the number of daily return rows they came from, `rf` the ANNUAL risk-free rate. The
 // weights are decimal fractions summing to 1; a Solution's mu and sigma are annual decimals.
 import { cholSolve, covMatrix, dot, mean, sum, type Mat, type Vec } from "./num.ts";
-import { riskParity, tangency, tangencyCapped, type Solution } from "./optimize.ts";
+import { perf, riskParity, tangency, tangencyCapped, type Solution } from "./optimize.ts";
+import { resample, type Resampled } from "./resample.ts";
 import { windowMoments } from "./portfolio.ts";
 import { loadVerdict } from "./stats.ts";
 import { CAP, CAP_MIN_ASSETS, YEAR_ROWS, type AddedId } from "./added.ts";
@@ -43,6 +46,8 @@ export function unavailable(id: AddedId, T: number, n: number): Unavailable | nu
       return T > n + 2 ? null : "too-few-rows";
     case "tan.lw":
       return n >= 3 ? null : "one-correlation";
+    case "tan.rs":
+      return null;
     case "tan.cap":
       return n >= CAP_MIN_ASSETS ? null : "too-few-assets";
     case "rp":
@@ -56,6 +61,7 @@ export function availability(T: number, n: number): Record<AddedId, Unavailable 
     "tan.1y": unavailable("tan.1y", T, n),
     "tan.bs": unavailable("tan.bs", T, n),
     "tan.lw": unavailable("tan.lw", T, n),
+    "tan.rs": unavailable("tan.rs", T, n),
     "tan.cap": unavailable("tan.cap", T, n),
     rp: unavailable("rp", T, n),
   };
@@ -68,6 +74,8 @@ export interface Moments {
   T: number;
   /** tan.lw only: the shrinkage that made S (S is then the shrunk matrix, not the sample one). */
   lw?: LedoitWolf;
+  /** tan.rs only: the daily return columns m and S came from, which it resamples (solveAdded takes them). */
+  rows?: Vec[];
 }
 
 /**
@@ -88,6 +96,7 @@ export function ownWindow(id: AddedId, cols: Vec[]): Moments {
     const lw = ledoitWolf(cols);
     return { m, S: lw.S, T, lw };
   }
+  if (id === "tan.rs") return { m, S, T, rows: cols };
   return { m, S, T };
 }
 
@@ -189,6 +198,21 @@ export function bayesStein(m: Vec, S: Mat, T: number): Shrunk | null {
   return { means: m.map((x) => (1 - phi) * x + phi * mu0), phi, mu0 };
 }
 
+// A resample costs tens of milliseconds, and the scorecard asks for the same one twice (the column, then its cut
+// row's starting point), so each is kept per return columns and centre means, by identity: ownWindow hands both on
+// unchanged, and a caller that moves the means passes a new array.
+const RESAMPLED = new WeakMap<Vec[], WeakMap<Vec, Map<string, Resampled | null>>>();
+
+function resampledOn(rows: Vec[], m: Vec, rf: number, allowShort: boolean): Resampled | null {
+  let byM = RESAMPLED.get(rows);
+  if (!byM) RESAMPLED.set(rows, (byM = new WeakMap()));
+  let byRate = byM.get(m);
+  if (!byRate) byM.set(m, (byRate = new Map()));
+  const key = `${rf}|${allowShort}`;
+  if (!byRate.has(key)) byRate.set(key, resample(rows, rf, allowShort, { m }));
+  return byRate.get(key) ?? null;
+}
+
 /** One added construction solved on its own window's moments. */
 export interface AddedSolution extends Solution {
   id: AddedId;
@@ -200,6 +224,8 @@ export interface AddedSolution extends Solution {
   beatsRf: boolean | null;
   /** tan.bs only: the shrunk means, the intensity and the target. Null for the others (tan.lw's shrinkage is its window's, Moments.lw). */
   shrink: Shrunk | null;
+  /** tan.rs only: the averaged weights' spread across the draws, and how many draws were averaged. Null for the others. */
+  rs: Resampled | null;
 }
 
 /**
@@ -209,6 +235,12 @@ export interface AddedSolution extends Solution {
  * tangency and risk parity are long-only whatever it says. Null when the solve has no answer: shorting on
  * and nothing inside the box beats the risk-free rate (tan.1y, tan.bs), no capped mix beats it (tan.cap),
  * T <= n + 2 (tan.bs), or a failed solve.
+ *
+ * tan.rs re-solves on resampled ROWS, so it needs `rows`, the daily return columns m came from (ownWindow puts them
+ * in Moments.rows); without them it is null. Each draw's means are centred on `m` (./resample.ts), so a caller that
+ * moves the means (the cut row) moves every draw by the same amount. Its mu and sigma are the averaged weights'
+ * on m and S, and beatsRf says whether those earn more than the risk-free rate. Null also when no draw's
+ * maximum-Sharpe mix beat the rate.
  */
 export function solveAdded(
   id: AddedId,
@@ -217,28 +249,35 @@ export function solveAdded(
   T: number,
   rf: number,
   allowShort: boolean,
+  rows?: Vec[],
 ): AddedSolution | null {
   switch (id) {
     case "tan.1y": {
       const t = tangency(m, S, rf, allowShort);
-      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink: null };
+      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink: null, rs: null };
     }
     case "tan.bs": {
       const shrink = bayesStein(m, S, T);
       const t = shrink && tangency(shrink.means, S, rf, allowShort);
-      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink };
+      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink, rs: null };
     }
     case "tan.lw": {
       const t = tangency(m, S, rf, allowShort);
-      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink: null };
+      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink: null, rs: null };
+    }
+    case "tan.rs": {
+      const rs = rows ? resampledOn(rows, m, rf, allowShort) : null;
+      if (!rs) return null;
+      const p = perf(rs.w, m, S);
+      return { id, w: rs.w, mu: p.mu, sigma: p.sigma, beatsRf: p.mu > rf, shrink: null, rs };
     }
     case "tan.cap": {
       const t = tangencyCapped(m, S, rf, CAP);
-      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink: null };
+      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink: null, rs: null };
     }
     case "rp": {
       const r = riskParity(m, S);
-      return r && { id, w: r.w, mu: r.mu, sigma: r.sigma, beatsRf: null, shrink: null };
+      return r && { id, w: r.w, mu: r.mu, sigma: r.sigma, beatsRf: null, shrink: null, rs: null };
     }
   }
 }

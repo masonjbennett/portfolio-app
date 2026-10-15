@@ -228,7 +228,7 @@ for (const set of SETS) {
       if (r.id === "tan") want = O.tangency(fit.map(mean), covMatrix(fit), f.fitRate, false)?.beatsRf ?? null;
       else if (r.id !== "ew" && r.id !== "gmv" && !r.unavailable[k]) {
         const own = C.ownWindow(r.id, fit);
-        want = C.solveAdded(r.id, own.m, own.S, own.T, f.fitRate, false)?.beatsRf ?? null;
+        want = C.solveAdded(r.id, own.m, own.S, own.T, f.fitRate, false, own.rows)?.beatsRf ?? null;
       }
       if (r.beatsRf[k] !== want) bad.push(`${r.id} fold ${k}: ${r.beatsRf[k]} against ${want}`);
       if (r.beatsRf[k] === false) below += 1;
@@ -294,7 +294,7 @@ const runOf = (b, over = {}, opts) => W.walkForward({ cols: b.cols, dates: b.dat
       run.folds.forEach((f, k) => {
         const solve = (from, to) => {
           const own = C.ownWindow(r.id, b.cols.map((c) => c.slice(from, to)));
-          return C.solveAdded(r.id, own.m, own.S, own.T, 0.02, false)?.w ?? null;
+          return C.solveAdded(r.id, own.m, own.S, own.T, 0.02, false, own.rows)?.w ?? null;
         };
         within(`synthetic ${fit} ${r.id} fold ${k}: solveAdded on exactly the fold's fit rows`, r.weights[k], solve(f.fitFrom, f.fitTo), 1e-15);
         if (gapOf(solve(f.fitFrom, f.fitTo + 1), r.weights[k]) > 1e-6 && gapOf(solve(f.fitFrom, f.fitTo - 1), r.weights[k]) > 1e-6) moved += 1;

@@ -213,7 +213,7 @@ export interface Fitted {
   /** Why the construction cannot be offered on this fit (added constructions only), else null. */
   unavailable: Unavailable | null;
   /**
-   * A maximum-Sharpe fit (the tangency and the four added tangencies): whether its mix earned more than the
+   * A maximum-Sharpe fit (the tangency and the five added tangencies): whether its mix earned more than the
    * fit's rate on the fit's own rows. False means none did, and the solver holds the mix whose Sharpe ratio is
    * least negative there (one asset, long-only). Null for the other constructions and where there are no weights.
    */
@@ -246,7 +246,7 @@ export function fitAll(ids: readonly Construction[], fit: Vec[], rf: number, all
         continue;
       }
       const own = ownWindow(id, fit);
-      const sol = solveAdded(id, own.m, own.S, own.T, rf, allowShort);
+      const sol = solveAdded(id, own.m, own.S, own.T, rf, allowShort, own.rows);
       out[id] = { w: sol?.w ?? null, unavailable: null, beatsRf: sol ? sol.beatsRf : null };
     }
   }
@@ -263,7 +263,7 @@ export interface WalkInput {
   /** A flat annual rate, or the daily series to take each period's rate from. */
   rates: Rates;
   allowShort: boolean;
-  /** Also run the five added constructions. */
+  /** Also run the six added constructions. */
   added: boolean;
 }
 

@@ -37,6 +37,7 @@ import Table from "../components/Table.tsx";
 import WhatIfRow, { loadWhatIf } from "../chrome/WhatIfRow.tsx";
 import { format, MINUS } from "../format.ts";
 import { ADDED_IDS, unavailable, type AddedId } from "../lib/constructions.ts";
+import { PATHS } from "../lib/simulate.ts";
 import type { Vec } from "../lib/num.ts";
 import type { Custom } from "../lib/portfolio.ts";
 import type { Analysis, LoadState, TabProps } from "../types.ts";
@@ -49,7 +50,7 @@ import { optimizationFormula } from "./formula.ts";
 import { said } from "./performance.ts";
 import Bars from "./optimization/Bars.tsx";
 import DotStrips, { StripsHow } from "./optimization/DotStrips.tsx";
-import { seedOf, useAddedStrips, useRedraws } from "./optimization/redraws.ts";
+import { seedOf, useAddedStrips, useRedraws, useResampled } from "./optimization/redraws.ts";
 import { scorecard, type AddedDraws, type RedrawState } from "./optimization/scorecard.ts";
 import {
   ADDED_LABEL,
@@ -209,6 +210,9 @@ const Holdings = memo(function Holdings({ a, c, height, added }: { a: Analysis; 
 // values. It carries every figure the three portfolios' plates and the summary comparison printed (their return,
 // volatility, Sharpe with its standard error, Sortino and maximum drawdown are its rows; test/t-scorecard.mjs holds
 // them figure by figure), so their notes are under its "How it is calculated".
+// The line under Add a column while the resampled tangency is solved after paint (useResampled).
+const resampleSolving = () => `${ADDED_LABEL["tan.rs"]} is being solved on ${PATHS.toLocaleString("en-US")} redraws of the window's months; its column follows.`;
+
 const ScorecardCard = memo(function ScorecardCard({
   a,
   c,
@@ -216,6 +220,7 @@ const ScorecardCard = memo(function ScorecardCard({
   amount,
   chosen,
   shown,
+  solving,
   draws,
   onToggle,
 }: {
@@ -225,6 +230,8 @@ const ScorecardCard = memo(function ScorecardCard({
   amount: number;
   chosen: readonly AddedId[];
   shown: readonly AddedId[];
+  /** True while the resampled tangency, added, is still being solved after paint. */
+  solving: boolean;
   draws: AddedDraws;
   onToggle: (id: AddedId) => void;
 }) {
@@ -236,7 +243,8 @@ const ScorecardCard = memo(function ScorecardCard({
       ADDED_IDS.map((id) => ({ id, label: ADDED_LABEL[id], on: chosen.includes(id), offered: unavailable(id, a.dates.length, a.tickers.length) === null })),
     [a, chosen],
   );
-  const note = useMemo(() => unavailableNote(a), [a]);
+  const why = useMemo(() => unavailableNote(a), [a]);
+  const note = solving ? [why, resampleSolving()].filter(Boolean).join(" ") : why;
   const mixNote = customNote(a, c);
   const how = (
     <>
@@ -328,10 +336,13 @@ export default function Optimization({ analysis: a, settings, weights, setWeight
   // The constructions the reader added (the settings carry them, so the link does), and those of them
   // this basket can have, which are the ones shown.
   const chosen = settings.cols ?? NO_COLS;
+  // The resampled tangency joins the scorecard once its solves, run after paint, are in (useResampled).
+  const rsWanted = shownAdded(a, chosen).includes("tan.rs");
+  const rsReady = useResampled(a, rsWanted);
   const shown = useMemo(() => {
-    const s = shownAdded(a, chosen);
+    const s = shownAdded(a, chosen).filter((id) => id !== "tan.rs" || rsReady);
     return s.length ? s : NO_COLS;
-  }, [a, chosen]);
+  }, [a, chosen, rsReady]);
   const addedDraws = useAddedStrips(a, shown, seed);
   const onToggle = useCallback(
     (id: AddedId) => requestSettings({ cols: ADDED_IDS.filter((x) => (x === id ? !chosen.includes(x) : chosen.includes(x))) }),
@@ -364,6 +375,7 @@ export default function Optimization({ analysis: a, settings, weights, setWeight
             amount={settings.amount}
             chosen={chosen}
             shown={shown}
+            solving={rsWanted && !rsReady}
             draws={addedDraws}
             onToggle={onToggle}
           />

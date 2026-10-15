@@ -238,10 +238,38 @@ const M = [
   ["src/lib/constructions.ts", "row.map((v, j) => (i === j ? v : (1 - intensity) * v", "row.map((v, j) => (false ? v : (1 - intensity) * v", "the target's diagonal shrunk too (rBar times the variance)", "t-constructions"],
   ["src/lib/constructions.ts", "return { m, S: lw.S, T, lw };", "return { m, S, T, lw };", "tan.lw solved on the sample covariance", "t-constructions"],
   ["src/lib/constructions.ts", "return n >= 3 ? null : \"one-correlation\";", "return n >= 2 ? null : \"one-correlation\";", "tan.lw offered on two assets", "t-constructions"],
-  ["src/tabs/optimization/model.ts", "const { m, S } = ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));", "const { m, S } = ownWindow(\"tan.bs\", a.returns.map((c) => c.slice(c.length - lb)));", "tan.lw's lookbacks solved on the sample covariance", "t-columns"],
+  ["src/tabs/optimization/model.ts", "const own = ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));", "const own = ownWindow(\"tan.bs\", a.returns.map((c) => c.slice(c.length - lb)));", "tan.lw's lookbacks solved on the sample covariance", "t-columns"],
   ["src/tabs/optimization/scorecard.ts", "moves the covariance matrix ${format(lw.intensity, \"pct1\")}", "moves the covariance matrix ${format(lw.rBar, \"pct1\")}", "the caption's intensity typed from the wrong field", "t-columns"],
   ["src/tabs/optimization/scorecard.ts", "if (lwFit.sol.beatsRf !== false && tw && tw.every(", "if (lwFit.sol.beatsRf !== false && tw && !tw.every(", "the close-to-Tangency sentence on the wrong windows", "t-columns"],
-  ["src/lib/robust.ts", "kind === \"tan.bs\" || kind === \"tan.lw\" || kind === \"tan.cap\"", "kind === \"tan.bs\" || kind === \"tan.cap\"", "tan.lw's parameters counted as none", "t-constructions"],
+  ["src/lib/robust.ts", "kind === \"tan.bs\" || kind === \"tan.lw\" || kind === \"tan.rs\" || kind === \"tan.cap\"", "kind === \"tan.bs\" || kind === \"tan.rs\" || kind === \"tan.cap\"", "tan.lw's parameters counted as none", "t-constructions"],
+  // resample.ts and its wiring (course C4: the resampled tangency, tan.rs), judged by the suite named. Two defects are
+  // left out because they cannot change an answer: the draws' covariance over T instead of T - 1 (a maximum-Sharpe mix
+  // does not move when the covariance is scaled), and dropping either of the two guards that leave out a draw with no
+  // mix above the rate: the long-only "no mean above the rate" check and the beatsRf filter after the solve each drop
+  // exactly the draws the other does (measured: each alone survives), so only a guard that drops too MANY is a defect.
+  ["src/lib/resample.ts", "x[i] = cols[i][t] - bar[i];", "x[i] = cols[i][t];", "running sums of the raw rows, so every draw's means carry the window's twice", "t-resample"],
+  ["src/lib/resample.ts", "while (d + len < T && idx[d + len] === s + len) len++;", "while (d + len < T && idx[d + len] >= s) len++;", "a run read past where the drawn rows stop being consecutive", "t-resample"],
+  ["src/lib/resample.ts", "(sq[k] - (sd[i] * sd[j]) / T) / (T - 1)", "sq[k] / (T - 1)", "each draw's covariance about the window's means, not its own", "t-resample"],
+  ["src/lib/resample.ts", "const m = centre.map((c, i) => c + sd[i] / T);", "const m = centre.slice();", "every draw solved on the window's means: only the covariance resampled", "t-resample"],
+  ["src/lib/resample.ts", "if (!allowShort && !m.some((v) => v > daily)) continue;", "if (!allowShort && !m.every((v) => v > daily)) continue;", "a long-only draw dropped whenever any one mean is below the rate", "t-resample"],
+  ["src/lib/resample.ts", "const idx = blockRows(T, T, uniform, block);", "const idx = blockRows(T, T, uniform, 1);", "single days drawn, not the Range of outcomes' month-long blocks", "t-resample"],
+  ["src/lib/resample.ts", "const draws = opts.draws ?? PATHS;", "const draws = opts.draws ?? 200;", "the redraws' count, not the Range of outcomes' path count", "t-resample"],
+  ["src/lib/resample.ts", "p10: w.map((_, i) => percentile(col(i), 10)),", "p10: w.map((_, i) => percentile(col(i), 5)),", "the band's low end at the 5th percentile", "t-resample"],
+  ["src/lib/resample.ts", "kept.reduce((acc, k) => acc + k[i], 0) / kept.length", "kept.reduce((acc, k) => acc + k[i], 0) / draws", "averaged over every draw made, counted or not", "t-resample"],
+  ["src/lib/resample.ts", "if (T < block || T < 2) return null;", "if (T < 2) return null;", "a window shorter than one block resampled anyway", "t-resample"],
+  ["src/lib/constructions.ts", "byRate.set(key, resample(rows, rf, allowShort, { m }));", "byRate.set(key, resample(rows, rf, allowShort));", "the cut row's means ignored: every draw centred on the window's", "t-resample"],
+  ["src/lib/constructions.ts", "if (id === \"tan.rs\") return { m, S, T, rows: cols };", "if (id === \"tan.rs\") return { m, S, T };", "tan.rs handed no rows to resample", "t-resample"],
+  ["src/lib/constructions.ts", "return { id, w: rs.w, mu: p.mu, sigma: p.sigma, beatsRf: p.mu > rf, shrink: null, rs };", "return { id, w: rs.w, mu: p.mu * 0.5, sigma: p.sigma, beatsRf: p.mu > rf, shrink: null, rs };", "tan.rs's return not the averaged weights' on the sample means", "t-resample"],
+  ["src/lib/robust.ts", "  if (id === \"tan.rs\") return null;\n", "", "tan.rs redrawn 200 times without its rows, a strip of nothing", "t-resample"],
+  ["src/lib/robust.ts", "kind === \"tan.lw\" || kind === \"tan.rs\" || kind === \"tan.cap\"", "kind === \"tan.lw\" || kind === \"tan.cap\"", "tan.rs's parameters counted as none", "t-resample"],
+  ["src/lib/robust.ts", "cut: cutAdded(kind, x.m, x.S, x.rf, x.allowShort, x.T, x.rows),", "cut: cutAdded(kind, x.m, x.S, x.rf, x.allowShort, x.T),", "tan.rs's cut row without its rows", "t-resample"],
+  ["src/tabs/optimization/model.ts", "    if (lb === a.dates.length) {", "    if (false) {", "the full lookback window solved a second time, not read from the column", "t-resample"],
+  ["src/tabs/optimization/model.ts", "row[\"tan.rs.p10\"] = rs.p10[i];", "row[\"tan.rs.p10\"] = rs.p90[i];", "the weights table's 10th percentile column holds the 90th", "t-resample"],
+  ["src/tabs/optimization/scorecard.ts", "const solved = added.filter((id) => id !== \"tan.rs\" && addedFit(a, id).sol);", "const solved = added.filter((id) => addedFit(a, id).sol);", "tan.rs's dash in the draw row blamed on the covariance", "t-resample"],
+  ["src/tabs/optimization/scorecard.ts", "\"${BUILD_ROWS.redraws}\" shows how far one solve's weights swing", "One solve's weights swing", "the caption no longer names the redraws row it averages", "t-resample"],
+  ["src/tabs/optimization/redraws.ts", "    () => addedFragility(a, \"tan.rs\", null),\n", "", "the cut row's resample left to the render", "t-resample"],
+  ["src/tabs/Optimization.tsx", ".filter((id) => id !== \"tan.rs\" || rsReady);", ";", "tan.rs's column drawn before its solves, inside the render", "t-columns"],
+  ["src/tabs/optimization/model.ts", "if (id === \"tan.rs\") {\n    const bounds", "if (false) {\n    const bounds", "tan.rs with no weights described as a failed solve", "t-columns"],
 ];
 
 const missing = [...new Set(M.map(([, , , , suite]) => suite).filter((s) => s && !existsSync(suitePath(s))))];

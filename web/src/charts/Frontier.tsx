@@ -18,7 +18,7 @@
 //   highest volatility (1607-1609), but the plot is scaled to the points and the line is clipped at
 //   its edge; the app's autorange stretched the whole plot to hold the line's far end.
 //
-// Beyond the app: the Optimization tab can add up to five more constructions to its scorecard, and each
+// Beyond the app: the Optimization tab can add up to six more constructions to its scorecard, and each
 // one it adds is drawn here too, at the return and volatility its weights had over this window (the
 // same in-sample figures as its scorecard column). Their markers are hollow ink outlines, so they read
 // as one family apart from the four filled portfolio markers, and each has an outline of its own, so
@@ -663,15 +663,23 @@ function marker(type: SymbolKind, size: number, color: string, opacity = 1) {
 
 // The added constructions' outlines. None repeats a shape above (circle, plus, diamond, star, square,
 // upward triangle), and each is hollow where those are filled: an hourglass for the last-year tangency,
-// a Y for the shrunk-means tangency, a triangle pointing left for the shrunk-covariance tangency, an X
+// a Y for the shrunk-means tangency, a triangle pointing left for the shrunk-covariance tangency, a
+// four-pointed star for the resampled tangency (its points upright, so it reads apart from the X), an X
 // for the capped tangency and a triangle pointing right for risk parity. (A hexagon was tried and dropped, its outline too near the assets' circle at this size;
 // so was a triangle pointing down, too near the Y, which points the same three ways.)
 // An ink outline with nothing inside it: drawn over the four portfolio markers, so a construction that
 // lands on one (the shrunk-means tangency can sit on the tangency itself) leaves both in view. The fill
 // is there, at no opacity, only so the inside takes the pointer for the tooltip. Round joins, so the
 // outline reaches exactly half its width past each corner, which is what glyphExtent counts.
-export type Glyph = "hourglass" | "wye" | "triangle-left" | "saltire" | "triangle-right";
-export const ADDED_GLYPH: Record<AddedId, Glyph> = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.lw": "triangle-left", "tan.cap": "saltire", rp: "triangle-right" };
+export type Glyph = "hourglass" | "wye" | "triangle-left" | "sparkle" | "saltire" | "triangle-right";
+export const ADDED_GLYPH: Record<AddedId, Glyph> = {
+  "tan.1y": "hourglass",
+  "tan.bs": "wye",
+  "tan.lw": "triangle-left",
+  "tan.rs": "sparkle",
+  "tan.cap": "saltire",
+  rp: "triangle-right",
+};
 export const GLYPH_STROKE = 1.5;
 const deg = Math.PI / 180;
 
@@ -707,6 +715,13 @@ export function glyphPoints(kind: Glyph): Pt[] {
       return [{ x: -6, y: -7.5 }, { x: 6, y: -7.5 }, { x: 1.2, y: 0 }, { x: 6, y: 7.5 }, { x: -6, y: 7.5 }, { x: -1.2, y: 0 }];
     case "wye":
       return arms([-150, -30, 90], 2.4, 8);
+    case "sparkle":
+      // Four points up, right, down and left, pinched to 2.6 px between them.
+      return Array.from({ length: 8 }, (_, k) => {
+        const r = k % 2 ? 2.6 : 8.5;
+        const t = (k * 45 - 90) * deg;
+        return { x: r * Math.cos(t), y: r * Math.sin(t) };
+      });
     case "saltire":
       return arms([45, 135, 225, 315], 2.2, 8);
   }

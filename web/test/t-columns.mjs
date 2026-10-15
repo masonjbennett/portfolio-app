@@ -35,12 +35,12 @@ const join = (xs) => xs.join(",");
 // The engine, called directly: a construction's own window, its weights, its lookback weights, its redraws.
 function engine(a, id) {
   const own = C.ownWindow(id, a.returns);
-  const sol = C.solveAdded(id, own.m, own.S, own.T, a.rf, a.allowShort);
+  const sol = C.solveAdded(id, own.m, own.S, own.T, a.rf, a.allowShort, own.rows);
   const looks = id === "tan.1y" || windows(a.dates.length).length < 2
     ? []
     : windows(a.dates.length).map(({ lb }) => {
-        const { m, S } = C.ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));
-        return C.solveAdded(id, m, S, lb, a.rf, a.allowShort)?.w ?? null;
+        const w = C.ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));
+        return C.solveAdded(id, w.m, w.S, lb, a.rf, a.allowShort, w.rows)?.w ?? null;
       });
   const strip = R.addedStrip(id, own.m, own.S, a.rf, a.allowShort, own.T, R.REDRAWS, DEFAULT_SEED);
   return { own, sol, looks, strip };
@@ -62,7 +62,7 @@ for (const [name, make] of SETS) {
     const plain = SC.scorecard(a, c, READY);
     check(join(model.columns.map((x) => x.id)) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]),
       tag("order: the five added columns sit between Custom and the benchmark, in the fixed order"), join(model.columns.map((x) => x.id)));
-    check(join(SC.scoreColIds([...ids].reverse())) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]) && join(M.shownAdded(a, ["rp", "tan.cap", "tan.lw", "tan.bs", "tan.1y"])) === join(ids),
+    check(join(SC.scoreColIds([...ids].reverse())) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]) && join(M.shownAdded(a, ["rp", "tan.cap", "tan.rs", "tan.lw", "tan.bs", "tan.1y"])) === join(ids),
       tag("order: the column list and the shown list each put the constructions in the fixed order"));
     const reversed = SC.scorecard(a, c, READY, [...ids].reverse(), draws);
     check(join(reversed.columns.map((x) => x.id)) === join(model.columns.map((x) => x.id)), tag("order: added in the opposite order, the columns come out the same"));
@@ -78,7 +78,7 @@ for (const [name, make] of SETS) {
       }
       if (!(col.ok && col.weights.every((x, i) => x === e.sol.w[i]) && col.label === M.ADDED_LABEL[id])) off.push(`${id}: weights or head`);
       const row = scorecardRow(portfolioReturns(a.returns, e.sol.w), a.bench, a.dates, a.prices.dates[0], a.rf);
-      const frag = R.fragility(id, { m: e.own.m, S: e.own.S, rf: a.rf, allowShort: a.allowShort, T: e.own.T, lookbacks: e.looks, redraws: null, strip: e.strip });
+      const frag = R.fragility(id, { m: e.own.m, S: e.own.S, rf: a.rf, allowShort: a.allowShort, T: e.own.T, lookbacks: e.looks, redraws: null, strip: e.strip, rows: e.own.rows });
       for (const line of model.lines) {
         const cell = line.cells[k];
         const v = line.metric.value({ row, frag });
@@ -141,7 +141,9 @@ for (const [name, make] of SETS) {
     // The weights table carries the same weights, one column each, in the same order.
     const wt = M.weightTable(a, [...ids].reverse());
     const wcols = wt.value.columns.map((x) => x.key);
-    check(wt.status === "ready" && join(wcols) === join(["asset", "gmv", "tangency", "ew", ...ids]) &&
+    // The resampled tangency's averaged weights are followed by their 10th and 90th percentile across its draws.
+    const wantCols = ids.flatMap((id) => (id === "tan.rs" && want[id].sol ? [id, "tan.rs.p10", "tan.rs.p90"] : [id]));
+    check(wt.status === "ready" && join(wcols) === join(["asset", "gmv", "tangency", "ew", ...wantCols]) &&
       ids.every((id) => a.tickers.every((_, i) => wt.value.rows[i][id] === model.columns.find((x) => x.id === id).weights?.[i] || (wt.value.rows[i][id] === null && !want[id].sol))),
       tag("weights table: a column per added construction, in the fixed order, holding the scorecard's weights"), join(wcols));
   }
@@ -179,9 +181,9 @@ const year = analysed(cut(mega, { closes: C.YEAR_ROWS + 1 }));
 const yearAndADay = analysed(cut(mega, { closes: C.YEAR_ROWS + 2 }));
 check(four.tickers.length === 4 && five.tickers.length === 5 && year.dates.length === C.YEAR_ROWS && yearAndADay.dates.length === C.YEAR_ROWS + 1,
   "boundaries: the cut baskets have four and five assets, and windows of one year and one day more", `${four.tickers.length} ${five.tickers.length} ${year.dates.length} ${yearAndADay.dates.length}`);
-check(M.shownAdded(four, ids).join() === "tan.1y,tan.bs,tan.lw,rp" && M.shownAdded(five, ids).join() === ids.join(),
+check(M.shownAdded(four, ids).join() === "tan.1y,tan.bs,tan.lw,tan.rs,rp" && M.shownAdded(five, ids).join() === ids.join(),
   "boundaries: four assets cannot have the 25% cap, five can");
-check(M.shownAdded(year, ids).join() === "tan.bs,tan.lw,tan.cap,rp" && M.shownAdded(yearAndADay, ids).join() === ids.join(),
+check(M.shownAdded(year, ids).join() === "tan.bs,tan.lw,tan.rs,tan.cap,rp" && M.shownAdded(yearAndADay, ids).join() === ids.join(),
   "boundaries: a window of exactly one year cannot have the last-year column, one a day longer can");
 check(SC.scorecard(four, customWeights(four, {}), READY, ids).columns.every((x) => x.id !== "tan.cap"),
   "boundaries: a construction the basket cannot have is ignored for that basket, not shown failed");
@@ -223,7 +225,7 @@ function frontierAdded(root) {
     "row: a group labelled Add a column sits in the scorecard section, above the table");
   check(join(buttons().map((b) => text(b))) === join(ids.map((id) => M.ADDED_LABEL[id])) && buttons().every((b) => b.getAttribute("aria-pressed") === "false" && !b.disabled && b.getAttribute("role") === null) &&
     root.querySelectorAll('.addcol [role="switch"]').length === 0,
-    "row: five toggle buttons with aria-pressed, never a switch, all off and offered on the example", buttons().map((b) => text(b)).join(" | "));
+    "row: six toggle buttons with aria-pressed, never a switch, all off and offered on the example", buttons().map((b) => text(b)).join(" | "));
   check(join(heads()) === join(SC.SCORE_COL_IDS) && root.querySelector(".addcol-note") === null && frontierAdded(root)?.length === 0,
     "default: the scorecard opens with its default columns, no reason line, and the frontier is handed no marks");
   // Offering the four buttons reads the basket's size only: nothing is solved for a column nobody added.
@@ -232,11 +234,11 @@ function frontierAdded(root) {
   const marks0 = frontierAdded(root);
 
   // Clicked out of order, the columns land in the fixed order, and the link's ask is in that order too.
-  await act(async () => buttons()[4].click());
+  await act(async () => buttons()[5].click());
   await act(async () => buttons()[0].click());
   await flush();
   check(join(asked.at(-1).cols) === "tan.1y,rp" && join(heads()) === join(["ew", "gmv", "tangency", "custom", "tan.1y", "rp", "bench"]) &&
-    buttons()[0].getAttribute("aria-pressed") === "true" && buttons()[4].getAttribute("aria-pressed") === "true" && buttons()[1].getAttribute("aria-pressed") === "false",
+    buttons()[0].getAttribute("aria-pressed") === "true" && buttons()[5].getAttribute("aria-pressed") === "true" && buttons()[1].getAttribute("aria-pressed") === "false",
     "click: risk parity then the last-year tangency land in the fixed order, pressed", `${join(asked.at(-1).cols)} | ${join(heads())}`);
   const marks = frontierAdded(root);
   check(marks !== marks0 && join(marks.map((m) => m.id)) === "tan.1y,rp" && marks.every((m) => m.label === M.ADDED_LABEL[m.id] && m.w === M.addedFit(a, m.id).sol.w),
@@ -273,12 +275,18 @@ function frontierAdded(root) {
     text(root.querySelector('[data-col-def="col_parity"]')).includes(tipText("col_parity", "plain")),
     "explanations: each added head has an info mark, and its text is in the list that works on touch");
 
-  // All five, then the words on the page that are new.
+  // All six, then the words on the page that are new. The resampled tangency is solved after paint, one resample per
+  // macrotask: until the last lands its button is pressed, its column absent, and the line under the row says so.
   await act(async () => buttons()[1].click());
   await act(async () => buttons()[2].click());
-  await act(async () => buttons()[3].click());
+  await act(async () => buttons()[4].click());
   await flush();
-  check(join(heads()) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]), "click: all five added, still in the fixed order");
+  await act(async () => buttons()[3].click());
+  check(buttons()[3].getAttribute("aria-pressed") === "true" && !heads().includes("tan.rs") && /being solved/.test(text(root.querySelector(".addcol-note") ?? root)),
+    "resampled: pressed, its column waits for its solves after paint, and the line under the row says so", join(heads()));
+  await flush(12);
+  check(join(heads()) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]) && root.querySelector(".addcol-note") === null,
+    "click: all six added, still in the fixed order, and the solving line gone", join(heads()));
   // The page's own model, read off the scorecard's props: its added draw rows are the engine's redraws on the
   // page's seed (the downloads' seed), to the last digit.
   let sf = fiberOf(root.querySelector(".sc"));
@@ -286,7 +294,7 @@ function frontierAdded(root) {
   const pageModel = sf?.memoizedProps.model;
   const seeded = SC.scorecard(a, customWeights(a, {}), READY, ids, Object.fromEntries(ids.map((id) => [id, { status: "ready", value: engine(a, id).strip }])));
   const drawsOf = (m) => m.lines.find((l) => l.metric.id === "draws").cells.filter((_, k) => C.isAddedId(m.columns[k].id)).map((x) => x.value);
-  check(pageModel && drawsOf(pageModel).length === 5 && drawsOf(pageModel).every((x, i) => x === drawsOf(seeded)[i]) && new Set(drawsOf(seeded)).size > 2,
+  check(pageModel && drawsOf(pageModel).length === 6 && drawsOf(pageModel).every((x, i) => x === drawsOf(seeded)[i]) && new Set(drawsOf(seeded)).size > 2,
     "redraws: the page's added draw rows are the engine's redraws on the page's own seed, the one the downloads use", `${pageModel ? drawsOf(pageModel).join() : "no model"} vs ${drawsOf(seeded).join()}`);
   const caption = text(root.querySelector(".sc caption"));
   const phi = M.addedFit(a, "tan.bs").sol.shrink.phi;
@@ -297,7 +305,7 @@ function frontierAdded(root) {
     SC.addedConventions(a, ids),
     SC.scorecard(a, customWeights(a, {}), READY, ids, {}).addedDraws,
     ...Object.entries(reasons).map(([rr, aa]) => M.unavailableWords("tan.cap", rr, aa)),
-    ...["col_last_year", "col_shrunk", "col_shrunk_cov", "col_capped", "col_parity"].flatMap((k) => Object.values(SCORE_TIPS[k])),
+    ...["col_last_year", "col_shrunk", "col_shrunk_cov", "col_resampled", "col_capped", "col_parity"].flatMap((k) => Object.values(SCORE_TIPS[k])),
     M.addedSub("rp", true),
     M.LAST_YEAR,
     ADD_COLUMN,
@@ -353,8 +361,8 @@ function frontierAdded(root) {
   const long = exampleAnalysis({ rf: 1 });
   const short = exampleAnalysis({ rf: 1, allowShort: true });
   const empty = (a) => ids.filter((id) => !engine(a, id).sol);
-  check(join(empty(long)) === "tan.cap" && join(empty(short)) === "tan.1y,tan.bs,tan.lw,tan.cap",
-    "no weights: at a rate no mix reaches, the engine finds none for the capped tangency, and with shorting on for the other three tangencies too",
+  check(join(empty(long)) === "tan.rs,tan.cap" && join(empty(short)) === "tan.1y,tan.bs,tan.lw,tan.rs,tan.cap",
+    "no weights: at a rate no mix reaches, the engine finds none for the capped and resampled tangencies, and with shorting on for the other three too",
     `${join(empty(long))} | ${join(empty(short))}`);
   for (const [tag, a] of [["long-only", long], ["shorting", short]]) {
     const m = SC.scorecard(a, customWeights(a, {}), READY, ids);
@@ -370,17 +378,18 @@ function frontierAdded(root) {
     const cap = m.addedMissing.find((s) => s.startsWith(M.ADDED_LABEL["tan.cap"])) ?? "";
     const tans = m.addedMissing.filter((s) => !s.startsWith(M.ADDED_LABEL["tan.cap"]));
     check(cap.includes("long-only") && cap.includes(`at most ${Math.round(C.CAP * 100)}% of each asset`) && !cap.includes(`${MINUS}100%`) &&
-      tans.length === (a.allowShort ? 3 : 0) && tans.every((s) => s.includes(`between ${MINUS}100% and 100%`)),
+      // Long-only, only the resampled tangency is empty (the others hold the least negative mix), and it names no shorting bounds.
+      tans.length === (a.allowShort ? 4 : 1) && tans.every((s) => s.includes(`between ${MINUS}100% and 100%`) === a.allowShort),
       `no weights (${tag}): the capped line names the cap and never the shorting bounds; the others name the bounds the switch set`, m.addedMissing.join(" | "));
   }
   // On the page: one line per empty column under the scorecard, its button still offered and pressed so it can be taken off.
   const props = tabProps(short);
   const r = render(h(Optimization, { ...props, settings: { ...props.settings, cols: [...ids] } }));
-  await flush();
+  await flush(12);
   const lines = [...r.container.querySelectorAll('#build-scorecard [data-note="added-missing"]')].map((x) => text(x));
   const want = SC.scorecard(short, customWeights(short, {}), READY, ids).addedMissing;
   const pressed = [...r.container.querySelectorAll(".addcol-btn")].filter((b) => b.getAttribute("aria-pressed") === "true" && !b.disabled).length;
-  check(lines.length === 4 && join(lines) === join(want) && pressed === 5,
+  check(lines.length === 5 && join(lines) === join(want) && pressed === 6,
     "no weights (page): the scorecard prints each empty column's line, and its button stays offered and pressed", lines.join(" | "));
   r.unmount();
 
@@ -457,7 +466,8 @@ function frontierAdded(root) {
   const notes = (cols) => [FAILED, { status: "pending" }, READY].map((r) => SC.drawRowNote(r, cols));
   const both = `${M.PORT_LABEL.gmv} and ${M.PORT_LABEL.tangency}`;
   const draws = withAdded.lines.find((l) => l.metric.id === "draws").cells;
-  const filledAdded = withAdded.columns.every((col, k) => !C.isAddedId(col.id) || (col.ok && draws[k].value !== null));
+  // The resampled tangency has no redraws of its own (its caption says why), so its draw cell is a dash.
+  const filledAdded = withAdded.columns.every((col, k) => !C.isAddedId(col.id) || (col.ok && (col.id === "tan.rs" ? draws[k].value === null : draws[k].value !== null)));
   const baseEmpty = withAdded.columns.every((col, k) => (col.id !== "gmv" && col.id !== "tangency") || draws[k].value === null);
   check(filledAdded && baseEmpty && JSON.stringify(notes(withAdded.columns)) === JSON.stringify([
     `The redraw row is empty for ${both}: the redraws failed. The solver stopped.`,

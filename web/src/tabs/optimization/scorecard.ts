@@ -25,6 +25,7 @@ import { fragility, REDRAWS, type Construction, type Fragility, type Redraws, ty
 import { CAPM_MIN_MONTHS, capmBasisWords, fullMonths, scorecardRow, TRADING_DAYS, type ScoreRow } from "../../lib/stats.ts";
 import type { ScoreTipKey } from "../../content/tooltips.ts";
 import type { Analysis, CellFormat, Column, FormatId, TableRow, TipKey } from "../../types.ts";
+import { BUILD_ROWS } from "../build.ts";
 import { FITTED, tableSpan } from "../caption.ts";
 import { isEqualWeight } from "../custom/model.ts";
 import { fitWindows } from "../sensitivity/model.ts";
@@ -63,6 +64,7 @@ export const ADDED_TIP: Readonly<Record<AddedId, ScoreTipKey>> = {
   "tan.1y": "col_last_year",
   "tan.bs": "col_shrunk",
   "tan.lw": "col_shrunk_cov",
+  "tan.rs": "col_resampled",
   "tan.cap": "col_capped",
   rp: "col_parity",
 };
@@ -288,7 +290,7 @@ export function addedFragility(a: Analysis, id: AddedId, strip: Strip | null): F
   if (byStrip.has(strip)) return byStrip.get(strip) ?? null;
   const own = addedFit(a, id).own;
   const frag = own
-    ? fragility(id, { m: own.m, S: own.S, rf: a.rf, allowShort: a.allowShort, T: own.T, lookbacks: addedLookbacks(a, id), redraws: null, strip })
+    ? fragility(id, { m: own.m, S: own.S, rf: a.rf, allowShort: a.allowShort, T: own.T, lookbacks: addedLookbacks(a, id), redraws: null, strip, rows: own.rows })
     : null;
   if (byStrip.size >= STRIPS_KEPT) byStrip.delete(byStrip.keys().next().value as Strip | null);
   byStrip.set(strip, frag);
@@ -413,6 +415,19 @@ export function addedConventions(a: Analysis, added: readonly AddedId[]): string
       );
     }
   }
+  const rs = added.includes("tan.rs") ? addedFit(a, "tan.rs").sol?.rs : null;
+  if (rs) {
+    // The link to the redraws row is the point of saying this: that row shows how far one solve swings, this column is the average of many.
+    const of = rs.counted === rs.draws ? "" : `${rs.counted.toLocaleString("en-US")} of `;
+    out.push(
+      `${ADDED_LABEL["tan.rs"]} averages the maximum-Sharpe weights solved on ${of}${rs.draws.toLocaleString("en-US")} redraws of the window's own months, ` +
+        `in the Range of outcomes' month-long blocks (Michaud 1998). "${BUILD_ROWS.redraws}" shows how far one solve's weights swing; this column is ` +
+        `the average of such solves, so its redraw row is a dash and each weight's 10th to 90th percentile across its draws is under "${BUILD_ROWS.holdings}".`,
+    );
+    const left = rs.draws - rs.counted;
+    if (left === 1) out.push(`The other draw had no mix earning more than ${rate}, so it is left out.`);
+    else if (left > 1) out.push(`The other ${left.toLocaleString("en-US")} draws had no mix earning more than ${rate}, so they are left out.`);
+  }
   const cap = added.includes("tan.cap") ? addedFit(a, "tan.cap").sol : null;
   if (cap && Math.max(...cap.w) >= CAP - 1e-9) {
     out.push(
@@ -431,7 +446,8 @@ export function addedMissingNotes(a: Analysis, added: readonly AddedId[]): strin
 
 /** Why an added column's draw row is still a dash, or null when every shown one has its redraws. */
 export function addedDrawNote(a: Analysis, added: readonly AddedId[], draws: AddedDraws): string | null {
-  const solved = added.filter((id) => addedFit(a, id).sol);
+  // The resampled tangency has no redraws of its own to wait for: the caption (addedConventions) says why its row is a dash.
+  const solved = added.filter((id) => id !== "tan.rs" && addedFit(a, id).sol);
   const waiting = solved.filter((id) => (draws[id]?.status ?? "pending") === "pending").map((id) => ADDED_LABEL[id]);
   const parts: string[] = [];
   if (waiting.length) parts.push(`The redraw row fills in for ${waiting.join("; ")} once ${waiting.length === 1 ? "its" : "their"} ${REDRAWS} redraws are solved.`);

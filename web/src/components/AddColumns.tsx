@@ -21,7 +21,7 @@ export interface AddColumnOption {
 export interface AddColumnsProps {
   options: readonly AddColumnOption[];
   onToggle: (id: AddedId) => void;
-  /** Why the disabled buttons are disabled, in one short line; null when none is. */
+  /** Why the disabled buttons are disabled, and whether an added column is still being solved, in one short line; null when neither. */
   note: string | null;
 }
 
