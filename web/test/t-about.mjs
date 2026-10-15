@@ -101,13 +101,17 @@ const EMOJI = /\p{Extended_Pictographic}/u;
   check(!EMOJI.test(text(r.container)), "method: no emoji in the footer (the app's expander is headed with one)");
 
   // The literature (proposal D12): the walk-forward tab's own citation, word for word, and only papers whose
-  // method the engine uses — Jorion for the shrunk means it ships, never Ledoit-Wolf, whose shrinkage it does not.
+  // method the engine uses — Jorion for the shrunk means and Ledoit-Wolf's constant-correlation paper for the shrunk
+  // covariance, both of which it ships, and never their identity-target paper, whose target it does not use.
   const lit = [...panel.querySelectorAll(".footer-method-row")].find((row) => text(row.querySelector("dt")) === "Literature");
   const cites = [...(lit?.querySelectorAll("cite") ?? [])].map(text);
-  check(!!lit && text(lit).includes(`${live.CITE_AUTHORS},`) && cites[0] === live.CITE_TITLE && cites.length === 5,
-    "method: the literature cites DeMiguel, Garlappi and Uppal as the walk-forward tab does, and five papers by title", cites.join(" | "));
-  check(/Jorion \(1986\)/.test(text(lit ?? {})) && /bayesStein/.test(src("src/lib/constructions.ts")) && !/Ledoit/.test(body),
-    "method: the shrinkage cited is Jorion's, which constructions.ts ships, and Ledoit-Wolf is not cited");
+  check(!!lit && text(lit).includes(`${live.CITE_AUTHORS},`) && cites[0] === live.CITE_TITLE && cites.length === 6,
+    "method: the literature cites DeMiguel, Garlappi and Uppal as the walk-forward tab does, and six papers by title", cites.join(" | "));
+  check(/Jorion \(1986\)/.test(text(lit ?? {})) && /bayesStein/.test(src("src/lib/constructions.ts")),
+    "method: the mean shrinkage cited is Jorion's, which constructions.ts ships");
+  check(cites.includes("Honey, I Shrunk the Sample Covariance Matrix") && /export function ledoitWolf/.test(src("src/lib/constructions.ts")) &&
+    /constant-correlation/.test(src("src/lib/constructions.ts")) && !/Well-Conditioned/i.test(body),
+    "method: the covariance shrinkage cited is Ledoit-Wolf's constant-correlation paper, which constructions.ts ships, and not the identity-target one", cites.join(" | "));
   check(/hindsight in the choice of assets/.test(body) && /applies to all three portfolios alike/.test(body),
     "method: the asset-choice sentence says hindsight inflates every portfolio's Sharpe alike, not that the comparison is spared");
 

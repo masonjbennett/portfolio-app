@@ -62,6 +62,7 @@ export function scoreColIds(added: readonly AddedId[] = []): ScoreColId[] {
 export const ADDED_TIP: Readonly<Record<AddedId, ScoreTipKey>> = {
   "tan.1y": "col_last_year",
   "tan.bs": "col_shrunk",
+  "tan.lw": "col_shrunk_cov",
   "tan.cap": "col_capped",
   rp: "col_parity",
 };
@@ -356,7 +357,7 @@ function heldInstead(a: Analysis, w: readonly number[]): string {
 
 /**
  * What the caption adds for the added columns shown: the last-year column's fixed window, the shrinkage
- * the engine applied (read from its answer, never typed), why risk parity's what-if rows are zero, and,
+ * the engine applied to the means or the covariance (read from its answer, never typed), why risk parity's what-if rows are zero, and,
  * when the window makes them so, why a capped column's what-if rows can read zero, why the shrunk-mean
  * column sits close to Tangency's, and that a long-only tangency which earned no more than the rate holds one asset.
  * Every one of those is read from the engine's answer on this window. Null when none applies.
@@ -392,6 +393,23 @@ export function addedConventions(a: Analysis, added: readonly AddedId[]): string
         `On this window each of its weights is within ${Math.round(CLOSE_WEIGHTS * 100)} percentage point of Tangency's: shrinking scales every ` +
           `excess return by the same factor, which leaves the maximum-Sharpe weights where they were, and adds one amount common to every ` +
           `asset, the intensity times the target's excess over the rate, here ${format(common, "pct2")} a year; only that amount moves them.`,
+      );
+    }
+  }
+  const lwFit = added.includes("tan.lw") ? addedFit(a, "tan.lw") : null;
+  const lw = lwFit?.own?.lw;
+  if (lwFit?.sol && lw) {
+    out.push(
+      `${ADDED_LABEL["tan.lw"]} moves the covariance matrix ${format(lw.intensity, "pct1")} of the way toward one in which every pair of ` +
+        `assets has the average correlation, ${format(lw.rBar, "num2")}, and each keeps its own variance, before solving (Ledoit and Wolf 2004, an intensity estimated from the window).`,
+    );
+    if (lwFit.sol.beatsRf === false) out.push(`On the shrunk covariance no long-only mix earns more than ${rate}, so it holds ${heldInstead(a, lwFit.sol.w)}.`);
+    // A long window holds the sample covariance well, so the intensity can be small and the weights stay Tangency's; said only when they do.
+    const tw = a.tangency?.w;
+    if (lwFit.sol.beatsRf !== false && tw && tw.every((x, i) => Math.abs(x - lwFit.sol!.w[i]) < CLOSE_WEIGHTS)) {
+      out.push(
+        `On this window each of its weights is within ${Math.round(CLOSE_WEIGHTS * 100)} percentage point of Tangency's: at that intensity the ` +
+          `covariance matrix barely moves, because ${T.toLocaleString("en-US")} daily returns estimate it closely.`,
       );
     }
   }

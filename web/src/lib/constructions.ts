@@ -1,7 +1,8 @@
-// Four more ways to build a portfolio from the same window, for the scorecard's added columns.
+// Five more ways to build a portfolio from the same window, for the scorecard's added columns.
 //
 //   tan.1y   maximum Sharpe on the last year of the window only
 //   tan.bs   maximum Sharpe on Bayes-Stein shrunk means (Jorion, 1986)
+//   tan.lw   maximum Sharpe on the Ledoit-Wolf shrunk covariance, constant-correlation target (2004)
 //   tan.cap  maximum Sharpe, long-only, no weight above CAP
 //   rp       risk parity: every asset contributes the same share of the portfolio's variance
 //
@@ -11,7 +12,7 @@
 // Units, throughout, are the engine's: `m` is the MEAN DAILY return per asset, `S` the DAILY covariance
 // (ddof 1), `T` the number of daily return rows they came from, `rf` the ANNUAL risk-free rate. The
 // weights are decimal fractions summing to 1; a Solution's mu and sigma are annual decimals.
-import { cholSolve, dot, sum, type Mat, type Vec } from "./num.ts";
+import { cholSolve, covMatrix, dot, mean, sum, type Mat, type Vec } from "./num.ts";
 import { riskParity, tangency, tangencyCapped, type Solution } from "./optimize.ts";
 import { windowMoments } from "./portfolio.ts";
 import { loadVerdict } from "./stats.ts";
@@ -28,8 +29,9 @@ export { ADDED_IDS, CAP, CAP_MIN_ASSETS, isAddedId, YEAR_ROWS, type AddedId } fr
  *   year-too-thin       the last year is too few days per asset to estimate (loadVerdict refuses it)
  *   too-few-rows        T <= n + 2, where the Bayes-Stein intensity is undefined
  *   too-few-assets      fewer than CAP_MIN_ASSETS assets for the cap
+ *   one-correlation     two assets: the constant-correlation target's one correlation is the sample's own
  */
-export type Unavailable = "window-is-one-year" | "year-too-thin" | "too-few-rows" | "too-few-assets";
+export type Unavailable = "window-is-one-year" | "year-too-thin" | "too-few-rows" | "too-few-assets" | "one-correlation";
 
 /** Null when construction `id` can be offered on T daily return rows of n assets, else the reason. */
 export function unavailable(id: AddedId, T: number, n: number): Unavailable | null {
@@ -39,6 +41,8 @@ export function unavailable(id: AddedId, T: number, n: number): Unavailable | nu
       return loadVerdict(YEAR_ROWS, n) === "refuse" ? "year-too-thin" : null;
     case "tan.bs":
       return T > n + 2 ? null : "too-few-rows";
+    case "tan.lw":
+      return n >= 3 ? null : "one-correlation";
     case "tan.cap":
       return n >= CAP_MIN_ASSETS ? null : "too-few-assets";
     case "rp":
@@ -51,6 +55,7 @@ export function availability(T: number, n: number): Record<AddedId, Unavailable 
   return {
     "tan.1y": unavailable("tan.1y", T, n),
     "tan.bs": unavailable("tan.bs", T, n),
+    "tan.lw": unavailable("tan.lw", T, n),
     "tan.cap": unavailable("tan.cap", T, n),
     rp: unavailable("rp", T, n),
   };
@@ -61,12 +66,16 @@ export interface Moments {
   m: Vec;
   S: Mat;
   T: number;
+  /** tan.lw only: the shrinkage that made S (S is then the shrunk matrix, not the sample one). */
+  lw?: LedoitWolf;
 }
 
 /**
  * The window construction `id` reads. The last-year construction reads the LAST 252 rows of `cols` (one
- * daily return column per asset) and T = 252; the others read every row. Callers check unavailable()
- * first: with 252 rows or fewer, the last year is the whole window.
+ * daily return column per asset) and T = 252; the others read every row. The Ledoit-Wolf construction's S is
+ * the shrunk covariance of those rows (ledoitWolf), so whatever re-solves it on its own window (the walk-forward
+ * folds, the cut and redraw rows, which keep S and move the means) reads the shrunk matrix too. Callers check
+ * unavailable() first: with 252 rows or fewer, the last year is the whole window.
  */
 export function ownWindow(id: AddedId, cols: Vec[]): Moments {
   if (id === "tan.1y") {
@@ -75,7 +84,77 @@ export function ownWindow(id: AddedId, cols: Vec[]): Moments {
   }
   const T = cols[0].length;
   const { m, S } = windowMoments(cols, T);
+  if (id === "tan.lw") {
+    const lw = ledoitWolf(cols);
+    return { m, S: lw.S, T, lw };
+  }
   return { m, S, T };
+}
+
+/** The Ledoit-Wolf shrunk covariance, with how far it was shrunk and the target's one correlation. */
+export interface LedoitWolf {
+  /** The shrunk covariance, daily: (1 - intensity) S + intensity F, on the engine's S (ddof 1). */
+  S: Mat;
+  /** The shrinkage intensity, 0 to 1 (0 keeps the sample covariance, 1 replaces it with the target). */
+  intensity: number;
+  /** The target's correlation: the average of the sample correlations between distinct assets. */
+  rBar: number;
+}
+
+/**
+ * Ledoit and Wolf (2004), "Honey, I Shrunk the Sample Covariance Matrix", on daily return columns. The target F
+ * keeps every asset's own variance and sets every correlation to rBar, their average; the intensity is the
+ * paper's estimate of the one that minimises the expected squared distance to the true matrix, computed as the
+ * authors' covCor.m does (moments over T, on demeaned returns):
+ *   intensity = max(0, min(1, (pi - rho) / gamma / T)),
+ * pi the summed asymptotic variances of the sample covariances, rho their covariance with the target's entries,
+ * gamma the squared distance from the sample matrix to the target. That intensity is applied to the engine's S
+ * (ddof 1) and the target built from it, so the diagonal is S's. With fewer than 3 assets the target's one
+ * correlation is the sample's own, so the target IS the sample matrix (gamma is zero but for rounding, which would
+ * read as any intensity at all); there, and wherever the estimate is not a number, the intensity is 0 and S is returned.
+ * test/fixtures/ledoit-wolf.json holds it to a numpy implementation (test/oracle/ledoit_wolf.py).
+ */
+export function ledoitWolf(cols: Vec[]): LedoitWolf {
+  const n = cols.length;
+  const T = cols[0].length;
+  const d = cols.map((c) => {
+    const mu = mean(c);
+    return c.map((v) => v - mu);
+  });
+  const s: Mat = d.map((di) => d.map((dj) => dot(di, dj) / T));
+  const sd = s.map((row, i) => Math.sqrt(row[i]));
+  let rSum = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j) rSum += s[i][j] / (sd[i] * sd[j]);
+  const rBar = rSum / (n * (n - 1));
+  let pi = 0;
+  let rho = 0;
+  let gamma = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      let sq = 0;
+      let cube = 0;
+      for (let t = 0; t < T; t++) {
+        const a = d[i][t] * d[j][t];
+        sq += a * a;
+        cube += d[i][t] * d[i][t] * a;
+      }
+      const piIJ = sq / T - s[i][j] * s[i][j];
+      pi += piIJ;
+      if (i === j) {
+        rho += piIJ;
+      } else {
+        rho += rBar * (sd[j] / sd[i]) * (cube / T - s[i][i] * s[i][j]);
+        gamma += (s[i][j] - rBar * sd[i] * sd[j]) ** 2;
+      }
+    }
+  }
+  const kappa = (pi - rho) / gamma;
+  const intensity = n >= 3 && Number.isFinite(kappa) ? Math.max(0, Math.min(1, kappa / T)) : 0;
+  const S = covMatrix(cols);
+  const shrunk = S.map((row, i) =>
+    row.map((v, j) => (i === j ? v : (1 - intensity) * v + intensity * rBar * Math.sqrt(S[i][i] * S[j][j]))),
+  );
+  return { S: shrunk, intensity, rBar };
 }
 
 /** Bayes-Stein shrunk means, with how far they were shrunk and toward what. */
@@ -119,14 +198,14 @@ export interface AddedSolution extends Solution {
    * the tangency column does). Risk parity reads no means: null.
    */
   beatsRf: boolean | null;
-  /** tan.bs only: the shrunk means, the intensity and the target. Null for the others. */
+  /** tan.bs only: the shrunk means, the intensity and the target. Null for the others (tan.lw's shrinkage is its window's, Moments.lw). */
   shrink: Shrunk | null;
 }
 
 /**
  * Solve construction `id` on its OWN window's moments (ownWindow(id, cols) gives them). mu and sigma are
  * annual decimals on the means the weights were solved with: for tan.bs the shrunk means, for tan.1y the
- * last year's. The shorting switch reaches only the last-year and shrunk-mean tangencies; the capped
+ * last year's; for tan.lw, sigma is on the covariance passed in, which ownWindow makes the shrunk one. The shorting switch reaches only the last-year and shrunk-mean tangencies; the capped
  * tangency and risk parity are long-only whatever it says. Null when the solve has no answer: shorting on
  * and nothing inside the box beats the risk-free rate (tan.1y, tan.bs), no capped mix beats it (tan.cap),
  * T <= n + 2 (tan.bs), or a failed solve.
@@ -148,6 +227,10 @@ export function solveAdded(
       const shrink = bayesStein(m, S, T);
       const t = shrink && tangency(shrink.means, S, rf, allowShort);
       return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink };
+    }
+    case "tan.lw": {
+      const t = tangency(m, S, rf, allowShort);
+      return t && { id, w: t.w, mu: t.mu, sigma: t.sigma, beatsRf: t.beatsRf, shrink: null };
     }
     case "tan.cap": {
       const t = tangencyCapped(m, S, rf, CAP);

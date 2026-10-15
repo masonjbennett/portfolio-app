@@ -35,7 +35,7 @@ import {
   type Unavailable,
 } from "../../lib/constructions.ts";
 import type { Vec } from "../../lib/num.ts";
-import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, windowMoments, windows, type Custom, type Row } from "../../lib/portfolio.ts";
+import { normalizeCustom, portfolioReturns, riskContribution, summaryRow, windows, type Custom, type Row } from "../../lib/portfolio.ts";
 import { returnShare, sharpeSE, TRADING_DAYS, wealth } from "../../lib/stats.ts";
 import type { Role } from "../../charts/theme.ts";
 import type { Analysis, Column, CustomWeights, LoadState, TableRow } from "../../types.ts";
@@ -81,7 +81,7 @@ export function finiteSE(a: Analysis, w: Vec): number | null {
 }
 
 // ---- the added constructions ------------------------------------------------------------------------
-// Four more ways to build a portfolio from the same prices, which the reader can add to the scorecard and
+// Five more ways to build a portfolio from the same prices, which the reader can add to the scorecard and
 // the weights table one at a time. Each is solved by the engine (src/lib/constructions.ts) on its own
 // window's moments, once per analysis, and every one is in-sample: its weights are chosen on the prices
 // its figures are then computed on, exactly as the tangency column's are.
@@ -90,6 +90,7 @@ export function finiteSE(a: Analysis, w: Vec): number | null {
 export const ADDED_LABEL: Readonly<Record<AddedId, string>> = {
   "tan.1y": "Tangency, last year",
   "tan.bs": "Tangency, shrunk means",
+  "tan.lw": "Tangency, shrunk covariance",
   "tan.cap": `Tangency, at most ${Math.round(CAP * 100)}% each`,
   rp: "Risk parity",
 };
@@ -218,8 +219,9 @@ export function addedLookbacks(a: Analysis, id: AddedId): (Vec | null)[] {
     if (id === "tan.1y" || addedFit(a, id).reason) return [];
     const ws = windows(a.dates.length);
     if (ws.length < 2) return [];
+    // Each trailing window read the construction's own way (ownWindow), so the shrunk-covariance one shrinks each.
     return ws.map(({ lb }) => {
-      const { m, S } = windowMoments(a.returns, lb);
+      const { m, S } = ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));
       return solveAdded(id, m, S, lb, a.rf, a.allowShort)?.w ?? null;
     });
   });
@@ -246,6 +248,8 @@ export function unavailableWords(id: AddedId, reason: Unavailable, a: Analysis):
       return n === CAP_MIN_ASSETS - 1
         ? `${label} needs at least ${CAP_MIN_ASSETS} assets: with ${n}, the cap leaves equal weight as the only mix.`
         : `${label} needs at least ${CAP_MIN_ASSETS} assets: with ${n}, no mix keeps every weight at ${Math.round(CAP * 100)}% or less.`;
+    case "one-correlation":
+      return `${label} needs at least 3 assets: with ${n}, the target's one correlation is the sample's own, so nothing is shrunk.`;
   }
 }
 

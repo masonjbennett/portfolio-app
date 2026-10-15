@@ -225,6 +225,23 @@ const M = [
   ["src/lib/eigen.ts", "bets: Math.exp(h)", "bets: 1 / shares.reduce((x, y) => x + y * y, 0)", "effective bets by the participation ratio, not the entropy the page names", "t-eigen"],
   ["src/lib/eigen.ts", "< 0 ? -1 : 1;", "< 0 ? 1 : 1;", "PC1's sign left to the solver", "t-eigen"],
   ["src/lib/eigen.ts", "const shares = lam.map((v) => v / sum);", "const shares = lam.map((v) => v / n);", "shares over the asset count, not the eigenvalues' sum", "t-eigen"],
+  // constructions.ts (course C3: the Ledoit-Wolf shrunk covariance, tan.lw), judged by the suite named
+  ["src/lib/constructions.ts", "const rBar = rSum / (n * (n - 1));", "const rBar = rSum / (n * n);", "the average correlation over n^2 pairs, the diagonal's", "t-constructions"],
+  ["src/lib/constructions.ts", "const piIJ = sq / T - s[i][j] * s[i][j];", "const piIJ = sq / T;", "pi without the squared covariance taken off", "t-constructions"],
+  ["src/lib/constructions.ts", "        rho += piIJ;", "        rho += 0;", "rho without the diagonal's pi", "t-constructions"],
+  ["src/lib/constructions.ts", "rho += rBar * (sd[j] / sd[i])", "rho += rBar * (sd[i] / sd[j])", "rho's off-diagonal ratio inverted", "t-constructions"],
+  ["src/lib/constructions.ts", "cube += d[i][t] * d[i][t] * a;", "cube += d[j][t] * d[j][t] * a;", "theta from the other asset's cube", "t-constructions"],
+  ["src/lib/constructions.ts", "gamma += (s[i][j] - rBar * sd[i] * sd[j]) ** 2;", "gamma += s[i][j] ** 2;", "gamma as the distance to zero, not to the target", "t-constructions"],
+  ["src/lib/constructions.ts", "Math.max(0, Math.min(1, kappa / T))", "Math.max(0, Math.min(1, kappa / (T - 1)))", "the intensity over T - 1, not the paper's T", "t-constructions"],
+  ["src/lib/constructions.ts", "const intensity = n >= 3 && Number.isFinite(kappa)", "const intensity = Number.isFinite(kappa)", "two assets read rounding as an intensity", "t-constructions"],
+  ["src/lib/constructions.ts", "  const S = covMatrix(cols);\n  const shrunk", "  const S = covMatrix(cols, 0);\n  const shrunk", "shrinks the ddof-0 covariance, not the engine's S", "t-constructions"],
+  ["src/lib/constructions.ts", "row.map((v, j) => (i === j ? v : (1 - intensity) * v", "row.map((v, j) => (false ? v : (1 - intensity) * v", "the target's diagonal shrunk too (rBar times the variance)", "t-constructions"],
+  ["src/lib/constructions.ts", "return { m, S: lw.S, T, lw };", "return { m, S, T, lw };", "tan.lw solved on the sample covariance", "t-constructions"],
+  ["src/lib/constructions.ts", "return n >= 3 ? null : \"one-correlation\";", "return n >= 2 ? null : \"one-correlation\";", "tan.lw offered on two assets", "t-constructions"],
+  ["src/tabs/optimization/model.ts", "const { m, S } = ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));", "const { m, S } = ownWindow(\"tan.bs\", a.returns.map((c) => c.slice(c.length - lb)));", "tan.lw's lookbacks solved on the sample covariance", "t-columns"],
+  ["src/tabs/optimization/scorecard.ts", "moves the covariance matrix ${format(lw.intensity, \"pct1\")}", "moves the covariance matrix ${format(lw.rBar, \"pct1\")}", "the caption's intensity typed from the wrong field", "t-columns"],
+  ["src/tabs/optimization/scorecard.ts", "if (lwFit.sol.beatsRf !== false && tw && tw.every(", "if (lwFit.sol.beatsRf !== false && tw && !tw.every(", "the close-to-Tangency sentence on the wrong windows", "t-columns"],
+  ["src/lib/robust.ts", "kind === \"tan.bs\" || kind === \"tan.lw\" || kind === \"tan.cap\"", "kind === \"tan.bs\" || kind === \"tan.cap\"", "tan.lw's parameters counted as none", "t-constructions"],
 ];
 
 const missing = [...new Set(M.map(([, , , , suite]) => suite).filter((s) => s && !existsSync(suitePath(s))))];

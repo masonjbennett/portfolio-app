@@ -21,7 +21,7 @@ const K = { tickers: "tickers", start: "start", end: "end", rf: "rf", bench: "be
 // The app does not validate ticker characters (1007); a URL is hostile input, so a symbol is held
 // to the pattern the price endpoint accepts (Yahoo's alphabet: BRK-B, ^GSPC, EURUSD=X), and a link
 // can never carry a ticker the endpoint would refuse.
-// Longer than any honest value (ten tickers, ten weights, all four added columns); a longer one is not
+// Longer than any honest value (ten tickers, ten weights, all five added columns); a longer one is not
 // parsed at all. It bounds each value, not the link: view=published adds a key of its own, not length to one.
 export const MAX_PARAM = 400;
 // The rate field has no bounds in the app (717). A link gets a sane one: -100% to 100%.

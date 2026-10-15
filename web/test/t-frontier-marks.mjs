@@ -57,7 +57,7 @@ const cases = BASKETS.flatMap(([name, make]) => [false, true].map((allowShort) =
   const a = make({ allowShort });
   return { tag: `${name} ${allowShort ? "short" : "long"}`, a, added: addedFor(a) };
 }));
-check(cases.every((c) => c.added.length === 4), "setup: all four constructions solve on both baskets, long-only and shorting",
+check(cases.every((c) => c.added.length === 5), "setup: all five constructions solve on both baskets, long-only and shorting",
   cases.map((c) => `${c.tag}: ${c.added.map((x) => x.id).join(",")}`).join("; "));
 
 const ready = (value) => ({ status: "ready", value });
@@ -215,15 +215,15 @@ const SHAPE_APART = 0.3;
     drawn.map((m) => `${m.name} ${m.fill}@${m.opacity ?? 1}/${m.stroke}`).join("; "));
   // Drawn after the four portfolio markers, so one that lands on a portfolio is not hidden under it.
   const order = [...root.querySelectorAll(".frontier-mark, .frontier-added")].map((g) => (g.classList.contains("frontier-added") ? "added" : "mark"));
-  check(order.length === 8 && order.lastIndexOf("mark") < order.indexOf("added"), "outlines: the added markers are drawn over the four portfolio markers", order.join(","));
+  check(order.length === 9 && order.lastIndexOf("mark") < order.indexOf("added"), "outlines: the added markers are drawn over the four portfolio markers", order.join(","));
   check(new Set(Object.values(F.ADDED_GLYPH)).size === ADDED_IDS.length && ADDED_IDS.every((id) => F.ADDED_GLYPH[id]),
     "outlines: every construction has an outline, and no two share one");
   // Which outline marks which construction is a choice a reader learns once and reads on every chart after,
   // so it is pinned: swapping two of them must fail here, not pass because the set of shapes is the same.
-  const GLYPH_OF = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.cap": "saltire", rp: "triangle-right" };
+  const GLYPH_OF = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.lw": "triangle-left", "tan.cap": "saltire", rp: "triangle-right" };
   const onChart = added.map((x) => [x.id, root.querySelector(`.frontier-added--${x.id.replace(".", "-")} .frontier-glyph`)?.getAttribute("data-glyph")]);
   check(JSON.stringify(F.ADDED_GLYPH) === JSON.stringify(GLYPH_OF) && onChart.length === ADDED_IDS.length && onChart.every(([id, g]) => g === GLYPH_OF[id]),
-    "outlines: each construction keeps its own outline (last year an hourglass, shrunk means a wye, capped a saltire, risk parity a right triangle), on the chart too",
+    "outlines: each construction keeps its own outline (last year an hourglass, shrunk means a wye, shrunk covariance a left triangle, capped a saltire, risk parity a right triangle), on the chart too",
     onChart.map(([id, g]) => `${id}=${g}`).join(" "));
   const strangers = [];
   for (const el of root.querySelectorAll("*")) {
@@ -252,10 +252,11 @@ const SHAPE_APART = 0.3;
 // ---- (d) every name placed, clear of every other name and marker, at a desk's width and a phone's ------
 // Each marker's box is read off the path drawn (its corners and its translate, plus half its outline);
 // each name's box off the text drawn, at the face's measured advances (textWidth) and 12px tall.
-// At 343px the four heads (the longest about 150px) do not all fit beside their points among the five or
-// seven assets on three of these frontiers: there the key line names them. Desktop width always names
+// At 343px the five heads (the longest about 150px) do not all fit beside their points among the five or
+// seven assets on any of these frontiers: there the key line names them. (With four heads the mega-cap short
+// frontier fitted; the fifth, added Oct 15 2026, sends it to the key line too.) Desktop width always names
 // them on the chart.
-const KEYED = ["cross-asset example long @343", "cross-asset example short @343", "mega-cap fixture long @343"];
+const KEYED = ["cross-asset example long @343", "cross-asset example short @343", "mega-cap fixture long @343", "mega-cap fixture short @343"];
 {
   const markersIn = (root) =>
     [...root.querySelectorAll(".frontier-asset .recharts-symbols, .frontier-bench .recharts-symbols, .frontier-mark .recharts-symbols, .frontier-added .frontier-glyph")].map((p) => {

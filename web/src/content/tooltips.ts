@@ -187,6 +187,7 @@ export type ScoreTipKey =
   | "frag_params"
   | "col_last_year"
   | "col_shrunk"
+  | "col_shrunk_cov"
   | "col_capped"
   | "col_parity"
   | "ew_sharpe"
@@ -310,6 +311,11 @@ export const SCORE_TIPS: Readonly<Record<ScoreTipKey, Texts>> = {
     finance: "Tangency on Bayes-Stein shrunk means (Jorion, 1986, Journal of Financial and Quantitative Analysis): each sample mean moves toward the mean return of the minimum-variance portfolio with no weight bounds, by an intensity estimated from the window; the covariance is the sample one. In-sample.",
     formula: "μ̂ = (1 − φ) m + φ μ₀ 1, with μ₀ = 1′Σ⁻¹m / 1′Σ⁻¹1, φ = (n + 2) / ((n + 2) + T (m − μ₀1)′Σ⁻¹(m − μ₀1)) and Σ = S (T − 1) / (T − n − 2); then the tangency on μ̂ and S.",
   },
+  col_shrunk_cov: {
+    plain: "The maximum-Sharpe mix after the estimates of how the assets move together have been pulled part of the way toward one shared correlation, which tempers the extreme pairs before the weights are chosen. How far they are pulled is worked out from the data; its figures are in-sample.",
+    finance: "Tangency on the Ledoit-Wolf shrunk covariance (Ledoit and Wolf, 2004, Journal of Portfolio Management) with the constant-correlation target: every asset keeps its own variance and every correlation moves toward their average. That target, not the scaled identity, because a basket can mix bonds with stocks, and an identity target would pull their very different variances toward one figure. The intensity is the paper's estimate from the window; the means are the sample ones. In-sample.",
+    formula: "Σ̂ = (1 − δ) S + δ F, with Fᵢᵢ = Sᵢᵢ, Fᵢⱼ = r̄ √(SᵢᵢSⱼⱼ), r̄ the average sample correlation, and δ = max(0, min(1, (π̂ − ρ̂) / γ̂ / T)); then the tangency on m and Σ̂; parameters n + n(n + 1)/2.",
+  },
   col_capped: {
     plain: `The maximum-Sharpe mix with no short positions and no asset above ${CAP_PCT} of the money. Its weights were chosen on this window's prices, so its figures are in-sample.`,
     finance: `Long-only tangency with an upper bound of ${CAP_PCT} on every weight, solved on the window's means and covariance at the page's risk-free rate. It needs at least ${CAP_MIN_ASSETS} assets, and the shorting switch does not reach it. In-sample.`,
@@ -361,6 +367,7 @@ export const SCORE_TIP_NAMES: Readonly<Record<ScoreTipKey, string>> = {
   frag_params: "parameters estimated",
   col_last_year: "tangency on the last year",
   col_shrunk: "tangency on shrunk means",
+  col_shrunk_cov: "tangency on shrunk covariance",
   col_capped: "tangency with a 25% cap",
   col_parity: "risk parity",
   ew_sharpe: "equal-weight Sharpe",

@@ -41,8 +41,8 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 const list = (xs: readonly number[]) => `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`;
 
 // The papers behind what the page does, and only those (proposal D12 as the skeptics cut it: a citation for a
-// method the page does not use reads as name-dropping). Ledoit and Wolf are left out because the shrinkage that
-// shipped is Jorion's, on the means. The walk-forward tab cites DeMiguel, Garlappi and Uppal by its own
+// method the page does not use reads as name-dropping). Ledoit and Wolf came in with the shrunk-covariance column
+// (Oct 2026), the constant-correlation paper only, the target that column uses. The walk-forward tab cites DeMiguel, Garlappi and Uppal by its own
 // CITE_AUTHORS / CITE_TITLE; they are written out here because that tab loads on demand, and t-about holds the two together.
 const LITERATURE: ReactNode = (
   <>
@@ -55,7 +55,8 @@ const LITERATURE: ReactNode = (
     are not sample means from short windows. The Sharpe ratio&rsquo;s standard error is Lo (2002),{" "}
     <cite>The Statistics of Sharpe Ratios</cite>, Financial Analysts Journal 58(4), with Mertens&rsquo; (2002)
     correction; the shrunk-mean tangency is Jorion (1986), <cite>Bayes-Stein Estimation for Portfolio Analysis</cite>,
-    Journal of Financial and Quantitative Analysis 21(3).
+    Journal of Financial and Quantitative Analysis 21(3), and the shrunk-covariance tangency Ledoit and Wolf (2004),{" "}
+    <cite>Honey, I Shrunk the Sample Covariance Matrix</cite>, Journal of Portfolio Management 30(4).
   </>
 );
 

@@ -316,7 +316,7 @@ const COLUMN_NAMES = await (async () => {
       }
     }
   }
-  check(solved === 24 && wrong.length === 0,
+  check(solved === 28 && wrong.length === 0,
     "score-tips: every solved column, and no fixed one, carries the line under its name that the Sharpe ± text points to", `${solved} solved; ${wrong.join(" | ")}`);
   const n = 7;
   const cases = [(n * (n + 1)) / 2, n + (n * (n + 1)) / 2];

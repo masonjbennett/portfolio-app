@@ -39,7 +39,7 @@ function engine(a, id) {
   const looks = id === "tan.1y" || windows(a.dates.length).length < 2
     ? []
     : windows(a.dates.length).map(({ lb }) => {
-        const { m, S } = windowMoments(a.returns, lb);
+        const { m, S } = C.ownWindow(id, a.returns.map((c) => c.slice(c.length - lb)));
         return C.solveAdded(id, m, S, lb, a.rf, a.allowShort)?.w ?? null;
       });
   const strip = R.addedStrip(id, own.m, own.S, a.rf, a.allowShort, own.T, R.REDRAWS, DEFAULT_SEED);
@@ -61,8 +61,8 @@ for (const [name, make] of SETS) {
     const model = SC.scorecard(a, c, READY, ids, draws);
     const plain = SC.scorecard(a, c, READY);
     check(join(model.columns.map((x) => x.id)) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]),
-      tag("order: the four added columns sit between Custom and the benchmark, in the fixed order"), join(model.columns.map((x) => x.id)));
-    check(join(SC.scoreColIds([...ids].reverse())) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]) && join(M.shownAdded(a, ["rp", "tan.cap", "tan.bs", "tan.1y"])) === join(ids),
+      tag("order: the five added columns sit between Custom and the benchmark, in the fixed order"), join(model.columns.map((x) => x.id)));
+    check(join(SC.scoreColIds([...ids].reverse())) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]) && join(M.shownAdded(a, ["rp", "tan.cap", "tan.lw", "tan.bs", "tan.1y"])) === join(ids),
       tag("order: the column list and the shown list each put the constructions in the fixed order"));
     const reversed = SC.scorecard(a, c, READY, [...ids].reverse(), draws);
     check(join(reversed.columns.map((x) => x.id)) === join(model.columns.map((x) => x.id)), tag("order: added in the opposite order, the columns come out the same"));
@@ -115,6 +115,16 @@ for (const [name, make] of SETS) {
     check(model.conventions.includes(`${format(shrink.phi, "pct1")} of the way`) && model.conventions.includes(format(shrink.mu0 * TRADING_DAYS, "pct2")) &&
       model.conventions.includes("Bayes-Stein") && !plain.conventions.includes("Bayes-Stein"),
       tag("caption: with the shrunk-means column on, it gives the engine's intensity and target, and only then"), `${format(shrink.phi, "pct1")}`);
+    // The covariance shrinkage, likewise: the intensity and the target's correlation are ledoitWolf's on the window.
+    const lw = C.ledoitWolf(a.returns);
+    check(lw.intensity > 0 && lw.intensity < 1 && model.conventions.includes(`moves the covariance matrix ${format(lw.intensity, "pct1")} of the way`) &&
+      model.conventions.includes(`the average correlation, ${format(lw.rBar, "num2")}`) && !plain.conventions.includes("Ledoit"),
+      tag("caption: with the shrunk-covariance column on, it gives the engine's intensity and average correlation, and only then"), `${format(lw.intensity, "pct1")} ${format(lw.rBar, "num2")}`);
+    // Close to Tangency: said exactly when every weight is within a point of Tangency's (on the example, 3.1% moves none).
+    const lwW = model.columns.find((x) => x.id === "tan.lw").weights;
+    const closeLw = !!a.tangency && lwW.every((x, i) => Math.abs(x - a.tangency.w[i]) < 0.01);
+    check(model.conventions.includes("covariance matrix barely moves") === closeLw && (name !== "example" || allowShort || closeLw),
+      tag("caption: the shrunk-covariance column is said to sit on Tangency's weights exactly when it does"), String(closeLw));
     check(lookback.cells[k1].value === null && model.conventions.includes(`last ${C.YEAR_ROWS} daily returns, from ${format(a.dates[a.dates.length - C.YEAR_ROWS], "date")}`) &&
       model.lines.find((l) => l.metric.id === "params").cells[k1].value === R.paramCount("tan.1y", a.tickers.length),
       tag("last year: its lookback row is a dash and the caption names its fixed window"));
@@ -169,9 +179,9 @@ const year = analysed(cut(mega, { closes: C.YEAR_ROWS + 1 }));
 const yearAndADay = analysed(cut(mega, { closes: C.YEAR_ROWS + 2 }));
 check(four.tickers.length === 4 && five.tickers.length === 5 && year.dates.length === C.YEAR_ROWS && yearAndADay.dates.length === C.YEAR_ROWS + 1,
   "boundaries: the cut baskets have four and five assets, and windows of one year and one day more", `${four.tickers.length} ${five.tickers.length} ${year.dates.length} ${yearAndADay.dates.length}`);
-check(M.shownAdded(four, ids).join() === "tan.1y,tan.bs,rp" && M.shownAdded(five, ids).join() === ids.join(),
+check(M.shownAdded(four, ids).join() === "tan.1y,tan.bs,tan.lw,rp" && M.shownAdded(five, ids).join() === ids.join(),
   "boundaries: four assets cannot have the 25% cap, five can");
-check(M.shownAdded(year, ids).join() === "tan.bs,tan.cap,rp" && M.shownAdded(yearAndADay, ids).join() === ids.join(),
+check(M.shownAdded(year, ids).join() === "tan.bs,tan.lw,tan.cap,rp" && M.shownAdded(yearAndADay, ids).join() === ids.join(),
   "boundaries: a window of exactly one year cannot have the last-year column, one a day longer can");
 check(SC.scorecard(four, customWeights(four, {}), READY, ids).columns.every((x) => x.id !== "tan.cap"),
   "boundaries: a construction the basket cannot have is ignored for that basket, not shown failed");
@@ -213,7 +223,7 @@ function frontierAdded(root) {
     "row: a group labelled Add a column sits in the scorecard section, above the table");
   check(join(buttons().map((b) => text(b))) === join(ids.map((id) => M.ADDED_LABEL[id])) && buttons().every((b) => b.getAttribute("aria-pressed") === "false" && !b.disabled && b.getAttribute("role") === null) &&
     root.querySelectorAll('.addcol [role="switch"]').length === 0,
-    "row: four toggle buttons with aria-pressed, never a switch, all off and offered on the example", buttons().map((b) => text(b)).join(" | "));
+    "row: five toggle buttons with aria-pressed, never a switch, all off and offered on the example", buttons().map((b) => text(b)).join(" | "));
   check(join(heads()) === join(SC.SCORE_COL_IDS) && root.querySelector(".addcol-note") === null && frontierAdded(root)?.length === 0,
     "default: the scorecard opens with its default columns, no reason line, and the frontier is handed no marks");
   // Offering the four buttons reads the basket's size only: nothing is solved for a column nobody added.
@@ -222,11 +232,11 @@ function frontierAdded(root) {
   const marks0 = frontierAdded(root);
 
   // Clicked out of order, the columns land in the fixed order, and the link's ask is in that order too.
-  await act(async () => buttons()[3].click());
+  await act(async () => buttons()[4].click());
   await act(async () => buttons()[0].click());
   await flush();
   check(join(asked.at(-1).cols) === "tan.1y,rp" && join(heads()) === join(["ew", "gmv", "tangency", "custom", "tan.1y", "rp", "bench"]) &&
-    buttons()[0].getAttribute("aria-pressed") === "true" && buttons()[3].getAttribute("aria-pressed") === "true" && buttons()[1].getAttribute("aria-pressed") === "false",
+    buttons()[0].getAttribute("aria-pressed") === "true" && buttons()[4].getAttribute("aria-pressed") === "true" && buttons()[1].getAttribute("aria-pressed") === "false",
     "click: risk parity then the last-year tangency land in the fixed order, pressed", `${join(asked.at(-1).cols)} | ${join(heads())}`);
   const marks = frontierAdded(root);
   check(marks !== marks0 && join(marks.map((m) => m.id)) === "tan.1y,rp" && marks.every((m) => m.label === M.ADDED_LABEL[m.id] && m.w === M.addedFit(a, m.id).sol.w),
@@ -263,11 +273,12 @@ function frontierAdded(root) {
     text(root.querySelector('[data-col-def="col_parity"]')).includes(tipText("col_parity", "plain")),
     "explanations: each added head has an info mark, and its text is in the list that works on touch");
 
-  // All four, then the words on the page that are new.
+  // All five, then the words on the page that are new.
   await act(async () => buttons()[1].click());
   await act(async () => buttons()[2].click());
+  await act(async () => buttons()[3].click());
   await flush();
-  check(join(heads()) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]), "click: all four added, still in the fixed order");
+  check(join(heads()) === join(["ew", "gmv", "tangency", "custom", ...ids, "bench"]), "click: all five added, still in the fixed order");
   // The page's own model, read off the scorecard's props: its added draw rows are the engine's redraws on the
   // page's seed (the downloads' seed), to the last digit.
   let sf = fiberOf(root.querySelector(".sc"));
@@ -275,7 +286,7 @@ function frontierAdded(root) {
   const pageModel = sf?.memoizedProps.model;
   const seeded = SC.scorecard(a, customWeights(a, {}), READY, ids, Object.fromEntries(ids.map((id) => [id, { status: "ready", value: engine(a, id).strip }])));
   const drawsOf = (m) => m.lines.find((l) => l.metric.id === "draws").cells.filter((_, k) => C.isAddedId(m.columns[k].id)).map((x) => x.value);
-  check(pageModel && drawsOf(pageModel).length === 4 && drawsOf(pageModel).every((x, i) => x === drawsOf(seeded)[i]) && new Set(drawsOf(seeded)).size > 2,
+  check(pageModel && drawsOf(pageModel).length === 5 && drawsOf(pageModel).every((x, i) => x === drawsOf(seeded)[i]) && new Set(drawsOf(seeded)).size > 2,
     "redraws: the page's added draw rows are the engine's redraws on the page's own seed, the one the downloads use", `${pageModel ? drawsOf(pageModel).join() : "no model"} vs ${drawsOf(seeded).join()}`);
   const caption = text(root.querySelector(".sc caption"));
   const phi = M.addedFit(a, "tan.bs").sol.shrink.phi;
@@ -286,7 +297,7 @@ function frontierAdded(root) {
     SC.addedConventions(a, ids),
     SC.scorecard(a, customWeights(a, {}), READY, ids, {}).addedDraws,
     ...Object.entries(reasons).map(([rr, aa]) => M.unavailableWords("tan.cap", rr, aa)),
-    ...["col_last_year", "col_shrunk", "col_capped", "col_parity"].flatMap((k) => Object.values(SCORE_TIPS[k])),
+    ...["col_last_year", "col_shrunk", "col_shrunk_cov", "col_capped", "col_parity"].flatMap((k) => Object.values(SCORE_TIPS[k])),
     M.addedSub("rp", true),
     M.LAST_YEAR,
     ADD_COLUMN,
@@ -336,14 +347,14 @@ function frontierAdded(root) {
 
 // ---- 4. what the window does to an added column ----------------------------------------------------------
 // At a 100% rate nothing earns more than the rate: the capped tangency finds no weights, and with shorting on
-// neither do the last-year and shrunk-mean tangencies, while long-only those two hold one asset each. Each
+// neither do the last-year, shrunk-mean and shrunk-covariance tangencies, while long-only those three hold one asset each. Each
 // sentence is held to the engine's own answer on the same analysis.
 {
   const long = exampleAnalysis({ rf: 1 });
   const short = exampleAnalysis({ rf: 1, allowShort: true });
   const empty = (a) => ids.filter((id) => !engine(a, id).sol);
-  check(join(empty(long)) === "tan.cap" && join(empty(short)) === "tan.1y,tan.bs,tan.cap",
-    "no weights: at a rate no mix reaches, the engine finds none for the capped tangency, and with shorting on for the other two tangencies too",
+  check(join(empty(long)) === "tan.cap" && join(empty(short)) === "tan.1y,tan.bs,tan.lw,tan.cap",
+    "no weights: at a rate no mix reaches, the engine finds none for the capped tangency, and with shorting on for the other three tangencies too",
     `${join(empty(long))} | ${join(empty(short))}`);
   for (const [tag, a] of [["long-only", long], ["shorting", short]]) {
     const m = SC.scorecard(a, customWeights(a, {}), READY, ids);
@@ -359,7 +370,7 @@ function frontierAdded(root) {
     const cap = m.addedMissing.find((s) => s.startsWith(M.ADDED_LABEL["tan.cap"])) ?? "";
     const tans = m.addedMissing.filter((s) => !s.startsWith(M.ADDED_LABEL["tan.cap"]));
     check(cap.includes("long-only") && cap.includes(`at most ${Math.round(C.CAP * 100)}% of each asset`) && !cap.includes(`${MINUS}100%`) &&
-      tans.length === (a.allowShort ? 2 : 0) && tans.every((s) => s.includes(`between ${MINUS}100% and 100%`)),
+      tans.length === (a.allowShort ? 3 : 0) && tans.every((s) => s.includes(`between ${MINUS}100% and 100%`)),
       `no weights (${tag}): the capped line names the cap and never the shorting bounds; the others name the bounds the switch set`, m.addedMissing.join(" | "));
   }
   // On the page: one line per empty column under the scorecard, its button still offered and pressed so it can be taken off.
@@ -369,19 +380,19 @@ function frontierAdded(root) {
   const lines = [...r.container.querySelectorAll('#build-scorecard [data-note="added-missing"]')].map((x) => text(x));
   const want = SC.scorecard(short, customWeights(short, {}), READY, ids).addedMissing;
   const pressed = [...r.container.querySelectorAll(".addcol-btn")].filter((b) => b.getAttribute("aria-pressed") === "true" && !b.disabled).length;
-  check(lines.length === 3 && join(lines) === join(want) && pressed === 4,
+  check(lines.length === 4 && join(lines) === join(want) && pressed === 5,
     "no weights (page): the scorecard prints each empty column's line, and its button stays offered and pressed", lines.join(" | "));
   r.unmount();
 
   // Long-only, a tangency that earned no more than the rate holds one asset; the caption names it, read from the engine's weights.
   const conv = SC.addedConventions(long, ids) ?? "";
-  const lone = ["tan.1y", "tan.bs"].map((id) => {
+  const lone = ["tan.1y", "tan.bs", "tan.lw"].map((id) => {
     const w = engine(long, id).sol.w;
     const held = w.flatMap((x, i) => (x > 1e-9 ? [long.tickers[i]] : []));
     return { id, beats: engine(long, id).sol.beatsRf, held };
   });
   check(lone.every((x) => x.beats === false && x.held.length === 1 && conv.includes(`holds ${x.held[0]} alone`)) &&
-    (conv.match(/least negative/g) ?? []).length === 2 && !/least negative/.test(SC.addedConventions(exampleAnalysis(), ids) ?? ""),
+    (conv.match(/least negative/g) ?? []).length === 3 && !/least negative/.test(SC.addedConventions(exampleAnalysis(), ids) ?? ""),
     "one asset: a long-only tangency that earned no more than the rate is said to hold its one asset, and only then",
     lone.map((x) => `${x.id} ${x.beats} ${x.held.join()}`).join("; "));
 }

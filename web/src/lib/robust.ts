@@ -9,7 +9,7 @@
 // rows the window's estimates came from. Every expected return this module RETURNS is ANNUAL and a
 // decimal (0.12 is 12% a year), and every weight is a decimal fraction of the portfolio (0.45 is 45%).
 //
-// The four added constructions (src/lib/constructions.ts) get the same what-ifs through solveAdded(): each
+// The five added constructions (src/lib/constructions.ts) get the same what-ifs through solveAdded(): each
 // is re-solved, the same way it was built, on the moved means, with the covariance held where it was. For
 // those, m, S and T are the construction's OWN window (the last year, for the last-year tangency).
 import { isAddedId, solveAdded, type AddedId } from "./constructions.ts";
@@ -451,10 +451,10 @@ export function drawSpread(s: Strip, asset: number): DrawRow | null {
 export function paramCount(kind: Construction | AddedId, n: number): number {
   if (kind === "gmv") return (n * (n + 1)) / 2;
   if (kind === "tan") return n + (n * (n + 1)) / 2;
-  // Risk parity reads the covariance only, as minimum variance does; the last-year, shrunk-mean and capped
-  // tangencies read the n means as well. The last-year one's are estimated from 252 rows (Fragility.days).
+  // Risk parity reads the covariance only, as minimum variance does; the last-year, shrunk-mean,
+  // shrunk-covariance and capped tangencies read the n means as well (shrinking a covariance estimates no fewer). The last-year one's are estimated from 252 rows (Fragility.days).
   if (kind === "rp") return (n * (n + 1)) / 2;
-  if (kind === "tan.1y" || kind === "tan.bs" || kind === "tan.cap") return n + (n * (n + 1)) / 2;
+  if (kind === "tan.1y" || kind === "tan.bs" || kind === "tan.lw" || kind === "tan.cap") return n + (n * (n + 1)) / 2;
   return 0;
 }
 

@@ -313,6 +313,8 @@ function whyWords(reason: Unavailable, n: number): string {
       return `it needs more than ${n + 2} daily returns for ${n} assets`;
     case "window-is-one-year":
       return `it needs more than ${YEAR_ROWS} daily returns to fit on`;
+    case "one-correlation":
+      return `it needs at least 3 assets and this basket has ${n}`;
   }
 }
 

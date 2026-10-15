@@ -18,7 +18,7 @@
 //   highest volatility (1607-1609), but the plot is scaled to the points and the line is clipped at
 //   its edge; the app's autorange stretched the whole plot to hold the line's far end.
 //
-// Beyond the app: the Optimization tab can add up to four more constructions to its scorecard, and each
+// Beyond the app: the Optimization tab can add up to five more constructions to its scorecard, and each
 // one it adds is drawn here too, at the return and volatility its weights had over this window (the
 // same in-sample figures as its scorecard column). Their markers are hollow ink outlines, so they read
 // as one family apart from the four filled portfolio markers, and each has an outline of its own, so
@@ -663,15 +663,15 @@ function marker(type: SymbolKind, size: number, color: string, opacity = 1) {
 
 // The added constructions' outlines. None repeats a shape above (circle, plus, diamond, star, square,
 // upward triangle), and each is hollow where those are filled: an hourglass for the last-year tangency,
-// a Y for the shrunk-means tangency, an X for the capped tangency and a triangle pointing right for
-// risk parity. (A hexagon was tried and dropped, its outline too near the assets' circle at this size;
+// a Y for the shrunk-means tangency, a triangle pointing left for the shrunk-covariance tangency, an X
+// for the capped tangency and a triangle pointing right for risk parity. (A hexagon was tried and dropped, its outline too near the assets' circle at this size;
 // so was a triangle pointing down, too near the Y, which points the same three ways.)
 // An ink outline with nothing inside it: drawn over the four portfolio markers, so a construction that
 // lands on one (the shrunk-means tangency can sit on the tangency itself) leaves both in view. The fill
 // is there, at no opacity, only so the inside takes the pointer for the tooltip. Round joins, so the
 // outline reaches exactly half its width past each corner, which is what glyphExtent counts.
-export type Glyph = "hourglass" | "wye" | "saltire" | "triangle-right";
-export const ADDED_GLYPH: Record<AddedId, Glyph> = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.cap": "saltire", rp: "triangle-right" };
+export type Glyph = "hourglass" | "wye" | "triangle-left" | "saltire" | "triangle-right";
+export const ADDED_GLYPH: Record<AddedId, Glyph> = { "tan.1y": "hourglass", "tan.bs": "wye", "tan.lw": "triangle-left", "tan.cap": "saltire", rp: "triangle-right" };
 export const GLYPH_STROKE = 1.5;
 const deg = Math.PI / 180;
 
@@ -700,6 +700,8 @@ export function glyphPoints(kind: Glyph): Pt[] {
   switch (kind) {
     case "triangle-right":
       return polygon(3, 8.5, 0);
+    case "triangle-left":
+      return polygon(3, 8.5, 180);
     case "hourglass":
       // Two triangles meeting at a narrow waist, flat across the top and the bottom.
       return [{ x: -6, y: -7.5 }, { x: 6, y: -7.5 }, { x: 1.2, y: 0 }, { x: 6, y: 7.5 }, { x: -6, y: 7.5 }, { x: -1.2, y: 0 }];

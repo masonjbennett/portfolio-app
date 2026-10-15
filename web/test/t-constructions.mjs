@@ -1,4 +1,4 @@
-// The four added constructions: src/lib/constructions.ts, tangencyCapped() and riskParity() in
+// The five added constructions: src/lib/constructions.ts, tangencyCapped() and riskParity() in
 // src/lib/optimize.ts, and their fragility rows in src/lib/robust.ts.
 //
 // The oracle is test/oracle/dump_oracle.py, written from the definitions by other methods (see its
@@ -157,8 +157,8 @@ for (const name of SETS) {
   check(C.unavailable("tan.cap", 1943, C.CAP_MIN_ASSETS) === null, "tan.cap: five assets offered");
   check(C.CAP_MIN_ASSETS === 5 && C.CAP === 0.25, "the cap is 25% and needs five assets");
   check([[3, 1], [253, 2], [1943, 30]].every(([T, n]) => C.unavailable("rp", T, n) === null), "rp: always offered");
-  check(same(C.availability(253, 7), { "tan.1y": null, "tan.bs": null, "tan.cap": null, rp: null }), "availability: all four at 253 x 7");
-  check(same(C.availability(252, 4), { "tan.1y": "window-is-one-year", "tan.bs": null, "tan.cap": "too-few-assets", rp: null }), "availability: reasons at 252 x 4");
+  check(same(C.availability(253, 7), { "tan.1y": null, "tan.bs": null, "tan.lw": null, "tan.cap": null, rp: null }), "availability: all five at 253 x 7");
+  check(same(C.availability(252, 4), { "tan.1y": "window-is-one-year", "tan.bs": null, "tan.lw": null, "tan.cap": "too-few-assets", rp: null }), "availability: reasons at 252 x 4");
   check(C.ADDED_IDS.every(C.isAddedId) && !["ew", "gmv", "tan", "custom", "bench"].some(C.isAddedId), "isAddedId names the four and nothing else");
 }
 
@@ -237,7 +237,7 @@ for (const [name, cols, rf] of [
       const own = C.ownWindow(id, cols);
       // The caller's lookback weights: the construction solved on each trailing window.
       const lookbacks = windows(T).map(({ lb }) => {
-        const w = windowMoments(cols, lb);
+        const w = C.ownWindow(id, cols.map((c) => c.slice(c.length - lb)));
         return C.solveAdded(id, w.m, w.S, lb, rf, allowShort)?.w ?? null;
       });
       const strip = R.addedStrip(id, own.m, own.S, rf, allowShort, own.T);
@@ -330,6 +330,41 @@ for (const [name, cols, rf] of [
     }
     check(R.paramCount("ew", n) === 0 && R.paramCount("custom", n) === 0, "fixed portfolios estimate nothing");
   }
+}
+
+// ---- the Ledoit-Wolf shrunk covariance (tan.lw) ----------------------------------------------------------------
+// Against test/fixtures/ledoit-wolf.json, written once by test/oracle/ledoit_wolf.py (numpy, the authors' covCor.m,
+// itself cross-checked against the paper's sums written out). Three seeded cases: 5 assets over 600 days, 3 over
+// 300, 10 over 120. Tolerances: intensity and rBar relative 1e-10, every shrunk entry relative 1e-10 of the largest
+// variance; both sides sum the same products in a different order, measured worst under 1e-13.
+{
+  const { readFileSync } = await import("node:fs");
+  const fx = JSON.parse(readFileSync(new URL("./fixtures/ledoit-wolf.json", import.meta.url), "utf8"));
+  check(fx.cases.length === 3, "ledoitWolf: three reference cases");
+  for (const c of fx.cases) {
+    const lw = C.ledoitWolf(c.cols);
+    near(`ledoitWolf ${c.name}: intensity`, lw.intensity, c.intensity, 1e-10);
+    near(`ledoitWolf ${c.name}: rBar`, lw.rBar, c.rBar, 1e-10);
+    const scale = Math.max(...c.shrunk.map((r, i) => r[i]));
+    const worst = Math.max(...c.shrunk.map((r, i) => maxAbsDiff(r, lw.S[i])));
+    check(worst <= 1e-10 * scale, `ledoitWolf ${c.name}: the shrunk matrix is numpy's`, `worst ${worst}, scale ${scale}`);
+    const S = C.ownWindow("tan.bs", c.cols).S;
+    check(lw.S.every((r, i) => r[i] === S[i][i]), `ledoitWolf ${c.name}: every variance is the sample's`);
+    // The construction reads it: its window's S is the shrunk matrix, and the solve is the tangency on it.
+    const own = C.ownWindow("tan.lw", c.cols);
+    check(same(own.S, lw.S) && same(own.lw, lw), `ownWindow ${c.name}: tan.lw reads the shrunk covariance and carries its shrinkage`);
+    for (const allowShort of [false, true]) {
+      const sol = C.solveAdded("tan.lw", own.m, own.S, own.T, 0.03, allowShort);
+      const t = O.tangency(own.m, lw.S, 0.03, allowShort);
+      check(!!sol && !!t && same(sol.w, t.w), `solveAdded ${c.name}${allowShort ? " short" : ""}: tan.lw is the tangency on the shrunk covariance`);
+      const plain = O.tangency(own.m, S, 0.03, allowShort);
+      check(!!plain && maxAbsDiff(plain.w, sol.w) > 1e-6, `solveAdded ${c.name}${allowShort ? " short" : ""}: and not the tangency on the sample one`, String(plain && maxAbsDiff(plain.w, sol.w)));
+    }
+  }
+  // Two assets: the target's one correlation is the sample's own, so the column is not offered.
+  check(C.unavailable("tan.lw", 500, 2) === "one-correlation" && C.unavailable("tan.lw", 500, 3) === null, "unavailable: tan.lw needs 3 assets");
+  const two = C.ledoitWolf(fx.cases[1].cols.slice(0, 2));
+  check(two.intensity === 0, "ledoitWolf: with two assets the target is the sample matrix and the intensity 0", String(two.intensity));
 }
 
 done("t-constructions");
