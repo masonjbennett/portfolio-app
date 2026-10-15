@@ -628,15 +628,23 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const all = [L, ...onSets, O, Lh, Lf].map(ledeText);
   check(all.every((s) => words(s) <= 70), "overview: the answer is at most 70 words on every basket and branch", all.map(words).join(" "));
 
-  // The hindsight card's bars: the live figures with hindsight, the published strings without.
-  const H = hindsight(EX);
-  const bars = H.groups.flatMap((g) => g.bars);
+  // The hindsight card's bars on a published set: both are the test's own strings, the whole-window fit with
+  // hindsight and the holds without, never the live window's Sharpe (which set 1.000 here against Does it hold
+  // up?'s 1.105 for one basket until Oct 14 2026). Each published set, on a live analysis whose own Sharpe
+  // differs from its in-sample string, so a bar that fell back to the live figure goes red.
   const ewS = snapshotPlates(EX)[0].value;
-  const gmvS = snapshotPlates(EX)[2].value;
-  check(H.title === "Hindsight flatters the optimizer" && H.groups.map((g) => g.label).join() === "Best-tradeoff mix,Equal split,Lowest-risk mix" &&
-    bars.filter((b) => !b.hindsight).map((b) => b.text).join() === [cross.tangency, cross.ew, cross.gmv].join() &&
-    bars.filter((b) => b.hindsight).map((b) => b.value).join() === [EX.tangency.sharpe, ewS, gmvS].join(),
-    "overview: on a published set each mix's bar with hindsight is the live Sharpe, and without it the set's published figure", JSON.stringify(H.groups));
+  const faultsH = [];
+  for (const set of P.PUBLISHED_SETS) {
+    const H = hindsight({ ...EX, tickers: [...set.tickers] });
+    const bars = H.groups.flatMap((g) => g.bars);
+    const want = (k) => [set.inSample[k], set[k]].join();
+    if (H.title !== "Hindsight flatters the optimizer" || H.groups.map((g) => g.label).join() !== "Best-tradeoff mix,Equal split,Lowest-risk mix" ||
+      H.groups.map((g) => g.bars.map((b) => b.text).join()).join("|") !== ["tangency", "ew", "gmv"].map(want).join("|") ||
+      H.groups.some((g) => g.bars[0].hindsight !== true || g.bars[1].hindsight !== false) ||
+      bars.some((b) => b.hindsight && b.value === ewS) || !H.sub.includes("whole window")) faultsH.push(`${set.name}: ${JSON.stringify(H.groups)}`);
+  }
+  check(faultsH.length === 0 && P.PUBLISHED_SETS[2] === cross,
+    "overview: on a published set each mix's hollow bar is the test's whole-window figure and its solid bar the published hold figure, never the live window", faultsH.join("; "));
   const Ho = hindsight({ ...EX, tickers: ten });
   check(Ho.set === null && Ho.groups[0].bars.every((b) => b.hindsight) && Ho.groups[1].label === `${mega.name}, published` &&
     Ho.groups[1].bars.map((b) => b.text).join() === [P.MEGA_CAP_IN_SAMPLE, mega.tangency, mega.ew].join() && Ho.sub.includes("this basket has not been published"),
@@ -645,8 +653,8 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   const F = whyFacts(EX);
   const top = EX.tangency.w.indexOf(Math.max(...EX.tangency.w));
   check(F.length === 3 && F[0].big === `${format(EX.tangency.w[top], "pct1")} ${EX.tickers[top]}` && F[1].big === "3.8% to 44.8%" && F[2].big === "6 one-year tests" &&
-    whyFacts(failedA).length === 2,
-    "overview: the three facts are the live mix's largest holding, the published Apple range and the published holds; no live fact without a mix", JSON.stringify(F));
+    whyFacts(failedA).length === 2 && F[1].text.includes(`published test (${P.PUBLISHED_WHEN})`),
+    "overview: the three facts are the live mix's largest holding, the published Apple range (dated) and the published holds; no live fact without a mix", JSON.stringify(F));
 
   // On the page: one h1, the question; the answer under it; the three baskets; the byline.
   const s = stand({ chapter: "overview" });

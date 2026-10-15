@@ -33,13 +33,20 @@ export interface PublishedSet {
   ew: string;
   gmv: string;
   tangency: string;
+  /**
+   * The same three constructions scored on the test's whole window, the held-out years included (in-sample, at the
+   * run's rate), as Does it hold up?'s published chart prints them: copies of the stored record's `wholeWindow.ship`
+   * (src/content/walkforward.ts, which the page's first chunk does not load); test/t-walkforward-published.mjs holds
+   * each to it. The Overview's hindsight bars use these on a published set, so both chapters print one pair.
+   */
+  inSample: { ew: string; gmv: string; tangency: string };
 }
 
 /** The nine published out-of-sample Sharpe ratios, three sets by three constructions. */
 export const PUBLISHED_SETS: readonly PublishedSet[] = [
-  { name: "Five mega-caps", tickers: ["AAPL", "MSFT", "GOOGL", "AMZN", "JPM"], ew: "0.864", gmv: "0.710", tangency: "0.659" },
-  { name: "Seven sector ETFs", tickers: ["XLK", "XLF", "XLV", "XLE", "XLI", "XLP", "XLY"], ew: "0.915", gmv: "0.450", tangency: "0.661" },
-  { name: "Cross-asset", tickers: ["VTI", "AGG", "GLD", "VNQ", "EFA"], ew: "0.704", gmv: "−0.247", tangency: "0.883" },
+  { name: "Five mega-caps", tickers: ["AAPL", "MSFT", "GOOGL", "AMZN", "JPM"], ew: "0.864", gmv: "0.710", tangency: "0.659", inSample: { ew: "1.019", gmv: "1.034", tangency: "1.107" } },
+  { name: "Seven sector ETFs", tickers: ["XLK", "XLF", "XLV", "XLE", "XLI", "XLP", "XLY"], ew: "0.915", gmv: "0.450", tangency: "0.661", inSample: { ew: "0.795", gmv: "0.630", tangency: "0.989" } },
+  { name: "Cross-asset", tickers: ["VTI", "AGG", "GLD", "VNQ", "EFA"], ew: "0.704", gmv: "−0.247", tangency: "0.883", inSample: { ew: "0.776", gmv: "0.106", tangency: "1.105" } },
 ];
 
 /**

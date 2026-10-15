@@ -12,7 +12,7 @@
 // the tangency (maximum-Sharpe) portfolio, the lowest-risk mix the minimum-variance (GMV) one, the equal
 // split equal weight (1/N). "Best-tradeoff" is one name, never "best" on its own: the published test is the
 // page's evidence that the mix is not the best one to hold.
-import { MEGA_CAP_APPLE, MEGA_CAP_IN_SAMPLE, MEGA_CAP_IN_SAMPLE_END, MEGA_CAP_IN_SAMPLE_RF, PUBLISHED_HOLDS, PUBLISHED_SETS, type PublishedSet } from "../content/published.ts";
+import { MEGA_CAP_APPLE, MEGA_CAP_IN_SAMPLE, MEGA_CAP_IN_SAMPLE_END, MEGA_CAP_IN_SAMPLE_RF, PUBLISHED_HOLDS, PUBLISHED_SETS, PUBLISHED_WHEN, type PublishedSet } from "../content/published.ts";
 import type { ScoreTipKey } from "../content/tooltips.ts";
 import { format, MINUS } from "../format.ts";
 import { monthYear } from "../chrome/when.ts";
@@ -336,10 +336,13 @@ const live = (mix: MixKey, v: number | null): Bar[] => (v === null ? [] : [{ mix
 const pub = (mix: MixKey, s: string): Bar => ({ mix, hindsight: false, value: figureOf(s), text: s });
 
 /**
- * The hindsight card. On a published set: each mix's Sharpe with hindsight (live, this window) beside the
- * same construction's published Sharpe without it. On any other basket nothing published exists for it, so
- * its three live bars stand alone and the five mega-caps follow under their own name, their published 1.107
- * with hindsight beside 0.659 without, and the equal split's 0.864: a reference, labelled as one.
+ * The hindsight card. On a published set: both bars are the test's own, each mix's whole-window fit (in-sample,
+ * with hindsight) beside its published Sharpe on the holds, so this card and Does it hold up?'s chart print one
+ * pair per mix; the live window's figures are the lede's and the first chart's. Until Oct 14 2026 the hollow bar
+ * was the live window's Sharpe, which set 1.000 here against the chart's 1.105 for the same basket. On any other
+ * basket nothing published exists for it, so its three live bars stand alone and the five mega-caps follow under
+ * their own name, their published 1.107 with hindsight beside 0.659 without, and the equal split's 0.864: a
+ * reference, labelled as one.
  */
 export function hindsight(a: Analysis): Hindsight {
   const set = publishedSetOf(a.tickers);
@@ -348,14 +351,15 @@ export function hindsight(a: Analysis): Hindsight {
   const gmv = gmvSharpe(a);
   const key = "Hollow: chosen with hindsight on this window. Solid: Mason's published test";
   if (set) {
-    const flatters = tan !== null && tan > figureOf(set.tangency);
+    const fitted = (mix: MixKey, s: string): Bar => ({ mix, hindsight: true, value: figureOf(s), text: s });
+    const flatters = figureOf(set.inSample.tangency) > figureOf(set.tangency);
     return {
       title: flatters ? "Hindsight flatters the optimizer" : "Here the optimizer held up without hindsight",
-      sub: `Sharpe ratio, higher is better. ${key}, ${PUBLISHED_HOLDS} one-year holds.`,
+      sub: `Sharpe ratio, higher is better. Mason's published test: hollow, fitted with hindsight on its whole window; solid, ${PUBLISHED_HOLDS} one-year holds it had not seen.`,
       groups: [
-        { label: MIX.tangency.name, by: "mix", bars: [...live("tangency", tan), pub("tangency", set.tangency)] },
-        { label: MIX.ew.name, by: "mix", bars: [...live("ew", ew), pub("ew", set.ew)] },
-        { label: MIX.gmv.name, by: "mix", bars: [...live("gmv", gmv), pub("gmv", set.gmv)] },
+        { label: MIX.tangency.name, by: "mix", bars: [fitted("tangency", set.inSample.tangency), pub("tangency", set.tangency)] },
+        { label: MIX.ew.name, by: "mix", bars: [fitted("ew", set.inSample.ew), pub("ew", set.ew)] },
+        { label: MIX.gmv.name, by: "mix", bars: [fitted("gmv", set.inSample.gmv), pub("gmv", set.gmv)] },
       ],
       set,
     };
@@ -414,7 +418,8 @@ export function whyFacts(a: Analysis): Fact[] {
   const apple = [...MEGA_CAP_APPLE].sort((x, y) => figureOf(x.replace("%", "")) - figureOf(y.replace("%", "")));
   out.push({
     big: `${apple[0]} to ${apple[apple.length - 1]}`,
-    text: "Apple's best-tradeoff weight on five mega-caps, depending only on how many years it looks back over.",
+    // Dated: these are the method note's frozen figures, and the live lookback rows on the mega-caps differ.
+    text: `Apple's best-tradeoff weight on five mega-caps in Mason's published test (${PUBLISHED_WHEN}), depending only on how many years it looked back over.`,
   });
   out.push({
     big: `${PUBLISHED_HOLDS} one-year tests`,

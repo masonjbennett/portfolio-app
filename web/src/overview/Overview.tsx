@@ -158,7 +158,8 @@ function HindsightCard({ a }: { a: Analysis }) {
     <p>
       With hindsight, each mix is chosen and scored on the same window, so it already knows what happened. Mason's walk-forward test
       chooses each mix on all earlier years only, holds it through one year it has not seen, then rolls forward. The bars marked
-      without hindsight are that test's published figures, quoted as published and never recomputed here.
+      without hindsight are that test's published figures, quoted as published and never recomputed here. On one of its three
+      baskets the hollow bars are the test's own too, each mix fitted to its whole window, so they match Does it hold up?.
     </p>
   );
   // The plates' Sharpe ratios, as the marks beside their labels used to explain them: every level at once.

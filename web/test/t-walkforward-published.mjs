@@ -95,7 +95,11 @@ check(P.MEGA_CAP_IN_SAMPLE_END === megaRun?.lastBar && P.MEGA_CAP_IN_SAMPLE_END 
 for (const run of M.WALK_RUNS) {
   const pub = pubFor(run.tickers);
   check(pub !== NONE && KEYS.every((k) => pub[FIELD[k]] === WF.sets[run.key].published[k]), `published ${run.key}: the three strings are the fixture's`);
+  check(pub !== NONE && KEYS.every((k) => pub.inSample[FIELD[k]] === format(run.wholeWindow.ship[k], "num3")),
+    `published ${run.key}: the three in-sample strings are the record's whole-window figures, as the published chart prints them`,
+    JSON.stringify(pub.inSample));
 }
+check(pubFor(megaRun.tickers).inSample.tangency === P.MEGA_CAP_IN_SAMPLE, "published: the mega-caps' in-sample tangency is 1.107");
 
 // ---- 3. the engine's replay of the module's weights on the frozen prices --------------------------------
 

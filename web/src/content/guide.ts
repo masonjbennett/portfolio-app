@@ -134,9 +134,10 @@ export const GUIDE_FIRST_SCREEN: readonly GuidePart[] = [
     heading: "The two cards",
     body: [
       `The first card draws what the starting amount became in the three mixes and the benchmark, each line named at its end.`,
-      "The second, [[Hindsight flatters the optimizer]] on the example, sets each mix's Sharpe ratio with hindsight (a hollow " +
-        "bar) beside its published figure without it (a solid bar). On a basket that was never published, your bars stand " +
-        "alone and the five mega-caps follow as the reference, under their own name.",
+      "The second, [[Hindsight flatters the optimizer]] on the example, sets each mix's Sharpe ratio in Mason's published " +
+        "test fitted with hindsight on the test's whole window (a hollow bar) beside its figure on years it had not seen (a " +
+        "solid bar), the same pairs Does it hold up? draws. On a basket that was never published, your bars stand alone, " +
+        "with hindsight on this window, and the five mega-caps follow as the reference, under their own name.",
       "Every card has two folds. [[Show the numbers]] opens the figures behind the picture; [[How it is calculated]] opens " +
         "the method.",
       "The second card's numbers open on the highest Sharpe ratio your tickers reached, then four more: [[Equal-Weight " +
