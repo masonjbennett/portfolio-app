@@ -11,7 +11,7 @@
 // for one series from the window's first day on, parsed by the same rules as the latest yield) and
 // the page's (read the answer defensively, then take the mean over the analysis' own first and last
 // price days).
-import { FRED_DGS3MO, parseRfCsv, RF_SOURCE, RF_TIMEOUT_MS, type RfOptions } from "../data/fred.ts";
+import { FRED_DGS3MO, parseRfCsv, RF_SOURCE, RF_TIMEOUT_MS, RF_USER_AGENT, type RfOptions } from "../data/fred.ts";
 import type { ApiError, RfChoice, RfRate } from "../types.ts";
 
 /** One observation: its ISO day and the annual yield as a decimal (FRED's 4.12 is 0.0412). */
@@ -108,7 +108,7 @@ export async function fetchRfSeries(start: string, opts: RfOptions = {}): Promis
   const f = opts.fetch ?? globalThis.fetch;
   let text: string;
   try {
-    const res = await f(rfSeriesUpstream(start), { signal: AbortSignal.timeout(opts.timeoutMs ?? RF_TIMEOUT_MS) });
+    const res = await f(rfSeriesUpstream(start), { headers: { "User-Agent": RF_USER_AGENT }, signal: AbortSignal.timeout(opts.timeoutMs ?? RF_TIMEOUT_MS) });
     if (!res.ok) throw new Error(String(res.status));
     text = await res.text();
   } catch {

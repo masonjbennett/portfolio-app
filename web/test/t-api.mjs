@@ -9,7 +9,7 @@ import { GET as rfGET } from "../api/rf.ts";
 import {
   CACHE_FAILED, CACHE_PAST, CACHE_RECENT, fetchPrices, joinSeries, parseChart, parsePricesQuery, pricesUrl,
 } from "../src/data/prices.ts";
-import { RF_CACHE_FAILED, RF_CACHE_OK, fetchRf, parseRfCsv } from "../src/data/fred.ts";
+import { RF_CACHE_FAILED, RF_CACHE_OK, RF_USER_AGENT, fetchRf, parseRfCsv } from "../src/data/fred.ts";
 import { fetchRfSeries, isIsoDay, parseRfSeries, readRfSeries, windowRate } from "../src/state/rfwindow.ts";
 import { readFileSync } from "node:fs";
 import { toFrame } from "../src/data/payload.ts";
@@ -305,6 +305,9 @@ function sameFrame(a, b) {
   const q = await rfGET(new Request("http://localhost/api/rf?x=1"));
   check(q.status === 400 && calls.length === 0 && q.headers.get("Cache-Control") === "no-store", "rf: any parameter answers 400 with zero upstream calls", `${q.status} ${calls.length}`);
 
+  let ua1;
+  const sent = (await fetchRf(TODAY, { fetch: async (_u, init) => { ua1 = init?.headers?.["User-Agent"]; return new Response(csv, { status: 200 }); } }), ua1);
+  check(sent === RF_USER_AGENT && !/^(node|undici|Mozilla\/5\.0)?$/.test(sent), "rf: FRED is sent the site's own User-Agent, never undici's default (Oct 15 2026)", String(sent));
   const slow = await fetchRf(TODAY, { timeoutMs: 30, fetch: async (_u, init) => hang(init) });
   check(!slow.ok && slow.body.error === "upstream", "rf: a request past its timeout fails closed as upstream (618)");
 }
@@ -368,6 +371,9 @@ function sameFrame(a, b) {
     check(r.status === 502 && b.error === id && r.headers.get("Cache-Control") === RF_CACHE_FAILED, `rf window: ${label} fails closed as ${id}, cached one minute`,
       `${r.status} ${JSON.stringify(b)}`);
   }
+  let ua2;
+  const sent = (await fetchRfSeries("2019-01-02", { fetch: async (_u, init) => { ua2 = init?.headers?.["User-Agent"]; return new Response(csv, { status: 200 }); } }), ua2);
+  check(sent === RF_USER_AGENT && !/^(node|undici|Mozilla\/5\.0)?$/.test(sent), "rf window: FRED is sent the site's own User-Agent, never undici's default (Oct 15 2026)", String(sent));
   const slow = await fetchRfSeries("2019-01-02", { timeoutMs: 30, fetch: async (_u, init) => hang(init) });
   check(!slow.ok && slow.body.error === "upstream", "rf window: a request past its timeout fails closed as upstream");
 }

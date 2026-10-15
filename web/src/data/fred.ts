@@ -8,6 +8,11 @@ export const FRED_DGS3MO = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=D
 export const RF_WINDOW_DAYS = 120;
 export const RF_TIMEOUT_MS = 10000;
 export const RF_SOURCE = "FRED DGS3MO";
+// FRED's edge stalls a request whose User-Agent is undici's default "node" (also "undici", none, or a bare
+// "Mozilla/5.0") until the 10 s timeout, and serves a descriptive one in under a second. It began on Oct 15
+// 2026: production /api/rf answered 502 on every request, while the dashboard's FRED calls, which name the
+// site and an address (its api/fred.js), kept answering from the same Vercel region. Measured with curl.
+export const RF_USER_AGENT = "portfolio.masonjbennett.com (bennettmasonj@gmail.com)";
 
 // `today` is an ISO date. The window start is today minus 120 days (615).
 export function rfUrl(today: string): string {
@@ -51,7 +56,7 @@ export async function fetchRf(today: string, opts: RfOptions = {}): Promise<RfRe
   const f = opts.fetch ?? globalThis.fetch;
   let text: string;
   try {
-    const res = await f(rfUrl(today), { signal: AbortSignal.timeout(opts.timeoutMs ?? RF_TIMEOUT_MS) });
+    const res = await f(rfUrl(today), { headers: { "User-Agent": RF_USER_AGENT }, signal: AbortSignal.timeout(opts.timeoutMs ?? RF_TIMEOUT_MS) });
     if (!res.ok) throw new Error(String(res.status));
     text = await res.text(); // decodes UTF-8 with replacement, as decode("utf-8", "replace") does (619)
   } catch {
