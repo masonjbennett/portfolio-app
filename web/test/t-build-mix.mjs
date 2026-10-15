@@ -507,7 +507,7 @@ function Harness({ a, init = {} }) {
   };
   const sharpe = (a) => once(a, (c) => plates(c)[2].value);
   const s5 = n3(portfolioPerformance(at5.ew, at5.m, at5.S, 0.05).sharpe);
-  check(sharpe(at5) === s5 && s5 !== sharpe(base) && once(at5, (c) => text(mixOf(c)).includes("at the 5.00% risk-free rate")),
+  check(sharpe(at5) === s5 && s5 !== sharpe(base) && once(at5, (c) => text(fold(mixOf(c), "How it is calculated")).includes("at the 5.00% risk-free rate")),
     "ledger:rf-live: the Sharpe plate and its note follow the analysis's rate", `${sharpe(at5)} vs ${s5}`);
 }
 
@@ -539,7 +539,8 @@ function Harness({ a, init = {} }) {
     "ledger:daily-rebalanced-label: the app's tab 5 applies fixed weights every day (1740, 1829) and never says so");
   const a = fixtureAnalysis("cross");
   const r = quietRender(h(Optimization, tabProps(a)));
-  check(mixOf(r.container).querySelector(".cust-plates + .cust-note")?.textContent.includes("held fixed and rebalanced daily") &&
+  check(fold(mixOf(r.container), "How it is calculated")?.textContent.includes("held fixed and rebalanced daily") &&
+    !mixOf(r.container).querySelector(".cust-figures > .cust-note") &&
     /rebalanced daily to the target weights/.test(wealthCaption(10000, a.dates[0], a.asOf)),
     "ledger:daily-rebalanced-label: the port's figures say rebalanced daily, and so does the growth chart that carries the mix (Performance)");
   r.unmount();

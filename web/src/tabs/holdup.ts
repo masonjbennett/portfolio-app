@@ -81,5 +81,5 @@ export function metricsFinding(fits: WindowFit[], rf: number, p: Port = "tan"): 
 export function customFinding(fits: WindowFit[], tickers: readonly string[], weights: CustomWeights, rf: number, allowShort: boolean): string {
   const c = customWeights(tickers, weights, allowShort);
   if (!c.ok) return "Not evaluated: your mix's weights cannot be scored as they stand.";
-  return `${sharpeChartTitle(sharpeGroups(fits, c.w, rf))}.`;
+  return `${sharpeChartTitle(sharpeGroups(fits, c.w, rf), fits[0].to)}.`;
 }

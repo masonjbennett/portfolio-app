@@ -493,7 +493,9 @@ const page = () => text(r.container);
   const cust = r.container.querySelector(".sens-custom");
   const cw = M.customWeights(a.tickers, {}, false);
   const sg = M.sharpeGroups(fits, cw.w, a.rf);
-  check(text(cust.querySelector(".chart-title")) === M.sharpeChartTitle(sg), "custom: the Sharpe chart's title states its finding");
+  check(text(cust.querySelector(".chart-title")) === M.sharpeChartTitle(sg, fits[0].to), "custom: the Sharpe chart's title states its finding");
+  check(/\(\d years? to \d{4}-\d\d-\d\d\)|\(Full sample to /.test(text(cust.querySelector(".chart-title"))) && !/Years\)/.test(text(cust.querySelector(".chart-title"))),
+    "custom: the title names its windows as the metrics row does (\"5 years to <date>\"), not by the chart's \"5 Years\"", text(cust.querySelector(".chart-title")));
   check(["GMV", "Tangency", "Custom"].every((s) => svgText(cust).includes(s)) && !cust.querySelector(".recharts-legend-wrapper"),
     "custom: GMV, Tangency and Custom named on the Sharpe chart, no legend", svgText(cust).join(" "));
   const cn = Object.fromEntries(barNames(cust).map((n) => [n.text, n.fill]));

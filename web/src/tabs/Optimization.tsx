@@ -283,6 +283,8 @@ const RiskContribution = memo(function RiskContribution({ a, c, height }: { a: A
     </>
   );
   const how = (
+    <>
+    <p className="opt-note">Each asset{"’"}s share of {SHARE_LABEL[shown]}{"’"}s money (its weight), of its return and of its risk, over this window.</p>
     <p className="opt-note">
       An asset{"’"}s percentage risk contribution (PRC) is its share of the portfolio{"’"}s variance: its weight times its covariance
       with the portfolio, over the portfolio{"’"}s variance. The shares sum to 100%. An asset whose PRC is well above its weight is a
@@ -290,18 +292,17 @@ const RiskContribution = memo(function RiskContribution({ a, c, height }: { a: A
       return; those sum to 100% too, and can fall below 0% or pass 100%. The table under Show the numbers sets weight, return and
       risk side by side for every portfolio.
     </p>
+    </>
   );
+  // The pill's finding is the card's sub-line, in the body face: the row's title above it is the one serif line
+  // (review F9; the frame's own serif title made a second).
+  const title = shareTitle(a, c, shown);
   return (
-    <Card label={BUILD_ROWS.prc} numbers={numbers} how={how}>
+    <Card label={BUILD_ROWS.prc} sub={title} numbers={numbers} how={how}>
       <div className="opt-share-pills">
         <SegControl options={SHARE_OPTIONS} value={shown} onChange={setPick} ariaLabel="Portfolio" />
       </div>
-      <ChartFrame
-        title={shareTitle(a, c, shown)}
-        subtitle={`Each asset's share of ${SHARE_LABEL[shown]}'s money (its weight), of its return and of its risk, over this window.`}
-        state={bars}
-        height={height}
-      >
+      <ChartFrame title={title} state={bars} height={height} bare>
         {(v) => <Bars data={v} height={height} />}
       </ChartFrame>
     </Card>

@@ -336,7 +336,7 @@ const CustomSection = memo(function CustomSection({ fits, tickers, weights, rf, 
         span={windowsSpan(fits[0].to)}
       />
       <ChartFrame
-        title={sharpeChartTitle(groups)}
+        title={sharpeChartTitle(groups, fits[0].to)}
         subtitle="Sharpe Ratio Comparison Across Estimation Windows: GMV, Tangency and Custom, each scored in-sample."
         state={{ status: "ready", value: groups }}
         height={380}

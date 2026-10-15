@@ -438,7 +438,7 @@ export function weightChartTitle(fits: WindowFit[], p: Port, tickers: readonly s
 }
 
 /** The Sharpe chart's title: where the custom mix scores best and worst. */
-export function sharpeChartTitle(groups: Group[]): string {
+export function sharpeChartTitle(groups: Group[], to: string): string {
   let lo: { v: number; w: string } | null = null;
   let hi: { v: number; w: string } | null = null;
   for (const g of groups) {
@@ -448,7 +448,7 @@ export function sharpeChartTitle(groups: Group[]): string {
     if (!hi || v > hi.v) hi = { v, w: g.name };
   }
   if (!lo || !hi) return "The custom portfolio's Sharpe ratio is undefined in every window";
-  return `The custom portfolio's Sharpe ratio runs from ${format(lo.v, "num3")} (${lo.w}) to ${format(hi.v, "num3")} (${hi.w})`;
+  return `The custom portfolio's Sharpe ratio runs from ${format(lo.v, "num3")} (${windowName(lo.w, to)}) to ${format(hi.v, "num3")} (${windowName(hi.w, to)})`;
 }
 
 // ---- the custom portfolio (1948-1977) -------------------------------------------------------------

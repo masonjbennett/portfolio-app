@@ -137,7 +137,8 @@ const Editor = memo(function Editor({ a, v, weights, setWeights }: { a: Analysis
   );
 });
 
-// The five figures (1739-1749), and their span and rate under them.
+// The five figures (1739-1749). Their span and rate are under How it is calculated (review F8: the panel's
+// words at rest sat over the text budget beside the frontier); only a refusal is said here.
 const Figures = memo(function Figures({ a, v }: { a: Analysis; v: CustomView }) {
   const w = customWeights(v);
   const p = useMemo(() => (w ? customMetrics(a, w) : null), [a, w]);
@@ -150,7 +151,7 @@ const Figures = memo(function Figures({ a, v }: { a: Analysis; v: CustomView }) 
           <Plate key={d.key} label={d.label} value={p ? p[d.key] : null} format={d.format} allowShort={a.allowShort} se={d.key === "sharpe" ? se : null} />
         ))}
       </div>
-      <p className="cust-note">{p ? platesNote(a) : "No figures: the weights entered were refused."}</p>
+      {p ? null : <p className="cust-note">No figures: the weights entered were refused.</p>}
     </div>
   );
 });
@@ -198,6 +199,7 @@ export default memo(function YourMix({
   );
   const how = (
     <>
+      <p className="cust-note">{platesNote(a)}</p>
       <p className="cust-note">
         The weights are divided by their total so they add up to 1, a fully invested portfolio. An asset left alone holds
         1/{a.tickers.length}, an equal share, so raising one weight lowers the share of every other. The mix is held at these
