@@ -520,6 +520,17 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
             "opens your basket's row to run the test again on prices fetched now.",
         ],
       },
+      {
+        heading: "Range of outcomes: these years reshuffled",
+        body: [
+          "Your window's own months in a new order. Its daily returns are cut into runs of about a month, every asset and " +
+            "the benchmark on the same days, and strung together again at random, many times over. The line is the " +
+            "median path; the band holds eight paths in ten. [[Years ahead]] sets how far out, never further than the " +
+            "window is long.",
+          "It is a spread under that one assumption, not a forecast. The best-tradeoff mix is left out: its weights come " +
+            "from the same months' average returns, so reshuffling them would replay the hindsight the test measures.",
+        ],
+      },
     ],
   },
 };

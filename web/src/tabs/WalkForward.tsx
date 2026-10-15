@@ -4,7 +4,8 @@
 // test's card (./walkforward/Published.tsx): the chart of the nine pairs, the project card's sentence word for word as
 // its caption. A More list holds the rest:
 //   "Your basket"   the test run on the basket in the bar (./walkforward/Live.tsx), solved only once the row opens;
-//   "Hold by hold"  each published set's holds, the weights they held and its rerun button.
+//   "Hold by hold"  each published set's holds, the weights they held and its rerun button;
+//   "Range of outcomes" the basket's own months reshuffled into a spread of endings (./walkforward/Outcomes.tsx).
 //
 // Some ways in ask the page to LAND the reader here, because the control that was clicked has just left the screen:
 // the Overview's published control and the in-sample note in Build land on the lead (the finding takes the focus);
@@ -21,6 +22,8 @@ import type { Analysis, RfHistory, Settings, TabProps, WalkRates } from "../type
 import { basketFinding, holdsFinding, holdupFinding, holdupSub, WF_HEADING, WF_LIST, WF_ROWS } from "./holdup.ts";
 import { said } from "./performance.ts";
 import Live from "./walkforward/Live.tsx";
+import Outcomes from "./walkforward/Outcomes.tsx";
+import { outcomesFinding } from "./walkforward/outcomes.ts";
 import Published, { Holds } from "./walkforward/Published.tsx";
 import { dayAfter, PUBLISHED_LAST_BAR, PUBLISHED_RF } from "./walkforward/terms.ts";
 import "./walkforward/WalkForward.css";
@@ -102,6 +105,16 @@ export default function WalkForward({ analysis, settings, requestSettings }: Tab
       children: (
         <Boundary name="Hold by hold" resetKey={analysis}>
           <Holds rerun={rerun} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "outcomes",
+      title: WF_ROWS.outcomes,
+      finding: said(WF_ROWS.outcomes, () => outcomesFinding(analysis)),
+      children: (
+        <Boundary name="Range of outcomes" resetKey={analysis}>
+          <Outcomes analysis={analysis} />
         </Boundary>
       ),
     },

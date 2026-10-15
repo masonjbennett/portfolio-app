@@ -24,7 +24,8 @@ export default function Footer({ here = "page" }: { here?: "page" | "guide" }) {
       <p>
         Returns are daily simple returns from adjusted closing prices, annualised over {TRADING_DAYS} trading days. Portfolio
         weights sum to 100%; each lies between 0% and 100%, or between −100% and 100% with short positions allowed. Every
-        figure describes the period shown and is not a forecast.
+        figure describes the period shown and is not a forecast: the range of outcomes only reshuffles that period&rsquo;s
+        own months.
       </p>
       <p className="footer-links">
         {here === "page" ? (

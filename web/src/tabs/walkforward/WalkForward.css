@@ -31,3 +31,17 @@
   margin: 0;
   color: var(--color-ink2);
 }
+
+/* Range of outcomes: the years-ahead switch above the fan, and the method's paragraphs in its fold. */
+.wfo-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.wfo-how {
+  margin: 0 0 var(--space-2);
+  color: var(--color-ink2);
+}

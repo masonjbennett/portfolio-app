@@ -16,6 +16,7 @@ export const WF_LIST = "wf";
 export const WF_ROWS = {
   basket: "Your basket: the same test, run now",
   holds: "Hold by hold, as published",
+  outcomes: "Range of outcomes: these years reshuffled",
 } as const;
 export const WF_HEADING = "More on the test";
 
