@@ -10,7 +10,8 @@
     "test": "node test/run.mjs",
     "typecheck": "tsc --noEmit -p .",
     "bake": "node scripts/bake-example.mjs",
-    "guide:pdf": "node --import ./test/_tsx.mjs scripts/guide-pdf.mjs"
+    "guide:pdf": "node --import ./test/_tsx.mjs scripts/guide-pdf.mjs",
+    "check:first-screen": "node --import ./test/_tsx.mjs scripts/first-screen.mjs"
   },
   "dependencies": {
     "@fontsource/instrument-serif": "^5.3.0",
