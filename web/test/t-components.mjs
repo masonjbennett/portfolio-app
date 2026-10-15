@@ -424,7 +424,7 @@ check(excelSerial("2024-01-01") === 45292 && excelSerial("1900-03-01") === 61, "
   `${excelSerial("2024-01-01")} ${excelSerial("1900-03-01")}`);
 check(excelSerial("2026-02-31") === null && excelSerial("AAPL") === null, "format: excelSerial refuses what is not a day");
 
-// Feel (batch 9): every transition and animation in a stylesheet sits inside a no-preference block (base.css's own
+// Feel: every transition and animation in a stylesheet sits inside a no-preference block (base.css's own
 // reduce rule is the one place that names them to switch them off), and a phone's controls are held to 44px.
 {
   const { readdirSync } = await import("node:fs");
