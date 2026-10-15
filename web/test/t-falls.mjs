@@ -137,7 +137,7 @@ for (const [set, a] of [["example", exampleAnalysis()], ["megacap", fixtureAnaly
 
   // Order: the portfolios in a fall is the risk list's first row; the Drawdowns row carries the old headline's finding.
   const order = [...r.container.querySelectorAll(".more-row")].map((s) => s.id);
-  check(same(order, ["perf-risk-falls", "perf-risk-drawdowns", "perf-risk-volatility", "perf-risk-metrics", "perf-risk-capm"]),
+  check(same(order, ["perf-risk-falls", "perf-risk-drawdowns", "perf-risk-volatility", "perf-risk-tail", "perf-risk-metrics", "perf-risk-capm"]),
     tag("order: the portfolios in a fall is the risk list's first row, anchored perf-risk-falls"), order.join());
   check(text(r.container.querySelector("#perf-risk-drawdowns .more-finding")) === P.drawdownsFinding(a), tag("order: the Drawdowns row states the deepest fall, as the headline did"));
   check(!/NaN|undefined|Infinity|\bnan\b/.test(text(r.container)), tag("tab: no NaN, undefined or Infinity with the section on it"));

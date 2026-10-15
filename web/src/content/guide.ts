@@ -333,6 +333,15 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
         ],
       },
       {
+        heading: "Value at risk and expected shortfall",
+        body: [
+          "How much each asset lost on a bad day. Value at risk is the loss on the day one in twenty from the bottom of the " +
+            "window; expected shortfall is the average loss on the days at or past it, so it is never smaller.",
+          "Both are measured exactly as the Build scorecard measures the portfolios, so an asset here and a portfolio there can " +
+            "be compared directly. They describe this window's worst days, not a limit on the next one.",
+        ],
+      },
+      {
         heading: "Risk-adjusted metrics",
         body: [
           "Each asset's Sharpe ratio and Sortino ratio, and the benchmark's. The Sortino ratio is the same idea counting only " +
@@ -359,7 +368,7 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
       "Correlation runs from minus one (always moving opposite) through zero (unrelated) to plus one (always together). " +
         "Investments that do not move together are what makes spreading money between them worth anything.",
       "The chapter opens on the most and the least correlated pair, and a shaded grid of every pair; the figures are under " +
-        "[[Show the numbers]]. Three rows follow.",
+        "[[Show the numbers]]. Four rows follow.",
     ],
     sections: [
       {
@@ -371,6 +380,16 @@ export const GUIDE_TABS: Readonly<Record<TabId, GuideTab>> = {
         body: [
           `What the ${even} did in your window: how much it swung in a year, against how much the assets swung on average, ` +
             "one by one. The gap is what diversification took away.",
+        ],
+      },
+      {
+        heading: "How many independent bets",
+        body: [
+          "Five assets are not always five separate bets. The row breaks the correlations into independent patterns of " +
+            "movement, the principal components, and says what share of all the movement the largest one, the shared driver, " +
+            "explains. The bars show every pattern's share.",
+          "The effective number of bets turns those shares into one figure: one when a single driver moves everything, the " +
+            "number of assets when none moves with another. Under [[Show the numbers]], each asset's weight on the shared driver.",
         ],
       },
       {

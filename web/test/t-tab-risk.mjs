@@ -22,7 +22,7 @@ const { BETA_ABOVE, BETA_BELOW } = RC;
 const { format } = await import("../src/format.ts");
 const { csvText, cellFor } = await import("../src/download.ts");
 const { tipText } = await import("../src/content/tooltips.ts");
-const { drawdowns, annualizedStats, capm, capmFit, fullMonths, alphaReading } = await import("../src/lib/stats.ts");
+const { drawdowns, annualizedStats, capm, capmFit, fullMonths, alphaReading, historicalTail, scorecardRow } = await import("../src/lib/stats.ts");
 const { monthYear } = await import("../src/chrome/when.ts");
 const { tokens } = await import("../src/styles/tokens.ts");
 
@@ -322,21 +322,22 @@ const sectionOf = (r, id) => r.container.querySelector(`#perf-risk-${ROW_OF[id]}
     `Daily closes, ${props.analysis.prices.dates[0]} to ${props.analysis.asOf}`,
     `Daily returns, ${props.analysis.dates[0]} to ${props.analysis.asOf}`,
     `Daily returns, ${props.analysis.dates[0]} to ${props.analysis.asOf}`,
+    `Daily returns, ${props.analysis.dates[0]} to ${props.analysis.asOf}`,
   ]), "spans: the drawdowns state their closes and the ratios their daily returns, each with its window", spans.join(" | "));
-  check(JSON.stringify(captions) === JSON.stringify(["Deepest falls, Equal-Weight", "Named falls in this window", "Worst drawdown by asset", "Risk-adjusted metrics", "CAPM beta and alpha"]),
-    "tab: its five tables, the portfolios' falls first", captions.join(" | "));
-  check(tables.length === 5 && tables.every((t) => {
+  check(JSON.stringify(captions) === JSON.stringify(["Deepest falls, Equal-Weight", "Named falls in this window", "Worst drawdown by asset", "Value at risk and expected shortfall", "Risk-adjusted metrics", "CAPM beta and alpha"]),
+    "tab: its six tables, the portfolios' falls first", captions.join(" | "));
+  check(tables.length === 6 && tables.every((t) => {
     const b = [...t.querySelectorAll("button")].map(text);
     return b.includes("Download CSV") && b.includes("Download Excel");
   }), "ledger:downloads-everywhere every table on the tab has a CSV and an Excel download");
   check(!/download_button/.test(lines(1370, 1416)) && (lines(1360, 1367).match(/download_button/g) ?? []).length === 2,
     "ledger:downloads-everywhere the app gives the risk table two downloads (1364-1366) and the CAPM table none (1372-1416)");
-  const capmTable = tables[4];
+  const capmTable = tables[5];
   check(capmTable && [...capmTable.querySelectorAll("button")].map(text).includes("Download Excel"), "ledger:downloads-everywhere the port's CAPM table has both");
-  check(r.container.querySelectorAll("table").length === 5, "tab: no table outside the Table component");
+  check(r.container.querySelectorAll("table").length === 6, "tab: no table outside the Table component");
 
   // The printed cells: the risk table's first row, at the app's own format, from the oracle's figures.
-  const firstRow = [...tables[3].querySelectorAll("tbody tr")][0];
+  const firstRow = [...tables[4].querySelectorAll("tbody tr")][0];
   const cells = firstRow ? [...firstRow.children].map(text) : [];
   check(JSON.stringify(cells) === JSON.stringify(["VTI", format(o.perColumn.VTI.sharpe, "num3"), format(o.perColumn.VTI.sortino, "num3")]),
     "tab: VTI's Sharpe and Sortino print at the app's 3 decimals", cells.join(" "));
@@ -393,12 +394,37 @@ const sectionOf = (r, id) => r.container.querySelector(`#perf-risk-${ROW_OF[id]}
     "ledger:rf-live the app's tabs read the rate saved at Run (1087, 1158)");
   const b = fixtureAnalysis("cross", { rf: 0.05 });
   quiet(() => r.rerender(h(Risk, { ...props, analysis: b })));
-  const row = [...r.container.querySelectorAll(".tbl")[3].querySelectorAll("tbody tr")][0];
+  const row = [...r.container.querySelectorAll(".tbl")[4].querySelectorAll("tbody tr")][0];
   const sharpe5 = annualizedStats(b.returns[0], 0.05).sharpe;
   check(row && text(row.children[1]) === format(sharpe5, "num3") && format(sharpe5, "num3") !== format(o.perColumn.VTI.sharpe, "num3") && text(r.container).includes("5.00% risk-free rate"),
     "ledger:rf-live the tab's Sharpe follows a new rate at once", row ? text(row) : "no row");
   r.unmount();
   void ORACLE_RF;
+}
+
+// Value at risk per asset (FDA2 Week 8 section 9): the scorecard's own historicalTail, one day, 95%, positive
+// losses, the benchmark last, and the row's finding names the asset with the largest one.
+{
+  const rows = M.tailRows(a);
+  const want = [...a.returns, a.bench].map((r) => historicalTail(r, 0.05));
+  check(rows.length === a.tickers.length + 1 && rows.at(-1).asset === a.benchLabel && rows.every((r, i) => r.var === want[i].var && r.es === want[i].es),
+    "tail: each asset's and the benchmark's VaR and ES are historicalTail's at 5%, exactly", JSON.stringify(rows[0]));
+  check(rows.every((r) => r.var > 0 && r.es >= r.var), "tail: positive losses, the shortfall at least the VaR", rows.map((r) => `${r.var}/${r.es}`).join());
+  const sc = scorecardRow(a.returns[0], a.bench, a.dates, null, a.rf);
+  check(sc.var95 === rows[0].var && sc.es95 === rows[0].es, "tail: an asset's figure here is what the scorecard prints for a mix of that asset alone", `${sc.var95} ${rows[0].var}`);
+  const assets = rows.slice(0, -1);
+  const top = assets.reduce((x, y) => (y.var > x.var ? y : x));
+  const f = P.tailFinding(a);
+  check(f === `On a bad day, 1 in 20, ${top.asset} lost ${format(top.var, "pct1")} or more; those days averaged ${format(top.es, "pct1")}.`,
+    "tail: the finding names the asset with the largest VaR, and its ES", f);
+  check(f.split(/\s+/).length <= 20, "tail: the finding is twenty words or fewer", `${f.split(/\s+/).length}`);
+  const r = quiet(() => openAll(render(h(Risk, tabProps(a)))));
+  const sec = r.container.querySelector("#perf-risk-tail");
+  check(sec && text(sec.querySelector(".more-finding")) === f, "tail: the row is anchored perf-risk-tail and carries the finding", sec ? text(sec.querySelector(".more-finding")) : "none");
+  const first = sec && [...sec.querySelectorAll("tbody tr")][0];
+  check(first && JSON.stringify([...first.children].map(text)) === JSON.stringify([a.tickers[0], format(rows[0].var, "pct2"), format(rows[0].es, "pct2")]),
+    "tail: the table prints each figure to two places", first ? text(first) : "none");
+  r.unmount();
 }
 
 // boundary, the tab half: a section that throws leaves one line naming it; the rest of the tab stays.
@@ -415,8 +441,8 @@ const sectionOf = (r, id) => r.container.querySelector(`#perf-risk-${ROW_OF[id]}
   if (r) {
     const fallback = [...r.container.querySelectorAll(".boundary")].map(text);
     check(JSON.stringify(fallback) === JSON.stringify(["Risk-adjusted metrics could not be shown."]), "ledger:boundary the failed section is one line naming it", fallback.join(" | "));
-    check(r.container.querySelectorAll(".more-title").length === 5 && r.container.querySelectorAll(".recharts-surface").length === 3 && r.container.querySelectorAll(".tbl").length === 4,
-      "ledger:boundary the five rows, the three charts and the other four tables still render");
+    check(r.container.querySelectorAll(".more-title").length === 6 && r.container.querySelectorAll(".recharts-surface").length === 3 && r.container.querySelectorAll(".tbl").length === 5,
+      "ledger:boundary the six rows, the three charts and the other five tables still render");
     r.unmount();
   }
 }

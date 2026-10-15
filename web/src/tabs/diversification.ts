@@ -6,13 +6,14 @@
 // figure its card does not carry. A finding that cannot be stated (a missing figure) says what is missing.
 import { format } from "../format.ts";
 import type { Analysis } from "../types.ts";
-import { corrView, DEFAULT_WINDOW, defaultPair, rollTitle, rollView, spread } from "./correlation/model.ts";
+import { betsSentence, betsView, corrView, DEFAULT_WINDOW, defaultPair, rollTitle, rollView, spread } from "./correlation/model.ts";
 
 /** The More list and its rows, in the order the chapter shows them. */
 export const DIV_LIST = "div";
 export const DIV_ROWS = {
   rolling: "Rolling pairwise correlation",
   spread: "Equal weights against each on its own",
+  bets: "How many independent bets",
   covariance: "Daily covariance matrix",
 } as const;
 export const DIV_HEADING = "More on how they move together";
@@ -41,4 +42,10 @@ export function covarianceFinding(a: Analysis): string {
   }
   if (top < 0) return "No daily variance could be measured.";
   return `The optimiser's input. ${tickers[top]} swung most on its own: a daily variance of ${format(S[top][top], "num6")}.`;
+}
+
+// The correlation matrix's first principal component and the effective number of bets, as the card states them.
+export function betsFinding(a: Analysis): string {
+  const v = betsView(a);
+  return v ? betsSentence(v) : "Too few assets with varying returns to count independent bets.";
 }

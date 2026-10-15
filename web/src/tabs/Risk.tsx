@@ -1,8 +1,8 @@
 // The risk half of the Performance chapter (portfolio_app.py 1317-1416), one More list under the returns':
 // the portfolios in a fall (one portfolio's deepest falls, and every portfolio over the named market falls
 // the window holds), the drawdown chart, which opens on the asset that fell furthest (the old tab's
-// headline, now the row's finding), then the rolling volatility, the risk-adjusted metrics and the CAPM
-// estimates. The arithmetic lives in ./risk/model.ts and ./risk/falls.ts; this file lays it out.
+// headline, now the row's finding), then the rolling volatility, a bad day (value at risk and expected
+// shortfall per asset), the risk-adjusted metrics and the CAPM estimates. The arithmetic lives in ./risk/model.ts and ./risk/falls.ts; this file lays it out.
 //
 // Each card sits inside its own Boundary, so a card that fails leaves one line naming it and the rest of
 // the chapter keeps rendering. The app has one script run for the whole page, and a throw anywhere in it
@@ -24,7 +24,7 @@ import { riskFormula } from "./formula.ts";
 import { customWeights } from "./optimization/model.ts";
 import type { ScoreColId } from "./optimization/scorecard.ts";
 import {
-  capmFinding, drawdownsFinding, fallsFinding, metricsFinding, RISK_HEADING, RISK_LIST, RISK_ROWS, said, volatilityFinding,
+  capmFinding, drawdownsFinding, fallsFinding, metricsFinding, RISK_HEADING, RISK_LIST, RISK_ROWS, said, tailFinding, volatilityFinding,
 } from "./performance.ts";
 import { portfolioSeries, seriesOptions, seriesSubs } from "./returns/years.ts";
 import {
@@ -55,6 +55,8 @@ import {
   drawdownTitle,
   RISK_COLUMNS,
   riskRows,
+  TAIL_COLUMNS,
+  tailRows,
   tickerDrawdowns,
   VOL_WINDOWS,
   volChart,
@@ -207,6 +209,26 @@ const Volatility = memo(function Volatility({ a, allowShort }: SectionProps) {
   );
 });
 
+// One-day value at risk and expected shortfall at 95% for each asset and the benchmark, by the scorecard's own
+// definition (historicalTail), so an asset's figure here and a mix's there are the same measurement.
+const Tail = memo(function Tail({ a }: SectionProps) {
+  const rows = useMemo(() => tailRows(a), [a]);
+  const how = (
+    <>
+      <p className="risk-note">
+        Historical, one day, 95%: value at risk is the loss on the day 1 in 20 from the bottom of this window{"’"}s daily
+        returns; expected shortfall is the average loss on the days at or past it. Both are positive losses, measured the way the
+        Build scorecard measures the portfolios.
+      </p>
+    </>
+  );
+  return (
+    <Card label={RISK_ROWS.tail} how={how}>
+      <Table title="Value at risk and expected shortfall" columns={TAIL_COLUMNS} rows={rows} filename="value_at_risk" span={tableSpan(a.dates[0], a.asOf)} headed />
+    </Card>
+  );
+});
+
 // Sharpe and Sortino for each asset and the benchmark (1353-1367).
 const Metrics = memo(function Metrics({ a, allowShort }: SectionProps) {
   const rows = useMemo(() => riskRows(a), [a]);
@@ -289,6 +311,16 @@ export default function Risk({ analysis: a, weights }: TabProps) {
       children: (
         <Boundary name="Rolling volatility" resetKey={a}>
           <Volatility {...p} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "tail",
+      title: RISK_ROWS.tail,
+      finding: said(RISK_ROWS.tail, () => tailFinding(a)),
+      children: (
+        <Boundary name="Value at risk" resetKey={a}>
+          <Tail {...p} />
         </Boundary>
       ),
     },

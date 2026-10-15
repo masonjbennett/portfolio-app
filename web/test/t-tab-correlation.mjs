@@ -205,19 +205,19 @@ const n = cross.tickers.length;
 {
   const D = await import("../src/tabs/diversification.ts");
   const rows = [...t.container.querySelectorAll(".more-row")];
-  check(rows.map((r) => r.id).join() === "div-rolling,div-spread,div-covariance" &&
+  check(rows.map((r) => r.id).join() === "div-rolling,div-spread,div-bets,div-covariance" &&
     rows.map((r) => text(r.querySelector(".more-title"))).join("|") === Object.values(D.DIV_ROWS).join("|"),
-    "rest: three More rows, in order, anchored div-<key>", rows.map((r) => r.id).join());
-  check(t.container.querySelectorAll(".tbl, .corr-spread, .corr-roll, .corr-controls").length === 0 && t.container.querySelectorAll("figure.chart-frame").length === 1,
+    "rest: four More rows, in order, anchored div-<key>", rows.map((r) => r.id).join());
+  check(t.container.querySelectorAll(".tbl, .corr-spread, .corr-bets, .corr-roll, .corr-controls").length === 0 && t.container.querySelectorAll("figure.chart-frame").length === 1,
     "rest: only the heatmap is drawn; both tables, the rolling chart and the volatility sentence wait for their fold or row");
   const findings = rows.map((r) => text(r.querySelector(".more-finding")));
-  check(findings[0] === D.rollingFinding(cross) && findings[1] === D.spreadFinding(cross) && findings[2] === D.covarianceFinding(cross) &&
+  check(findings[0] === D.rollingFinding(cross) && findings[1] === D.spreadFinding(cross) && findings[2] === D.betsFinding(cross) && findings[3] === D.covarianceFinding(cross) &&
     findings.every((f) => f.split(/\s+/).length <= 20),
     "rest: each row's finding is its model's, at most twenty words", findings.join(" | "));
   const iv = cross.tickers.map((_, i) => cross.S[i][i]);
   const top = iv.indexOf(Math.max(...iv));
-  check(findings[2].includes(cross.tickers[top]) && findings[2].includes(format(iv[top], "num6")),
-    "rest: the covariance row names the asset with the largest daily variance, and the figure its table prints", findings[2]);
+  check(findings[3].includes(cross.tickers[top]) && findings[3].includes(format(iv[top], "num6")),
+    "rest: the covariance row names the asset with the largest daily variance, and the figure its table prints", findings[3]);
 }
 openAll(t);
 {
@@ -410,22 +410,22 @@ check(!SRC.slice(1420, 1462).some((l) => /download_button|to_csv|df_to_excel/.te
 const tables = [...t.container.querySelectorAll(".tbl")];
 const caption = (tb) => (tb.querySelector("caption .tbl-title")?.textContent ?? "").trim();
 const buttons = (tb) => [...tb.querySelectorAll(".tbl-dl button")].map((b) => text(b));
-check(tables.length === 2 && caption(tables[0]) === "Pairwise correlation of daily returns" && caption(tables[1]) === "Daily covariance matrix",
-  "tab: two tables, the correlation under the heatmap and the covariance matrix", tables.map(caption).join(" | "));
+check(tables.length === 3 && caption(tables[0]) === "Pairwise correlation of daily returns" && caption(tables[1]) === "Loadings on the shared driver" && caption(tables[2]) === "Daily covariance matrix",
+  "tab: three tables, the correlation under the heatmap, the shared driver's loadings and the covariance matrix", tables.map(caption).join(" | "));
 {
   // The chapter leads with its finding: no eyebrow over it, and never the assignment's heading.
   check(!t.container.querySelector(".corr-kicker") && t.container.querySelector("h2")?.classList.contains("corr-headline") && !/Correlation & Covariance Analysis/.test(text(t.container)),
     "lead: the finding is the chapter's first heading, with no kicker and no assignment heading");
   const spans = tables.map((tb) => text(tb.querySelector(".tbl-span")));
-  check(spans.length === 2 && spans.every((s) => /^Daily returns, \d{4}-\d\d-\d\d to \d{4}-\d\d-\d\d$/.test(s)) && spans[0] === spans[1],
-    "spans: both matrices state their window and that the returns are daily", spans.join(" | "));
+  check(spans.length === 3 && spans.every((s) => /^Daily returns, \d{4}-\d\d-\d\d to \d{4}-\d\d-\d\d$/.test(s)) && spans.every((s) => s === spans[0]),
+    "spans: every table states their window and that the returns are daily", spans.join(" | "));
 }
 check(tables.every((tb) => buttons(tb).includes("Download CSV") && buttons(tb).includes("Download Excel")),
   "ledger:downloads-everywhere both matrices carry CSV and Excel downloads", tables.map((tb) => buttons(tb).join("+")).join(" | "));
 
 // The covariance matrix prints as the app prints it, {:.6f} (1462): num6, where num4 flattens it.
 {
-  const body = [...tables[1].querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((c) => text(c)));
+  const body = [...tables[2].querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((c) => text(c)));
   const want = oc.clean.tickers.map((tk, i) => [tk, ...oc.cov[i].map((x) => py(x, 6))]);
   check(JSON.stringify(body) === JSON.stringify(want), "covariance: every cell is the oracle's {:.6f} (1462)", JSON.stringify(body[1]));
   const flattened = oc.cov.flat().filter((x) => format(x, "num4") === "0.0000" || format(x, "num4") === "0.0001").length;
@@ -433,6 +433,30 @@ check(tables.every((tb) => buttons(tb).includes("Download CSV") && buttons(tb).i
   const corr = [...tables[0].querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((c) => text(c)));
   check(JSON.stringify(corr) === JSON.stringify(oc.clean.tickers.map((tk, i) => [tk, ...oc.corr[i].map((x) => py(x, 3))])),
     "correlation table: every cell is the oracle's matrix to three places", JSON.stringify(corr[0]));
+}
+
+// Independent bets (FDA2 Week 12): the correlation matrix's principal components, as the card draws them.
+{
+  const E = await import("../src/lib/eigen.ts");
+  const { corrMatrix } = await import("../src/lib/num.ts");
+  const v = M.betsView(cross);
+  const ref = E.bets(corrMatrix(cross.returns));
+  check(v && JSON.stringify(v.shares) === JSON.stringify(ref.shares) && v.bets === ref.bets, "bets: the view is eigen.ts's bets() of the correlation matrix, not the covariance");
+  const covShares = E.symEigen(cross.S).values;
+  check(Math.abs(covShares[0] / covShares.reduce((x, y) => x + y, 0) - v.shares[0]) > 0.01, "bets: the correlation's first share differs from the covariance's, so the test can tell them apart");
+  const row = t.container.querySelector("#div-bets");
+  const finding = text(row.querySelector(".more-finding"));
+  check(finding === `One shared driver explains ${Math.round(v.shares[0] * 100)}% of how these five move; about ${v.bets.toFixed(1)} independent bets.`,
+    "bets: the finding states PC1's share and the bets to one place", finding);
+  const bars = [...row.querySelectorAll(".corr-bet")].map((li) => text(li.querySelector(".corr-bet-value")));
+  check(JSON.stringify(bars) === JSON.stringify(v.shares.map((x) => format(x, "pct1"))), "bets: one bar per component, each its share", bars.join());
+  const widths = [...row.querySelectorAll(".corr-bet-bar")].map((b) => b.style.width);
+  check(widths[0] === `${v.shares[0] * 100}%`, "bets: a bar's width is its share", widths[0]);
+  const load = [...tables[1].querySelectorAll("tbody tr")].map((tr) => [...tr.children].map((c) => text(c)));
+  check(JSON.stringify(load) === JSON.stringify(cross.tickers.map((tk, i) => [tk, format(v.pc1[i], "num3")])), "bets: the loadings table prints PC1 on each asset", JSON.stringify(load[0]));
+  const flat = { ...cross, returns: cross.returns.map((r, i) => (i === 0 ? r.map(() => 0.001) : r)) };
+  const D2 = await import("../src/tabs/diversification.ts");
+  check(M.betsView(flat) === null && D2.betsFinding(flat) === "Too few assets with varying returns to count independent bets.", "bets: an asset that never varied gives no count, and the row says why");
 }
 
 // The covariance card's former info mark: its three texts under How it is calculated, every level at once.
@@ -506,8 +530,8 @@ check(line(1421) === "with tab3:" && line(1467) === "with tab4:" && !SRC.slice(1
   }
   const body = text(r.container);
   check(/Daily covariance matrix could not be shown\./.test(body) && r.container.querySelectorAll("g.corr-cell").length === n * n &&
-    text(r.container.querySelector("h2.corr-headline")) === HEAD && r.container.querySelectorAll(".tbl").length === 1,
-    "ledger:boundary a failed covariance card is named, and the headline, heatmap and correlation table stand", body.slice(-120));
+    text(r.container.querySelector("h2.corr-headline")) === HEAD && r.container.querySelectorAll(".tbl").length === 2,
+    "ledger:boundary a failed covariance card is named, and the headline, heatmap, correlation and loadings tables stand", body.slice(-120));
   check(errs.some((e) => e.includes("[boundary] Daily covariance matrix")), "ledger:boundary the console names the card that failed");
   check(!r.container.querySelector(".corr-spread") && !/volatility note could not be shown/.test(body) && !errs.some((e) => e.includes("[boundary] Equal-weight volatility note")),
     "volatility sentence: with no covariance matrix it is simply absent, never a failed card", body.slice(0, 200));

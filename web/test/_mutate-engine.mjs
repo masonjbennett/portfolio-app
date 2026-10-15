@@ -217,6 +217,14 @@ const M = [
   ["src/tabs/walkforward/live.ts", "    plan.why !== \"typed\" ||\n", "", "the published-terms line printed when the rate is not typed", "t-tab-walkforward"],
   ["src/tabs/walkforward/live.ts", "    if (here === null || here === quoted[id]) return [];", "    if (here === null) return [];", "the published-terms line naming figures that print as published", "t-tab-walkforward"],
   ["src/tabs/walkforward/Dumbbell.tsx", "  return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;", "  return Math.min(1, (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag);", "the gridline step stopped at 1, a line per unit on a wide axis", "t-tab-walkforward"],
+  // eigen.ts (course C2: the Jacobi solver and the independent bets), judged by t-eigen alone
+  ["src/lib/eigen.ts", "A[k][p] = c * akp - s * akq;", "A[k][p] = c * akp + s * akq;", "a Jacobi rotation with the wrong sign", "t-eigen"],
+  ["src/lib/eigen.ts", "sort((x, y) => A[y][y] - A[x][x])", "sort((x, y) => A[x][x] - A[y][y])", "eigenvalues smallest first", "t-eigen"],
+  ["src/lib/eigen.ts", "(j >= i ? m[i][j] : m[j][i])", "m[i][j]", "the lower triangle read", "t-eigen"],
+  ["src/lib/eigen.ts", "const MAX_SWEEPS = 100;", "const MAX_SWEEPS = 1;", "one Jacobi sweep, not converged", "t-eigen"],
+  ["src/lib/eigen.ts", "bets: Math.exp(h)", "bets: 1 / shares.reduce((x, y) => x + y * y, 0)", "effective bets by the participation ratio, not the entropy the page names", "t-eigen"],
+  ["src/lib/eigen.ts", "< 0 ? -1 : 1;", "< 0 ? 1 : 1;", "PC1's sign left to the solver", "t-eigen"],
+  ["src/lib/eigen.ts", "const shares = lam.map((v) => v / sum);", "const shares = lam.map((v) => v / n);", "shares over the asset count, not the eigenvalues' sum", "t-eigen"],
 ];
 
 const missing = [...new Set(M.map(([, , , , suite]) => suite).filter((s) => s && !existsSync(suitePath(s))))];

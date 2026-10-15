@@ -10,6 +10,7 @@
 // worked out here, and it uses the engine's own pieces: portfolioPerformance for the equal-weight mix and
 // the covariance matrix's diagonal, annualised by √252 as the engine annualises every volatility.
 import { format } from "../../format.ts";
+import { bets, type Bets } from "../../lib/eigen.ts";
 import { corrMatrix } from "../../lib/num.ts";
 import { portfolioPerformance } from "../../lib/portfolio.ts";
 import { rollingCorr, TRADING_DAYS } from "../../lib/stats.ts";
@@ -401,3 +402,31 @@ export function stepCell(at: readonly [number, number] | null, key: string, n: n
  * 1.5 times them.
  */
 export const MAX_SCALE = 1.5;
+
+// ---- independent bets: principal components of the correlation matrix (FDA2 Week 12; Week 3, 3.9) ------
+
+export type BetsView = Bets & { tickers: string[] };
+
+/** The correlation matrix's principal components, or null when it has an undefined entry or one asset. */
+export function betsView(a: Analysis): BetsView | null {
+  const b = bets(corrMatrix(a.returns));
+  return b ? { ...b, tickers: a.tickers } : null;
+}
+
+
+
+/** The row's finding: PC1's share of the variance and the effective number of bets, to one place. */
+export function betsSentence(v: BetsView): string {
+  const n = v.tickers.length;
+  const these = COUNT[n] ? `these ${COUNT[n]}` : `these ${n}`;
+  return `One shared driver explains ${Math.round(v.shares[0] * 100)}% of how ${these} move; about ${v.bets.toFixed(1)} independent bets.`;
+}
+
+export const LOADING_COLUMNS: Column[] = [
+  { key: "asset", label: "Asset", format: "text", first: true },
+  { key: "pc1", label: "Loading on the shared driver", format: "num3" },
+];
+
+export function loadingRows(v: BetsView): TableRow[] {
+  return v.tickers.map((t, i) => ({ asset: t, pc1: v.pc1[i] }));
+}

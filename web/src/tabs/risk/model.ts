@@ -14,7 +14,7 @@
 //   never "nan" (the app prints f"{nan:.3f}" as "nan").
 import { format } from "../../format.ts";
 import { cullLabels, spreadLabels, textWidth, type Rect } from "../../charts/labels.ts";
-import { alphaReading, annualizedStats, capmFit, drawdowns, rollingStd, TRADING_DAYS, type CapmFit } from "../../lib/stats.ts";
+import { alphaReading, annualizedStats, capmFit, drawdowns, historicalTail, rollingStd, TRADING_DAYS, type CapmFit } from "../../lib/stats.ts";
 import { monthYear } from "../../chrome/when.ts";
 import { drawdownEpisodes, relatedEvent } from "../../lib/episodes.ts";
 import { NAMED_FALLS } from "../../content/episodes.ts";
@@ -263,6 +263,23 @@ export function riskRows(a: Analysis): TableRow[] {
   });
   rows.push({ asset: a.benchLabel, sharpe: fin(a.benchStats.sharpe), sortino: fin(a.benchStats.sortino) });
   return rows;
+}
+
+// ---- a bad day: value at risk and expected shortfall, per asset (FDA2 Week 8, section 9) -----------------
+
+export const TAIL_COLUMNS: Column[] = [
+  { key: "asset", label: "Asset", format: "text", first: true },
+  { key: "var", label: "Value at risk, 95%", format: "pct2" },
+  { key: "es", label: "Expected shortfall, 95%", format: "pct2" },
+];
+
+// The mixes' own definition (the scorecard's var and es rows): historicalTail at 5%, one day, positive losses.
+export function tailRows(a: Analysis): TableRow[] {
+  const row = (asset: string, r: number[]): TableRow => {
+    const t = historicalTail(r, 0.05);
+    return { asset, var: fin(t.var), es: fin(t.es) };
+  };
+  return [...a.tickers.map((t, j) => row(t, a.returns[j])), row(a.benchLabel, a.bench)];
 }
 
 // ---- CAPM (1372-1416) --------------------------------------------------------------------------------

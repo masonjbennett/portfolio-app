@@ -11,7 +11,7 @@ import { monthTitle, monthView, yearRows } from "./returns/years.ts";
 import { MIX } from "../overview/model.ts";
 import { summaryRows } from "./returns/model.ts";
 import { fallsInWindow } from "./risk/falls.ts";
-import { betaChart, betaTitle, capmRows, DEFAULT_WINDOW, headline as riskHeadline, riskRows, volChart, volTitle } from "./risk/model.ts";
+import { betaChart, betaTitle, capmRows, DEFAULT_WINDOW, headline as riskHeadline, riskRows, tailRows, volChart, volTitle } from "./risk/model.ts";
 
 /** The two More lists and their rows, in the order the chapter shows them. */
 export const PERF_LIST = "perf";
@@ -21,6 +21,7 @@ export const RISK_ROWS = {
   falls: "The portfolios in a fall",
   drawdowns: "Drawdowns",
   volatility: "Rolling volatility",
+  tail: "Value at risk and expected shortfall",
   metrics: "Risk-adjusted metrics",
   capm: "CAPM beta and alpha",
 } as const;
@@ -105,6 +106,14 @@ export function drawdownsFinding(a: Analysis): string {
 export function volatilityFinding(a: Analysis): string {
   const v = volChart(a, DEFAULT_WINDOW);
   return v.status === "ready" ? `${volTitle(v.value)}.` : v.status === "empty" ? v.reason : "The volatility could not be computed.";
+}
+
+// The asset with the largest one-day value at risk, and the average of its days past it (expected shortfall).
+export function tailFinding(a: Analysis): string {
+  const assets = tailRows(a).slice(0, a.tickers.length).filter((r) => num(r.var) && num(r.es));
+  if (!assets.length) return "No value at risk could be measured.";
+  const top = assets.reduce((x, y) => ((y.var as number) > (x.var as number) ? y : x));
+  return `On a bad day, 1 in 20, ${top.asset} lost ${format(top.var as number, "pct1")} or more; those days averaged ${format(top.es as number, "pct1")}.`;
 }
 
 // The asset with the highest Sharpe ratio, and the benchmark's beside it.

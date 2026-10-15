@@ -1,7 +1,8 @@
 // The Diversification chapter (portfolio_app.py 1421-1462): the finding names the most and least correlated
 // pair; the lead card is the pairwise heatmap (1425-1436), its figures as a table under "Show the numbers";
 // a More list holds the rolling correlation of two chosen assets (1441-1458), what equal weights did to
-// volatility, and the daily covariance matrix (1461-1462). A row draws nothing until it is first opened.
+// volatility, how many independent bets the correlations leave (FDA2 Week 12), and the daily covariance
+// matrix (1461-1462). A row draws nothing until it is first opened.
 //
 // The app offers no download on this tab: the heatmap has no table behind it and the covariance matrix
 // sits in an expander as a styled frame. Here both matrices are Tables, each with CSV and Excel, holding
@@ -19,13 +20,16 @@ import MoreList, { type MoreRow } from "../components/MoreList.tsx";
 import Table from "../components/Table.tsx";
 import Term from "../components/Term.tsx";
 import type { Analysis, TabProps } from "../types.ts";
+import { format } from "../format.ts";
 import { tableSpan } from "./caption.ts";
 import Heatmap from "./correlation/Heatmap.tsx";
 import Rolling from "./correlation/Rolling.tsx";
-import { covarianceFinding, DIV_HEADING, DIV_LIST, DIV_ROWS, rollingFinding, spreadFinding } from "./diversification.ts";
+import { betsFinding, covarianceFinding, DIV_HEADING, DIV_LIST, DIV_ROWS, rollingFinding, spreadFinding } from "./diversification.ts";
 import { correlationFormula } from "./formula.ts";
 import { said } from "./performance.ts";
 import {
+  betsSentence,
+  betsView,
   CORR_FORMAT,
   corrView,
   COV_FORMAT,
@@ -33,6 +37,8 @@ import {
   heatState,
   heatSubtitle,
   heatTitle,
+  LOADING_COLUMNS,
+  loadingRows,
   matrixColumns,
   matrixRows,
   spread,
@@ -59,6 +65,16 @@ export default function Correlation({ analysis }: TabProps) {
       children: (
         <Boundary name="Equal-weight volatility note" resetKey={analysis}>
           <SpreadCard analysis={analysis} />
+        </Boundary>
+      ),
+    },
+    {
+      key: "bets",
+      title: DIV_ROWS.bets,
+      finding: said(DIV_ROWS.bets, () => betsFinding(analysis)),
+      children: (
+        <Boundary name="Independent bets" resetKey={analysis}>
+          <BetsCard analysis={analysis} />
         </Boundary>
       ),
     },
@@ -155,6 +171,48 @@ const SpreadCard = memo(function SpreadCard({ analysis }: { analysis: Analysis }
   return (
     <Card label={DIV_ROWS.spread} how={how}>
       <p className="corr-note corr-spread">{sentence}</p>
+    </Card>
+  );
+});
+
+// The correlation matrix's principal components: each one's share of the variance as a bar, and the first
+// one's loadings under "Show the numbers". Nothing at all when there is nothing to decompose.
+const BetsCard = memo(function BetsCard({ analysis }: { analysis: Analysis }) {
+  const v = betsView(analysis);
+  if (!v) return null;
+  const sentence = betsSentence(v);
+  const numbers = (
+    <Table
+      title="Loadings on the shared driver"
+      columns={LOADING_COLUMNS}
+      rows={loadingRows(v)}
+      filename="shared-driver-loadings"
+      span={tableSpan(analysis.dates[0], analysis.asOf)}
+    />
+  );
+  const how = (
+    <p className="corr-note">
+      Principal components of the correlation matrix, not the covariance, so a volatile asset does not dominate by its scale
+      alone. The components{"’"} variances (eigenvalues) sum to the number of assets; each bar is one component{"’"}s share.
+      The effective number of bets is e raised to the entropy of those shares (Meucci, 2009): 1 when one driver explains
+      everything, the number of assets when they are uncorrelated. Loadings are the first component{"’"}s weights on each
+      asset. Measured on this window, so they describe the past.
+    </p>
+  );
+  return (
+    <Card label={DIV_ROWS.bets} numbers={numbers} how={how}>
+      <p className="corr-note corr-bets-line">{sentence}</p>
+      <ol className="corr-bets" aria-label="Share of the variance by component">
+        {v.shares.map((s, k) => (
+          <li key={k} className="corr-bet">
+            <span className="corr-bet-name">PC{k + 1}</span>
+            <span className="corr-bet-track">
+              <span className="corr-bet-bar" style={{ width: `${Math.max(0, Math.min(1, s)) * 100}%` }} />
+            </span>
+            <span className="corr-bet-value">{format(s, "pct1")}</span>
+          </li>
+        ))}
+      </ol>
     </Card>
   );
 });
