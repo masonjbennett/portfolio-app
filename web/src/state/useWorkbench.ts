@@ -38,11 +38,16 @@ export const RF_URL = "/api/rf";
 export const FETCH_DELAY_MS = 300;
 // How long the page waits for the rate before giving up on it. The endpoint gives FRED 10 s.
 export const RF_WAIT_MS = 12000;
-// How long live prices wait for their window's rate when today's yield is already known from an
-// earlier answer: after that they show at today's yield, the rail says the window's rate is still
-// loading, and they move to it when it lands. With no rate known at all, as on a cold load, they wait
-// for the answer instead (RF_WAIT_MS), because the only rate to show them at would be the placeholder.
+// How long live prices wait for their window's rate: after that they show at today's yield when an
+// earlier answer gave it, the rail says the window's rate is still loading, and they move to it when it
+// lands. With no rate known at all, as on a cold load, they show at the placeholder (RF_FALLBACK) and the
+// rail says so. Until Oct 15 2026 a cold load waited for the answer instead (RF_WAIT_MS): when FRED stopped
+// answering Vercel, the endpoint's 502 came after 10 s, and a typed basket sat behind the example for all
+// of it, with nothing on the page saying why.
 export const RF_HOLD_MS = 3000;
+// The rail's note while live prices are scored at the placeholder and the lookup is still out.
+export const RF_SLOW_NOTE =
+  `The live 3-month Treasury rate has not answered yet. Using the ${(RF_FALLBACK * 100).toFixed(1)}% placeholder until it does; edit it if you know today's rate.`;
 // The address bar is rewritten at most this often (browsers throttle history.replaceState).
 export const URL_DELAY_MS = 250;
 
@@ -312,8 +317,9 @@ export function useWorkbench(): Workbench {
   // Live prices whose window rate is still on its way are held back while something else is on
   // screen: shown now at another rate, they would change a second time when it lands. The wait ends
   // when the lookup answers, fails or times out (RF_WAIT_MS); after a failure today's yield, or the
-  // fallback, is used. When today's yield is already held, the wait is capped at RF_HOLD_MS, counted
-  // from when these prices arrived, and a slow FRED costs one extra change instead of a stalled page.
+  // fallback, is used. The wait is capped at RF_HOLD_MS, counted from when these prices arrived: then they
+  // show at today's yield if it is held, else at the placeholder, and a slow FRED costs one extra change
+  // instead of a stalled page.
   const shown = useRef<{ computed: Analysis | AnalysisError; pick: RfResolved } | null>(null);
   const wantHold =
     settings.rf === null && payload !== null && !isExample(payload) && rfPending && pick.basis !== "window" && shown.current !== null;
@@ -324,7 +330,7 @@ export function useWorkbench(): Workbench {
     const t = setTimeout(() => setSpentFor(payload), RF_HOLD_MS);
     return () => clearTimeout(t);
   }, [wantHold, payload]);
-  const hold = wantHold && !(spentFor === payload && pick.basis === "today");
+  const hold = wantHold && spentFor !== payload;
   // The two rail inputs that rebuild the analysis, the shorting switch and a typed rate, reach it one
   // render behind the rail. The render that flips the switch (or shows the typed rate) is cheap and
   // paints at once; the rebuilt analysis, and every card drawn from it, follows in a render React may
@@ -381,12 +387,15 @@ export function useWorkbench(): Workbench {
   // screen are scored against. RfView extends RfRate, so it travels in the same slot.
   const win = inUse.window;
   const rfView = useMemo<LoadState<RfRate>>(() => {
+    // Live prices on screen at the placeholder while the lookup is still out: the rail says so, rather
+    // than "looking up" beside figures already scored.
+    if (rf.status === "loading" && inUse.basis === "fallback" && computed?.ok) return { status: "empty", reason: RF_SLOW_NOTE };
     if (rf.status !== "ready") return rf;
     const { rate, date, source } = rf.value;
     const view: RfView = { rate, date, source, window: win, basis: inUse.basis, inUse: inUse.choice.rate, loading: rfPending };
     return { status: "ready", value: view };
     // The window by value, not by identity: it is rebuilt on every render.
-  }, [rf, win?.rate, win?.from, win?.to, win?.days, inUse.basis, inUse.choice.rate, rfPending]);
+  }, [rf, win?.rate, win?.from, win?.to, win?.days, inUse.basis, inUse.choice.rate, rfPending, computed]);
 
   // The series itself, for a figure that scores each day at its own rate (the walk-forward test), with the
   // basis of the analysis on screen: a rate set in the rail means every figure uses that one rate.

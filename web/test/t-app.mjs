@@ -1027,6 +1027,11 @@ function rail(over = {}) {
   const down = rail({ settings: { ...EX_SETTINGS, rf: null }, rf: { status: "error", name: "rf", message: "down" } });
   check(field(down.root, "rf").value === String(RF_FALLBACK * 100) && /placeholder/.test(text(down.root)), "rail: an unreachable live rate says it uses the placeholder (711-713)");
   down.r.unmount();
+  // The workbench's state while live prices sit at the placeholder and the lookup is still out (Oct 15 2026).
+  const slow = rail({ settings: { ...EX_SETTINGS, rf: null }, rf: { status: "empty", reason: "SLOW NOTE" } });
+  check(field(slow.root, "rf").value === String(RF_FALLBACK * 100) && text(slow.root).includes("SLOW NOTE") && !/Could not reach/.test(text(slow.root)),
+    "rail: a lookup still out behind figures at the placeholder shows the placeholder and the workbench's note, not \"could not reach\"");
+  slow.r.unmount();
 
   const { wb: bw } = stand({ fetching: true });
   const busy = render(h(BasketBar, { settings: bw.settings, setSettings: bw.setSettings, rf: bw.rf, fetching: true, analysis: { status: "loading" } }));

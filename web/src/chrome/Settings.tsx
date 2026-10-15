@@ -343,6 +343,8 @@ export function RfField({ settings, setSettings, rf }: { settings: Settings; set
       : `Using today's 3-month Treasury rate (${view.date}): the rate over this window could not be loaded. Override it freely.`;
   } else if (live) {
     rfNote = `Live: 3-month Treasury, ${live.date} · source ${live.source}. Override it freely.`;
+  } else if (rf.status === "empty") {
+    rfNote = rf.reason;
   } else if (unreachable) {
     rfNote = `Could not reach the live rate. Using the ${(RF_FALLBACK * 100).toFixed(1)}% placeholder; edit it if you know today's rate.`;
   } else {

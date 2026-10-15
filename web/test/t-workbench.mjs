@@ -13,7 +13,8 @@ const W = await import("../src/state/useWorkbench.ts");
 const { tangency } = await import("../src/lib/optimize.ts");
 const { MESSAGES } = await import("../src/state/analyze.ts");
 const { PREFS_KEY, SETTINGS_KEY } = await import("../src/state/storage.ts");
-const { EXAMPLE_URL, FETCH_DELAY_MS, FIRST_SETTINGS, RF_HOLD_MS, RF_URL, URL_DELAY_MS, rfSeriesUrl, todayISO } = W;
+const { RF_FALLBACK } = await import("../src/state/defaults.ts");
+const { EXAMPLE_URL, FETCH_DELAY_MS, FIRST_SETTINGS, RF_HOLD_MS, RF_SLOW_NOTE, RF_URL, URL_DELAY_MS, rfSeriesUrl, todayISO } = W;
 
 const bits = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -106,6 +107,7 @@ check(calls.filter((c) => c.url === EXAMPLE_URL).length === 1 && rfCalls().lengt
   rfCalls()[0].url === `/api/rf?start=${EX.start}`,
   "mount: the example is fetched once, and the rate once, at once, for the window's start", rfCalls().map((c) => c.url).join(" "));
 check(wb.fetching === true && wb.failure === null, "mount: a live request for the same settings is under way while the example shows");
+check(wb.rf.status === "loading", "mount: with the example on screen and the rate still out, the rail reads the lookup as loading, not the placeholder", wb.rf.status);
 await later();
 check(priceCalls().length === 1, "mount: one /api/prices request, after the delay", `${priceCalls().length}`);
 const q = new URL(priceCalls()[0].url, "http://x").searchParams;
@@ -380,7 +382,7 @@ await later();
 check(wb.failure === null && bits(ready()?.tickers, CROSS.tickers), "recovery: the next good answer clears the failure");
 view.unmount();
 
-// ---- cold load, prices first: live prices wait for their window's rate -------------------------------------------
+// ---- cold load, prices first: live prices wait for their window's rate, at most RF_HOLD_MS ------------------------
 {
   fresh();
   const late = deferred();
@@ -398,16 +400,57 @@ view.unmount();
     `${r?.source} ${r?.rf} fetching ${wb.fetching}`);
   await settle(RF_HOLD_MS + 150);
   const r2 = ready();
-  check(r2 === r && wb.fetching === true,
-    "cold load: with no rate known at all, the live prices keep waiting past RF_HOLD_MS rather than show at the placeholder",
-    `${r2?.source} ${r2?.rf} fetching ${wb.fetching}`);
+  // Until Oct 15 2026 they waited for the answer however long it took: 10 s behind the example when FRED was down.
+  check(r2?.source === "live" && r2.rf === RF_FALLBACK && r2.rfSource === "fallback" && !wb.fetching &&
+    wb.rf.status === "empty" && wb.rf.reason === RF_SLOW_NOTE,
+    "cold load: with no rate known at all, after RF_HOLD_MS the live prices show at the placeholder, and the rail says the rate has not answered",
+    `${r2?.source} ${r2?.rf} fetching ${wb.fetching} rf ${wb.rf.status}`);
   await act(async () => {
     late.resolve(json(rfAnswer(EX.start)));
     await sleep(0);
   });
   const b = ready();
-  check(b?.source === "live" && Math.abs(b.rf - meanOver(b)) < 1e-15 && !wb.fetching && changes().length === 2,
-    "cold load: when the rate lands the live prices show, at the rate over their window, in one change", changes().join(" | "));
+  check(b?.source === "live" && Math.abs(b.rf - meanOver(b)) < 1e-15 && !wb.fetching && wb.rf.value?.basis === "window" && changes().length === 3,
+    "cold load: when the rate lands late the live prices move to the rate over their window, one change more", changes().join(" | "));
+  v.unmount();
+}
+
+// ---- cold load, the rate source down (as on Oct 15 2026: a 502 after 10 s): the basket still loads -----------------
+{
+  fresh();
+  const down = deferred();
+  routes = {
+    [EXAMPLE_URL]: () => Promise.resolve(json(EX)),
+    [RF_URL]: () => down.p,
+    "/api/prices": () => Promise.resolve(json(MEGA)),
+  };
+  const v = render(h(Probe));
+  await settle();
+  await later();
+  await settle(RF_HOLD_MS + 150);
+  const r = ready();
+  check(r?.source === "live" && bits(r.tickers, MEGA.tickers) && r.rf === RF_FALLBACK && !wb.fetching,
+    "rate down: the typed basket shows at the placeholder after RF_HOLD_MS, with the rate request still out",
+    `${r?.source} ${r?.rf} fetching ${wb.fetching}`);
+  await act(async () => {
+    down.resolve(json({ error: "upstream", message: "FRED did not answer for the 3-month Treasury rate." }, 502));
+    await sleep(0);
+  });
+  const f = ready();
+  check(f === r && wb.rf.status === "error" && changes().length === 2,
+    "rate down: the 502 changes no figure on screen, and the rail turns to the unreachable note",
+    `${wb.rf.status} ${changes().join(" | ")}`);
+  v.unmount();
+}
+
+// ---- nothing on screen yet: the rail says the rate is loading, not that a placeholder scores anything ------------
+{
+  fresh();
+  routes = {};
+  const v = render(h(Probe));
+  await settle();
+  await later();
+  check(ready() === null && wb.rf.status === "loading", "nothing on screen: with no figures and the rate still out, the rail reads it as loading", wb.rf.status);
   v.unmount();
 }
 

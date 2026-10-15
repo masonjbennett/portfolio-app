@@ -46,6 +46,9 @@ const real = globalThis.fetch;
 const outside = [];
 let yahoo = 0;
 let fred = 0;
+// FRED down, as it was for production on Oct 15 2026: the request stalls until api/rf.ts's own timeout, then 502.
+let fredDown = false;
+let stalled = 0;
 globalThis.fetch = async (input, init) => {
   const url = String(input instanceof Request ? input.url : input);
   const host = new URL(url).hostname;
@@ -58,6 +61,10 @@ globalThis.fetch = async (input, init) => {
   }
   if (host === "fred.stlouisfed.org") {
     fred += 1;
+    if (fredDown) {
+      stalled += 1;
+      return new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal.reason), { once: true }));
+    }
     return new Response(DGS3MO, { status: 200, headers: { "content-type": "text/csv" } });
   }
   outside.push(url);
@@ -69,8 +76,13 @@ check(!!browser, "first screen: a browser to measure in (Edge or Chrome; set GUI
 if (browser) {
   const server = await devServer();
   let rows = [];
+  let downRows = [];
   try {
     rows = await checkFirstScreen(server.origin);
+    // A typed basket with the rate source down still loads: after RF_HOLD_MS it shows at the stated placeholder,
+    // with its own lede. Until Oct 15 2026 it sat behind the example until the 502, and the check measured the example.
+    fredDown = true;
+    downRows = await checkFirstScreen(server.origin, { cases: CASES.filter((c) => c.lede === "run") });
   } finally {
     await server.close();
   }
@@ -79,6 +91,11 @@ if (browser) {
     const nums = m ? `question ${m.question}, lede ${m.lede}, chart ${m.chart}` : "not measured";
     check(misses.length === 0, `first screen: ${screen.name}, ${c.name} (targets ${screen.question} / ${screen.lede} / ${screen.chart})`,
       `${nums}; ${misses.join("; ")}${m && misses.length ? `; above the question: ${m.above}` : ""}`);
+  }
+  check(downRows.length === SCREENS.length && stalled >= SCREENS.length, "first screen, rate down: the typed basket was measured at every screen, each page's rate request stalled",
+    `${downRows.length} rows, ${stalled} stalled`);
+  for (const { screen, c, m, misses } of downRows) {
+    check(misses.length === 0, `first screen, rate down: ${screen.name}, ${c.name}`, `${m ? m.text.slice(0, 80) : "not measured"}; ${misses.join("; ")}`);
   }
   // The stub was what answered: the page asked for prices and the rate, and nothing else left the machine.
   check(yahoo > 0 && fred > 0 && outside.length === 0, "first screen: prices and the rate came from the fixtures, and no other outside url was asked for",

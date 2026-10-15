@@ -105,6 +105,8 @@ const READ = `(() => {
   const ov = document.querySelector(".ov");
   const lede = ov && ov.querySelector(".ov-lede");
   if (!ov || !lede || ov.classList.contains("ov--settling")) return null;
+  // Prices still coming ("· updating" beside the price day): the lede on screen is not yet the case's basket.
+  if (document.querySelector(".prices-tag-updating")) return null;
   const y = window.scrollY;
   const q = ov.querySelector("h1.ov-question");
   const chart = [...ov.querySelectorAll("svg")].find((s) => s.getBoundingClientRect().height > 100);
@@ -186,8 +188,9 @@ export async function devServer() {
 /**
  * Every case at every screen against `origin`, in one headless browser. Returns one row per case: its screen, its
  * case, what was measured (null when nothing settled) and its misses. Logs as it goes unless `log` is null.
+ * `cases` narrows the run to some of CASES (the suite's pass with the rate source down).
  */
-export async function checkFirstScreen(origin, { log = console.log } = {}) {
+export async function checkFirstScreen(origin, { log = console.log, cases = CASES } = {}) {
   const browser = findBrowser();
   if (!browser) throw new Error("no Edge or Chrome found; set GUIDE_BROWSER to one");
   origin = origin.replace(/\/?$/, "/");
@@ -206,7 +209,7 @@ export async function checkFirstScreen(origin, { log = console.log } = {}) {
     });
     log?.(`first screen: ${origin}`);
     for (const screen of SCREENS) {
-      for (const c of CASES) {
+      for (const c of cases) {
         let misses;
         let m = null;
         try {
