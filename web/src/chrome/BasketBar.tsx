@@ -44,7 +44,7 @@ export function PricesLine({ analysis, fetching, className }: { analysis: LoadSt
   const a = analysis.status === "ready" ? analysis.value : null;
   return (
     <p className={className} aria-live="polite">
-      {a ? <span>Prices to {format(a.asOf, "date")}</span> : fetching ? <span>Fetching prices</span> : null}
+      {a ? <span>Prices to <span className="prices-day">{format(a.asOf, "date")}</span></span> : fetching ? <span>Fetching prices</span> : null}
       {a && a.source === "example" ? <span className="prices-tag prices-tag-example">{"· "}example</span> : null}
       {a && fetching ? <span className="prices-tag prices-tag-updating">{"· "}updating</span> : null}
     </p>
