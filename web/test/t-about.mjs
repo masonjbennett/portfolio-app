@@ -23,6 +23,7 @@ const { TRADING_DAYS } = await import("../src/lib/stats.ts");
 const { FRONTIER_POINTS, RF_FALLBACK } = await import("../src/state/defaults.ts");
 const risk = await import("../src/tabs/risk/model.ts");
 const corr = await import("../src/tabs/correlation/model.ts");
+const live = await import("../src/tabs/walkforward/live.ts");
 const { exampleAnalysis } = await import("./_analysis.mjs");
 
 const web = new URL("../", import.meta.url);
@@ -98,6 +99,17 @@ const EMOJI = /\p{Extended_Pictographic}/u;
   check(!/SLSQP|scipy/i.test(body) && /quadratic programme/.test(body) && /quadprog/.test(body),
     "method (ledger): the port's describes the port's, exact quadratic programmes via quadprog, and never SLSQP");
   check(!EMOJI.test(text(r.container)), "method: no emoji in the footer (the app's expander is headed with one)");
+
+  // The literature (proposal D12): the walk-forward tab's own citation, word for word, and only papers whose
+  // method the engine uses — Jorion for the shrunk means it ships, never Ledoit-Wolf, whose shrinkage it does not.
+  const lit = [...panel.querySelectorAll(".footer-method-row")].find((row) => text(row.querySelector("dt")) === "Literature");
+  const cites = [...(lit?.querySelectorAll("cite") ?? [])].map(text);
+  check(!!lit && text(lit).includes(`${live.CITE_AUTHORS},`) && cites[0] === live.CITE_TITLE && cites.length === 5,
+    "method: the literature cites DeMiguel, Garlappi and Uppal as the walk-forward tab does, and five papers by title", cites.join(" | "));
+  check(/Jorion \(1986\)/.test(text(lit ?? {})) && /bayesStein/.test(src("src/lib/constructions.ts")) && !/Ledoit/.test(body),
+    "method: the shrinkage cited is Jorion's, which constructions.ts ships, and Ledoit-Wolf is not cited");
+  check(/hindsight in the choice of assets/.test(body) && /applies to all three portfolios alike/.test(body),
+    "method: the asset-choice sentence says hindsight inflates every portfolio's Sharpe alike, not that the comparison is spared");
 
   // ---- (c) the links -------------------------------------------------------------------------------------
   const links = [...r.container.querySelectorAll(".footer-links a")];

@@ -852,6 +852,8 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
     "plain words: the what-if is read with its panel open", fold ? fold.outerHTML.slice(0, 160) : "no row");
   const shown = [ov, wf, render(h(Masthead, { analysis: { status: "ready", value: EX }, fetching: false })), render(h(Footer))].map((r) => {
     r.container.querySelectorAll("[aria-label]").forEach((e) => names.push(e.getAttribute("aria-label")));
+    // A paper's title is quoted, not the page's own label: Michaud's "Is 'Optimized' Optimal?" in the footer's literature.
+    r.container.querySelectorAll("cite").forEach((c) => c.remove());
     const t = text(r.container);
     r.unmount();
     return t;
