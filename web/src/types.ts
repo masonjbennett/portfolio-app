@@ -422,7 +422,7 @@ export interface TabProps {
 
 // ---- chrome ----------------------------------------------------------------------------------------
 
-/** The phone summary chip ("5 tickers · 2019 to today · rf 4.1%") that opens the settings as a sheet. */
+/** The phone summary chip ("5 tickers · 2019– · rf 4.1%") that opens the settings as a sheet. */
 export interface SummaryChipProps {
   /** The current settings. */
   settings: Settings;

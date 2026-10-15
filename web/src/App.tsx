@@ -168,6 +168,16 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
   const { setSettings } = wb;
   const setTickers = useCallback((tickers: string[]) => setSettings({ tickers }), [setSettings]);
   const switchChapter = useCallback((id: ChapterId) => startSwitch(() => setChapter(id)), [setChapter]);
+  // The Overview's closing "Next" line: the same switch, from the foot of a long page, so the reader is taken back up
+  // to the chapter row (its tab focused) instead of being left wherever the shorter or taller chapter puts them.
+  const openChapter = useCallback(
+    (id: ChapterId) => {
+      switchChapter(id);
+      window.scrollTo(0, 0);
+      document.getElementById(tabId(CHAPTER_PREFIX, id))?.focus({ preventScroll: true });
+    },
+    [switchChapter],
+  );
   // An older link's tab is landed on once, when it is not already the top of its chapter; the palette's
   // jumps land every time.
   const [focus, setFocus] = useState<Focus | null>(() =>
@@ -276,7 +286,7 @@ export function AppView({ wb, tabs = TABS }: AppViewProps) {
                   >
                     {chapterTabs.length === 0 ? (
                       <Boundary name={CHAPTER_LABELS.overview} resetKey={ready}>
-                        <Overview analysis={ready} amount={wb.settings.amount} setTickers={setTickers} settling={settling} />
+                        <Overview analysis={ready} amount={wb.settings.amount} setTickers={setTickers} settling={settling} openChapter={openChapter} />
                       </Boundary>
                     ) : (
                       chapterTabs.map((id) => {

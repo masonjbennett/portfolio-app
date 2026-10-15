@@ -192,6 +192,22 @@
   color: var(--color-ink2);
 }
 
+/* The closing "Next" line: the argument's test first, then the other chapters on a line of their own. */
+.ov-next {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--type-2);
+}
+
+.ov-next-label,
+.ov-next-lead {
+  font-weight: 600;
+}
+
+.ov-next-rest {
+  color: var(--color-ink2);
+}
+
 .ov-built {
   display: flex;
   flex-wrap: wrap;

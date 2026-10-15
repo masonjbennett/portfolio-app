@@ -801,6 +801,26 @@ const page = (over, tabs = STAND_TABS) => render(h(Harness, { wb: stand(over).wb
   else delete proto.scrollIntoView;
 }
 
+// ---- (d2d) the Overview's closing "Next" line: the chapters a phone's row hides, Does it hold up? first ------
+{
+  const asked = [];
+  const r = render(h(Overview, { analysis: EX, amount: 10000, setTickers() {}, openChapter: (id) => asked.push(id) }));
+  const next = r.container.querySelector("nav.ov-next");
+  const buttons = [...(next?.querySelectorAll("button") ?? [])];
+  check(buttons.map((b) => b.textContent).join(" | ") === "Does it hold up? → | Performance | Diversification | Build a portfolio",
+    "overview next: Does it hold up? first, then the other three chapters", buttons.map((b) => b.textContent).join(" | "));
+  buttons.forEach((b) => click(b));
+  check(asked.join(" ") === "holdup performance diversification build", "overview next: each button opens its own chapter", asked.join(" "));
+  r.unmount?.();
+  const bare = render(h(Overview, { analysis: EX, amount: 10000, setTickers() {} }));
+  check(!bare.container.querySelector("nav.ov-next"), "overview next: no line without a way to switch chapters");
+  bare.unmount?.();
+  // The row's own scroll cue, read out of the stylesheet (a fade is paint, which jsdom does not do).
+  const css = readFileSync(new URL("../src/App.css", import.meta.url), "utf8");
+  check(/\.app-chapters::after\s*\{[^}]*linear-gradient\(to right, transparent, var\(--color-paper\)\)/.test(css),
+    "chapter row: a right-edge fade into the paper at phone width");
+}
+
 // ---- (d3) plain words: no "best" or "optimal" as a label on the Overview, masthead, footer or what-if ----
 // "Best-tradeoff" is one name, the plain name of the tangency portfolio, and never "best" on its own.
 {
@@ -1075,8 +1095,9 @@ function bar(over = {}) {
 // ---- (g) the phone: a summary chip that opens the rail as a sheet ----------------------------------
 {
   const s = { ...EX_SETTINGS, tickers: ["A", "B", "C", "D", "E"], start: "2019-01-01", end: null, rf: null };
-  check(summaryText(s, { status: "ready", value: LIVE }) === `5 tickers · 2019 to today · rf ${format(0.0412, "pct1")}`, "chip: counts tickers, years and the live rate", summaryText(s, { status: "ready", value: LIVE }));
-  check(summaryText({ ...s, end: "2024-06-30", rf: 0.05 }, { status: "ready", value: LIVE }) === `5 tickers · 2019 to 2024 · rf ${format(0.05, "pct1")}`, "chip: a set end year and a set rate win");
+  check(summaryText(s, { status: "ready", value: LIVE }) === `5 tickers · 2019– · rf ${format(0.0412, "pct1")}`, "chip: counts tickers, years and the live rate", summaryText(s, { status: "ready", value: LIVE }));
+  check(summaryText({ ...s, end: "2024-06-30", rf: 0.05 }, { status: "ready", value: LIVE }) === `5 tickers · 2019–24 · rf ${format(0.05, "pct1")}`, "chip: a set end year and a set rate win");
+  check(summaryText({ ...s, start: "1999-01-04", end: "2004-12-31" }, { status: "ready", value: LIVE }).includes(" · 1999–2004 · "), "chip: a span across a century keeps both years whole");
   check(summaryText(s, { status: "error", name: "rf", message: "x" }).endsWith(`rf ${format(RF_FALLBACK, "pct1")}`), "chip: an unreachable live rate shows the placeholder");
   let toggled = 0;
   const c = render(h(SummaryChip, { settings: s, rf: { status: "loading" }, open: false, onToggle: () => toggled++ }));

@@ -27,7 +27,7 @@ import { parseTickers } from "../lib/clean.ts";
 import { PUBLISHED_PRESETS } from "../state/defaults.ts";
 import { TabContext } from "../state/useWorkbench.ts";
 import { tokens } from "../styles/tokens.ts";
-import type { Analysis, Column } from "../types.ts";
+import { CHAPTER_LABELS, type Analysis, type ChapterId, type Column } from "../types.ts";
 import { figuresLine, finding, hindsight, lede, MIX, mixRows, QUESTION, snapshotPlates, whyFacts, type Bar, type BarGroup, type Hindsight, type MixKey } from "./model.ts";
 import "./Overview.css";
 
@@ -239,9 +239,16 @@ export interface OverviewProps {
   setTickers: (tickers: string[]) => void;
   /** The figures are the previous settings' while new ones are worked in. */
   settling?: boolean;
+  /** Open a chapter from the closing "Next" line, as the chapter row would, and bring the reader up to it. */
+  openChapter?: (id: ChapterId) => void;
 }
 
-export default function Overview({ analysis: a, amount, setTickers, settling = false }: OverviewProps) {
+// The closing line's chapters: the argument's test first, then the rest in the row's order. On a phone the row puts
+// the last two chapters past the screen edge, so this line is the Overview's own way on to them.
+const NEXT_LEAD: ChapterId = "holdup";
+const NEXT_REST: readonly ChapterId[] = ["performance", "diversification", "build"];
+
+export default function Overview({ analysis: a, amount, setTickers, settling = false, openChapter }: OverviewProps) {
   const page = useContext(TabContext);
   const l = useMemo(() => lede(a, amount), [a, amount]);
   const facts = useMemo(() => whyFacts(a), [a]);
@@ -284,6 +291,27 @@ export default function Overview({ analysis: a, amount, setTickers, settling = f
         ))}
         <span className="ov-try-or">or type your own tickers above</span>
       </div>
+      {openChapter ? (
+        <nav className="ov-next" aria-label="Next">
+          <div>
+            <span className="ov-next-label">Next:</span>{" "}
+            <button type="button" className="text-button ov-next-lead" onClick={() => openChapter(NEXT_LEAD)}>
+              {CHAPTER_LABELS[NEXT_LEAD]} →
+            </button>
+          </div>
+          <div className="ov-next-rest">
+            Or:{" "}
+            {NEXT_REST.map((id, i) => (
+              <span key={id}>
+                {i > 0 ? " · " : null}
+                <button type="button" className="text-button ov-next-more" onClick={() => openChapter(id)}>
+                  {CHAPTER_LABELS[id]}
+                </button>
+              </span>
+            ))}
+          </div>
+        </nav>
+      ) : null}
       <p className="ov-built">
         <span>
           Built by {AUTHOR} · {CREDENTIAL}

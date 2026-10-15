@@ -137,6 +137,31 @@
   box-shadow: inset 0 -3px 0 var(--color-teal);
 }
 
+/* Phone: the row runs past the screen edge (Build a portfolio and Does it hold up? start beyond 375), so its right
+   edge fades into the paper to say it scrolls: wide enough that the last whole label visibly fades, since
+   only a few pixels of the next one reach the screen. The fade sits over the row and takes no space: the first screen's
+   positions (plan 5a) do not move. The row's end padding lets the last label scroll clear of it. */
+@media (max-width: 760px) {
+  .app-chapters {
+    position: relative;
+  }
+
+  .app-chapters::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 1px;
+    width: 64px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--color-paper));
+  }
+
+  .app-chapters .seg {
+    padding-right: 48px;
+  }
+}
+
 .app-chapter .app-tab + .app-tab {
   margin-top: var(--gap-section);
 }
